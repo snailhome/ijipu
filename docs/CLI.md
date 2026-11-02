@@ -33,7 +33,7 @@
 命令行入口是**控制台垫片** `bin\ijipu.cmd`（注册 PATH 之后就是一个 `ijipu`，见 §一之一/§二之二）：
 
 ```powershell
-ijipu cli --version                                  # iJipu 0.76.0
+ijipu cli --version                                  # iJipu 0.77.0
 ijipu cli --help                                     # 完整的命令/选项清单
 ijipu cli lint -i 我的谱.jps                         # 有错 ⇒ 退出码 3
 ijipu cli render -i 我的谱.jps -t svg -o 我的谱.svg
@@ -268,6 +268,8 @@ ijipu cli render -i 赤伶.jps -t mp4 -o 段1-混合.mp4 --mark 段1 --sound mix
 - `--card [brand|paper|ink|minimal]`：片头/片尾模板（深空蓝／纸面／水墨／极简）。
   **不写 `--card` = 不带片头片尾**（只出动态谱）；**只写 `--card`、不跟模板 = 极简**（`minimal`）。
   `custom` **刻意不支持**：那是本机偏好，同一条命令换台机器会出不一样的片。
+  （`adj1176` 起界面的「我的模板」同样只在应用/相机位里用：命令行进程读不到那本模板库，
+  批量出片请用这 4 个内置模板，或先用模板 zip 导出备份。）
 - `--nosound`：明确导出**不带声音**的视频；不写就是带声音（与界面相机位「带声音」勾选一致）。
   打开无声时宿主不会去渲音轨（不是"渲完再丢掉"）。
 

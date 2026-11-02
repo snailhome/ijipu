@@ -1,6 +1,6 @@
 # iJipu 命令行使用手册
 
-> - 适用版本：**iJipu 0.76.0**
+> - 适用版本：**iJipu 0.77.0**
 > - 许可：**AGPL-3.0** ｜ 源码与问题反馈：<https://github.com/snailhome/ijipu>
 > - 共 13 个命令。下文示例均为**实跑输出**：以 `>` 开头的是输入的命令，紧随其后的是该命令的真实输出
 >   （这些示例都在 Windows 上**实跑过**，输出原文照录）。
@@ -55,7 +55,7 @@
 
 ```text
 > ijipu cli --version
-iJipu 0.76.0
+iJipu 0.77.0
 ```
 
 ```text
@@ -218,7 +218,7 @@ Q: 1"注释没闭合 2 3 4 |
 > ijipu cli lint -i 错谱.jps --json
 {
   "schema": 1,
-  "generator": "ijipu 0.76.0",
+  "generator": "ijipu 0.77.0",
   "input": "错谱.jps",
   "ok": false,
   …
@@ -232,7 +232,7 @@ Q: 1"注释没闭合 2 3 4 |
 > ijipu cli lint -i samples -r --json
 {
   "schema": 1,
-  "generator": "ijipu 0.76.0",
+  "generator": "ijipu 0.77.0",
   "files": [
 ```
 
@@ -333,7 +333,7 @@ Q: 1 2 3 4 |
 > ijipu cli info -i samples\ershenbu.jps --json
 {
   "schema": 1,
-  "generator": "ijipu 0.76.0",
+  "generator": "ijipu 0.77.0",
   …
   "groups": 3,
 ```
@@ -393,6 +393,7 @@ MIDI 是二进制，必须用 -o 指定文件（不能用 stdout）
 - `--card` 选片头片尾模板：`brand`（深空蓝）、`paper`（纸面）、`ink`（水墨）、`minimal`（极简）。
   **不写 `--card` = 不带片头片尾**（只出动态谱，画面直接从第一拍开始）；
   **只写 `--card`、后面不跟模板 = 用极简**。自定义卡片是本机偏好，命令行不接受 `custom`。
+  （界面的「我的模板」也一样：命令行进程读不到那本模板库，批量出片用这 4 个内置模板。）
 - `--nosound` 明确导出**不带声音**的视频；不写就是带声音（与相机位的「带声音」勾选一致）。
 - 缺省 **9:16、整曲时长**（不会像界面里的「3 分钟」那样把长曲悄悄截短）。
 - `-o` 必须写文件：MP4 是二进制，不能走 stdout。
@@ -689,7 +690,7 @@ iJipu CLI doctor
 > ijipu cli doctor --json
 {
   "schema": 1,
-  "generator": "ijipu 0.76.0",
+  "generator": "ijipu 0.77.0",
   "capabilities": {
     "svg": true,
     "midi": true,
