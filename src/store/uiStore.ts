@@ -20,10 +20,13 @@ import { defaultMarkName, nextMarkId, type PracticeMark } from './practiceMarks'
 import { loadEditorFont, loadEditorFontSize, loadFontOverride, saveEditorFont, saveEditorFontSize, saveFontOverride } from './editorPrefs'
 import type { FontOverride } from '@ijipu/engine'
 import {
+  hasCardStyle,
+  isBuiltInCardStyleId,
   normalizeCardStyle,
   type CardStyle,
-  type CardTemplateId,
 } from '../export/video/cardTemplates'
+// adj1176：删除用户模板时顺手回收不再被引用的背景图（附件在 files/ 或 IndexedDB）
+import { deleteCardImage } from './cardImageStore'
 // adj965d：`OverlayLayer`（`'wm' | 'bg'`）的唯一出处是**引擎**（`overlayGesture.ts`）——
 // 它是"水印层/背景层"这个领域概念，应用与插件共用；store 只在这里给它一个"用户选中的那层"的槽位
 export type { OverlayLayer } from '@ijipu/engine'
@@ -66,8 +69,13 @@ export interface DynamicCameraState {
   instrument: number | null
 }
 
-/** adj1073：动态谱片头/片尾卡片模板（L1 用户偏好，持久化；不写进 .jps） */
-export type DynamicCardStyleId = CardTemplateId | 'custom'
+/**
+ * adj1073：动态谱片头/片尾卡片模板（L1 用户偏好，持久化；不写进 .jps）。
+ *
+ * adj1176：取值不再只是 4 个预设 + `custom`，而是**任意模板 id**（内置 + 用户模板库里的 id）；
+ * 用 `string` 是为了让"保存自定义模板后立刻能选中"不需要再改类型。
+ */
+export type DynamicCardStyleId = string
 
 /**
  * adj462：底部 dock 的面板（互斥，同一时间只显示一块）。
@@ -114,6 +122,8 @@ export interface Notice {
   nonce: number
   /** adj728：可选动作按钮（有它时提示**不自动消失**） */
   action?: NoticeAction
+  /** adj1183：多个动作按钮（如导出成功后的「打开文件 / 打开文件夹」） */
+  actions?: NoticeAction[]
 }
 
 /** adj728：设置对话框的页签 id（`PageConfigDialog` 与 uiStore 共用一份，避免两处漂移） */
@@ -145,8 +155,20 @@ const SHOW_SCRIPT_PAD_KEY = 'ijipu.showScriptPad'
 const SHOW_GUIDES_KEY = 'ijipu.showGuides'
 /** adj1073：动态谱片头/片尾卡片模板（L1 用户偏好；不写进谱面） */
 const DYNAMIC_CARD_STYLE_KEY = 'ijipu.dynamicCardStyle'
-const DYNAMIC_CARD_STYLE_CUSTOM_KEY = 'ijipu.dynamicCardStyleCustom'
-const DYNAMIC_CARD_STYLE_IDS: readonly CardTemplateId[] = ['brand', 'paper', 'ink', 'minimal']
+/**
+ * adj1176（用户 2026-11-01）：**用户卡片模板库**（L1，公共的一份，不分曲子）。
+ *
+ * 旧版只有一个 `ijipu.dynamicCardStyleCustom` 槽位；现在改成"可命名的一串模板"，
+ * 相机位下拉直接列出来。旧的 `custom` 会在首次读取时**迁移成模板库里的一项**
+ * （id 仍是 `custom`，名字「我的卡片」），旧键保留不删（方便降级）。
+ *
+ * 形状：`{ version: 1, items: CardStyle[] }`。背景图仍是 `ijipu-blob:<名>` 引用，
+ * 图本体在 `files/`（桌面）或 IndexedDB（网页）。
+ */
+const CARD_TEMPLATES_KEY = 'ijipu.cardTemplates'
+const CARD_TEMPLATES_VERSION = 1
+/** 旧版单槽自定义卡片（只读，用于迁移） */
+const LEGACY_CARD_STYLE_CUSTOM_KEY = 'ijipu.dynamicCardStyleCustom'
 /**
  * adj1089（用户 2026-10-23 口径）：动态视频与试听的**行中平移方式**（L1 用户偏好）。
  *
@@ -206,28 +228,102 @@ function loadRowLeadBeats(): number {
   }
 }
 
-/** adj1074：自定义卡片样式（含背景图 data URL）；坏数据回退 null，不让预览打不开 */
-function loadCustomCardStyle(): CardStyle | null {
+/**
+ * adj1176：读用户模板库；第一次读时把旧的单槽自定义卡片迁移进来。
+ *
+ * 迁移必须**立刻写回新键**：否则用户把迁移出来的模板删掉后，下次启动又会被旧键复活。
+ * 读坏了就回空表（不阻塞启动、也不覆盖磁盘上的原值——只有用户真的改了才会写）。
+ */
+function loadCardTemplates(): CardStyle[] {
   try {
-    const raw = localStorage.getItem(DYNAMIC_CARD_STYLE_CUSTOM_KEY)
-    if (!raw) return null
-    return normalizeCardStyle(JSON.parse(raw) as Partial<CardStyle>)
+    const raw = localStorage.getItem(CARD_TEMPLATES_KEY)
+    if (raw !== null) return parseCardTemplates(raw)
+    const legacy = localStorage.getItem(LEGACY_CARD_STYLE_CUSTOM_KEY)
+    if (legacy === null) return []
+    const migrated = [normalizeCardStyle({ ...(JSON.parse(legacy) as Partial<CardStyle>), id: 'custom', name: '我的卡片' })]
+    saveCardTemplates(migrated)
+    return migrated
   } catch {
-    return null
+    return []
   }
 }
 
-const initialCustomCardStyle = loadCustomCardStyle()
+/** 解析模板库 JSON（数组或 `{version,items}` 都认，为以后换形状留余地） */
+function parseCardTemplates(raw: string): CardStyle[] {
+  const parsed = JSON.parse(raw) as unknown
+  const list = Array.isArray(parsed)
+    ? parsed
+    : parsed !== null && typeof parsed === 'object' && Array.isArray((parsed as { items?: unknown }).items)
+      ? ((parsed as { items: unknown[] }).items as unknown[])
+      : []
+  const out: CardStyle[] = []
+  const seen = new Set<string>()
+  for (const v of list) {
+    if (v === null || typeof v !== 'object') continue
+    const style = normalizeCardStyle(v as Partial<CardStyle>)
+    // 内置 id 是保留的：用户模板撞上就跳过（下拉里会重复、渲染也会走错分支）
+    if (isBuiltInCardStyleId(style.id) || seen.has(style.id)) continue
+    seen.add(style.id)
+    out.push(style)
+  }
+  return out
+}
 
-function loadDynamicCardStyle(custom: CardStyle | null): DynamicCardStyleId {
+/** 写回模板库（返回是否真的写进了本机存储；失败时内存值仍保留） */
+function saveCardTemplates(items: CardStyle[]): boolean {
+  try {
+    localStorage.setItem(CARD_TEMPLATES_KEY, JSON.stringify({ version: CARD_TEMPLATES_VERSION, items }))
+    return true
+  } catch {
+    // 忽略隐私模式/配额异常：内存里仍然是用户刚保存的模板
+    return false
+  }
+}
+
+const initialCardTemplates = loadCardTemplates()
+
+function loadDynamicCardStyle(templates: readonly CardStyle[]): DynamicCardStyleId {
   try {
     const v = localStorage.getItem(DYNAMIC_CARD_STYLE_KEY)
-    if (v === 'custom') return custom ? 'custom' : 'brand'
-    return DYNAMIC_CARD_STYLE_IDS.includes(v as CardTemplateId)
-      ? (v as CardTemplateId)
-      : 'brand'
+    if (v === 'custom') return templates.some((t) => t.id === 'custom') ? 'custom' : (templates[0]?.id ?? 'brand')
+    return hasCardStyle(v, templates) ? (v as string) : 'brand'
   } catch {
     return 'brand'
+  }
+}
+
+/** 生成模板 id（时间戳 + 随机尾数；不撞内置 id、也不撞已有 id） */
+function newCardTemplateId(items: readonly CardStyle[]): string {
+  const taken = new Set(items.map((t) => t.id))
+  for (let i = 0; i < 20; i += 1) {
+    const id = `tpl-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`
+    if (!taken.has(id) && !isBuiltInCardStyleId(id)) return id
+  }
+  return `tpl-${Date.now().toString(36)}-${items.length}`
+}
+
+/**
+ * 一套模板引用的所有附件（背景图 + adj1178 的印章图片）。
+ * 换图/删模板时用来判断"这张图还有没有人用"。
+ */
+function styleImages(style: CardStyle | undefined): string[] {
+  if (style === undefined) return []
+  const out: string[] = []
+  if (typeof style.backgroundImage === 'string' && style.backgroundImage !== '') out.push(style.backgroundImage)
+  const sealImage = style.seal?.image
+  if (typeof sealImage === 'string' && sealImage !== '') out.push(sealImage)
+  return out
+}
+
+/**
+ * 旧单槽自定义卡片（降级/迁移用）是否还引用这张图。
+ * 是的话删模板时**不能**回收附件，否则老版本回退过去会是一张打不开的图。
+ */
+function legacyCustomUsesImage(image: string): boolean {
+  try {
+    return localStorage.getItem(LEGACY_CARD_STYLE_CUSTOM_KEY)?.includes(image) === true
+  } catch {
+    return false
   }
 }
 // adj315：应用级视图偏好——左右拆分排列方向（默认视图已取消，改为记住顶栏上次设置）
@@ -484,13 +580,22 @@ interface UiState {
    * （试听入口把当前标记段与试听音色带进来）。相机里仍可改，两者不是两套导出。
    */
   openDynamicCamera: (opts?: { range?: DynamicCameraState['range']; instrument?: number | null }) => void
-  /** adj1073：片头/片尾卡片模板（L1 用户偏好，落盘；预设/以后的自定义） */
+  /** adj1073：片头/片尾卡片模板（L1 用户偏好，落盘；预设 / 用户模板 id） */
   dynamicCardStyle: DynamicCardStyleId
   setDynamicCardStyle: (id: DynamicCardStyleId) => void
-  /** adj1074：用户自定义卡片（含背景图）；null = 还没创建 */
-  dynamicCardStyleCustom: CardStyle | null
-  setDynamicCardStyleCustom: (style: CardStyle) => void
-  resetDynamicCardStyleCustom: () => void
+  /**
+   * adj1176（用户 2026-11-01）：**用户卡片模板库**（L1，公共一份）。
+   *
+   * 相机位每首谱只记"用哪套"（写进 `xxx.jps.sync.json` 的 `card.template`），
+   * 样式本体留在库里：改一处，所有引用它的谱都跟着变。
+   */
+  cardTemplates: CardStyle[]
+  /** 保存（新增或更新）一套模板，返回它的 id；会立刻落盘 */
+  saveCardTemplate: (style: CardStyle) => { id: string; persisted: boolean }
+  /** 改名（只改 name，没这套就什么都不做） */
+  renameCardTemplate: (id: string, name: string) => void
+  /** 删除一套模板；正在用就切回品牌模板，不再被引用的背景图一并回收 */
+  deleteCardTemplate: (id: string) => void
   /**
    * adj1089（用户 2026-10-23 口径）：动态视频与试听的**行中平移方式**（L1，落 localStorage）。
    *
@@ -772,7 +877,7 @@ interface UiState {
   /** adj379：设置「检测到新版本」状态（PWA 更新提示） */
   setUpdateReady: (b: boolean) => void
   /** adj728：`action` 非空时提示带一个按钮，且**不自动消失**（见 `NoticeAction`） */
-  showNotice: (text: string, kind?: NoticeKind, action?: NoticeAction) => void
+  showNotice: (text: string, kind?: NoticeKind, action?: NoticeAction | NoticeAction[]) => void
   clearNotice: () => void
   /**
    * adj724b：**确认条**（顶部横幅，两个动作）。
@@ -873,7 +978,7 @@ export function enabledVoicesOf(
   return Object.prototype.hasOwnProperty.call(map, libId) ? (map[libId] ?? []) : DEFAULT_HQ_ENABLED
 }
 
-export const useUiStore = create<UiState>()((set) => ({
+export const useUiStore = create<UiState>()((set, get) => ({
   modal: null,
   playbackStartId: null,
   playbackTick: 0,
@@ -881,9 +986,9 @@ export const useUiStore = create<UiState>()((set) => ({
   // adj1065：动态谱相机位（L3 会话级，不落盘）
   dynamicCamera: { on: false, aspect: '9x16', range: null, mode: '3min', instrument: null },
   // adj1073：卡片模板（L1，落盘；未知 id 回退 brand）
-  dynamicCardStyle: loadDynamicCardStyle(initialCustomCardStyle),
-  // adj1074：自定义卡片（L1，落盘；坏数据回退 null）
-  dynamicCardStyleCustom: initialCustomCardStyle,
+  dynamicCardStyle: loadDynamicCardStyle(initialCardTemplates),
+  // adj1176：用户模板库（L1，落盘；旧的单槽自定义已在上面的 load 里迁移）
+  cardTemplates: initialCardTemplates,
   // adj1089：平移方式（L1，落盘；脏值/读失败回退 beat ⇒ adj1094 起默认按拍）
   panMode: loadPanMode(),
   // adj1094：行末提前平移量（L1，落盘；默认半拍）
@@ -988,8 +1093,9 @@ export const useUiStore = create<UiState>()((set) => ({
         ...(opts?.instrument === undefined ? {} : { instrument: opts.instrument }),
       },
     })),
-  // adj1073：卡片模板是 L1，落盘；未知值由 load 回退
+  // adj1073 / adj1176：卡片模板是 L1，落盘；只接受"内置或模板库里有的 id"
   setDynamicCardStyle: (id) => {
+    if (!hasCardStyle(id, get().cardTemplates)) return
     try {
       localStorage.setItem(DYNAMIC_CARD_STYLE_KEY, id)
     } catch {
@@ -997,26 +1103,66 @@ export const useUiStore = create<UiState>()((set) => ({
     }
     set({ dynamicCardStyle: id })
   },
-  // adj1074：保存自定义卡片（L1）；背景图是 data URL，保存失败（配额）时仍切到自定义，界面提示由对话框负责
-  setDynamicCardStyleCustom: (style) => {
-    const normalized = normalizeCardStyle({ ...style, id: 'custom', name: style.name || '自定义' })
-    try {
-      localStorage.setItem(DYNAMIC_CARD_STYLE_CUSTOM_KEY, JSON.stringify(normalized))
-    } catch {
-      // 配额/隐私模式：保留内存中的自定义，不阻断预览
+  /**
+   * adj1176：保存（新增或更新）一套用户模板。
+   *
+   * `style.id` 为空 = 新建（生成 `tpl-…`）；有 id = 覆盖那一套（对话框里"保存"）。
+   * 返回最终 id + **是否真的写进本机存储**（配额/隐私模式失败时内存仍保留，界面要如实提示）。
+   */
+  saveCardTemplate: (style) => {
+    const wantsNew = style.id === undefined || style.id === null || style.id === ''
+    const normalized = normalizeCardStyle(style)
+    const s = get()
+    const existing = wantsNew ? undefined : s.cardTemplates.find((t) => t.id === normalized.id)
+    const id = wantsNew ? newCardTemplateId(s.cardTemplates) : normalized.id
+    const entry: CardStyle = {
+      ...normalized,
+      id,
+      name: (normalized.name || '我的卡片').slice(0, 40),
+      description: normalized.description || '用户自定义卡片',
     }
-    set({ dynamicCardStyleCustom: normalized, dynamicCardStyle: 'custom' })
+    const items = existing === undefined
+      ? [...s.cardTemplates, entry]
+      : s.cardTemplates.map((t) => (t.id === id ? entry : t))
+    const persisted = saveCardTemplates(items)
+    // 换过图（背景图或印章图）：旧图不再被任何模板引用就回收（同名同图仍被引用时不能删）
+    const stillUsed = new Set(items.flatMap((t) => styleImages(t)))
+    for (const oldImage of styleImages(existing)) {
+      if (!stillUsed.has(oldImage) && !legacyCustomUsesImage(oldImage)) {
+        void deleteCardImage(oldImage)
+      }
+    }
+    set({ cardTemplates: items })
+    return { id, persisted }
   },
-  resetDynamicCardStyleCustom: () => {
-    try {
-      localStorage.removeItem(DYNAMIC_CARD_STYLE_CUSTOM_KEY)
-    } catch {
-      // 忽略
+  renameCardTemplate: (id, name) => {
+    const trimmed = name.trim().slice(0, 40)
+    if (trimmed === '') return
+    const s = get()
+    if (!s.cardTemplates.some((t) => t.id === id)) return
+    const items = s.cardTemplates.map((t) => (t.id === id ? { ...t, name: trimmed } : t))
+    saveCardTemplates(items)
+    set({ cardTemplates: items })
+  },
+  deleteCardTemplate: (id) => {
+    const s = get()
+    const hit = s.cardTemplates.find((t) => t.id === id)
+    if (hit === undefined) return
+    const items = s.cardTemplates.filter((t) => t.id !== id)
+    saveCardTemplates(items)
+    const stillUsed = new Set(items.flatMap((t) => styleImages(t)))
+    for (const image of styleImages(hit)) {
+      if (!stillUsed.has(image) && !legacyCustomUsesImage(image)) void deleteCardImage(image)
     }
-    set((s) => ({
-      dynamicCardStyleCustom: null,
-      dynamicCardStyle: s.dynamicCardStyle === 'custom' ? 'brand' : s.dynamicCardStyle,
-    }))
+    set({ cardTemplates: items })
+    if (s.dynamicCardStyle === id) {
+      try {
+        localStorage.setItem(DYNAMIC_CARD_STYLE_KEY, 'brand')
+      } catch {
+        // 忽略
+      }
+      set({ dynamicCardStyle: 'brand' })
+    }
   },
   /**
    * adj1089：平移方式（L1）。
@@ -1252,8 +1398,18 @@ export const useUiStore = create<UiState>()((set) => ({
    * adj728：可带**动作按钮**（`action`）——有按钮的提示**不自动消失**，
    * 因为它是"要你去别处做一件事"（如"打开音色库手动导入"），几秒读完做不到。
    */
-  showNotice: (text, kind = 'ok', action) =>
-    set((s) => ({ notice: { text, kind, nonce: (s.notice?.nonce ?? 0) + 1, ...(action ? { action } : {}) } })),
+  showNotice: (text, kind = 'ok', action) => {
+    // adj1183：允许一次给多个动作（「打开文件 / 打开文件夹」）；单个 action 保持旧用法
+    const actions = action === undefined ? undefined : Array.isArray(action) ? action : [action]
+    set((s) => ({
+      notice: {
+        text,
+        kind,
+        nonce: (s.notice?.nonce ?? 0) + 1,
+        ...(actions !== undefined && actions.length > 0 ? { actions } : {}),
+      },
+    }))
+  },
   clearNotice: () => set({ notice: null }),
   /* ---- adj987（用户 2026-10-18 需求）：试听「练习段」 ---- */
   practiceMarks: [],

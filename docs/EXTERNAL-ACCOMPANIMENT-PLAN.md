@@ -1158,6 +1158,47 @@ bat 自己设 `CARGO_HOME` / `RUSTUP_HOME` / `PATH`（工作区 `.cargo` + `ming
 断言：`smoke` 的 `adj1155` 9 条（schema 往返/显式空/旧文件缺字段、save 带 extras、自动保存接线、
 App 桥、练习段增删立即写、相机段、bat 内容）。
 
+### 4-N sidecar 记「这首歌用哪套卡片模板」（adj1176，用户 2026-11-01）
+
+用户口径：
+
+- 每首曲子适合的风格不同；换回上一首时**风格不会恢复**；
+- 自定义风格要有名字、集中保存、能导入/导出/编辑/删除，保存后进相机位卡片列表；
+- 背景图要能调取景位置（不只"铺满 + 居中"）；片头/片尾/印章的字不限于一个，字体可选。
+
+结论：**样式本体留在本机模板库（L1），sidecar 只记引用**。
+
+| 字段 | 含义 | **缺字段** | **显式空** |
+|---|---|---|---|
+| `card.template` | 这套谱用的卡片模板 id（内置 `brand/paper/ink/minimal` 或用户模板 `tpl-…`） | 旧文件 ⇒ 沿用上次选的模板 | 空字符串按"没记过"处理（不灌回一个不存在的 id） |
+
+- 模板库：`ijipu.cardTemplates` = `{version, items: CardStyle[]}`；旧的单槽
+  `ijipu.dynamicCardStyleCustom` 首次读取时迁入一项（`id: 'custom'`，名字「我的卡片」），随后立刻写回新键。
+- 相机位下拉分「内置模板 / 我的模板」；用户换模板（或对话框保存）时调 `recordCardTemplate(id)`，
+  没有 sidecar 就先建一份（只有 `card` 的 sidecar 也合法，见 `parseSyncDoc` 的 `hasExtras`）。
+- 打开 `.jps` 时 `applySyncExtrasToUi` 按 `card.template` 切回；本机没有这套模板 ⇒ 保持当前并提示，不灌空 id。
+- 背景图几何抽成 `cardImageRect`（纯函数），对话框预览与出片共用；水印多字自动收字号（`fitFontSize`）、
+  印章多字竖排（`sealLayoutOf`），水印/印章都可用「跟谱面标题 / 衬线 / 无衬线」。
+- adj1177/1181：印章外框按文字大小算包围盒（`sealLayoutOf` 给 boxW/boxH），
+  轮廓从"椭圆"改为**贴合文字的超椭圆弧线**（`|u|⁴+|v|⁴=1`，96 点，带 ±3.6% 确定性起伏）；
+  单字近方、多字竖长，6 字有高度上限。用户 2026-11-02 口径：「不规则弧线，贴合文字，不再用椭圆」。
+- adj1178：印章可换成**图片**（`seal.image`，背景图同款 `ijipu-blob:` 引用）并指定
+  `size`（短边 12% 的倍数，0.4~2.5）与 `x`/`y`（中心相对坐标）；文字印章同样吃这三个参数；
+  图片在 `createDynamicSession` 里一次性解码，模板 zip 单独放 `seal-image.*`。
+- adj1179/1181：标题/水印/印章各加一个 `fontFamily`（**本机字体族**，有值优先于预设），
+  经 `normalizeFontStack` 补通用族兜底；卡片模板对话框可「读取本机字体」——
+  桌面壳优先走 Rust GDI `EnumFontFamiliesExW`（`list_system_fonts`，中文族名），
+  失败才退回浏览器 `navigator.queryLocalFonts()`；都读不到仍可手打字体名。
+  菜单「设置 → 卡片模板…」新增入口，与动态谱视频同一道 `canUseDynamicVideo()` 闸门。
+- adj1180/1182：本机字体列表来源在界面写明（默认只是常见提示、可手打）；保存模板**不关窗**；
+  模板新增 `baseId`（起点模板）随模板保存/导出，重开时按它回显，不再重置成深空蓝。
+- adj1183：桌面壳导出视频改走 Rust `save_mp4_file`（原生另存为 + 长度校验），成功后弹提示
+  并给「打开文件 / 打开文件夹」两个按钮；`Toast` 支持 `actions` 数组。
+
+断言：`smoke` 的 `adj1176` 19 条（取景几何/夹紧、多字与字体默认、竖排、自动收字号、模板解析回退、
+sidecar 往返与负对照、模板库/相机位/对话框/渲染器接线、迁移写回）；真界面在 `verify:app-ui`。
+
+
 ### 4-N 桌面壳「打开」必须走原生路径：sidecar 才会写到 .jps 同目录（adj1156，用户 2026-10-25 实报）
 
 现象：桌面壳里点保存，sidecar 仍下载到 Downloads，不在 `.jps` 同目录。

@@ -20,6 +20,7 @@ import {
   makeSyncDoc,
   parseSyncDoc,
   serializeSyncDoc,
+  type SyncCard,
   type SyncDoc,
   type SyncMix,
   type SyncPracticeMark,
@@ -68,7 +69,13 @@ interface SyncState {
    * adj1155：把**练习段/选中段/相机导出段**写进同一份 sidecar doc。
    * 只更新内存并 `rev+1`；落盘由自动保存（或手动保存）统一做。
    */
-  setExtras: (patch: { marks?: SyncPracticeMark[]; markId?: string; range?: SyncRange | null }) => void
+  setExtras: (patch: {
+    marks?: SyncPracticeMark[]
+    markId?: string
+    range?: SyncRange | null
+    /** adj1176：这首歌用的卡片模板（只记 id） */
+    card?: SyncCard
+  }) => void
   setKey: (k: string) => void
   setAudioName: (n: string) => void
   /** 保存：刷新 codeHash/时间戳 → 写 L1（sidecar 写盘下一步接） */
@@ -186,6 +193,7 @@ export const useSyncStore = create<SyncState>((set, get) => ({
         ...(patch.marks !== undefined ? { marks: patch.marks } : {}),
         ...(patch.markId !== undefined ? { markId: patch.markId } : {}),
         ...(patch.range !== undefined ? { range: patch.range } : {}),
+        ...(patch.card !== undefined ? { card: patch.card } : {}),
       },
       rev: get().rev + 1,
     })
@@ -217,6 +225,8 @@ export const useSyncStore = create<SyncState>((set, get) => ({
       ...(cur.marks !== undefined ? { marks: cur.marks } : {}),
       ...(cur.markId !== undefined ? { markId: cur.markId } : {}),
       ...(cur.range !== undefined ? { range: cur.range } : {}),
+      // adj1176：卡片模板引用跟着 sidecar 一起存（每首谱记住自己那套）
+      ...(cur.card !== undefined ? { card: cur.card } : {}),
       code,
     })
     set({ doc, rev: get().rev + 1 })

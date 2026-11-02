@@ -16,6 +16,7 @@
 import { useEffect } from 'react'
 import type { SyncDoc } from '../export/video/syncDoc'
 import { serializeSyncDoc } from '../export/video/syncDoc'
+import { hasCardStyle } from '../export/video/cardTemplates'
 import { syncCopy } from '../brand/copy'
 import { useDocStore, type WorkspaceBinding } from './docStore'
 import { useSyncStore } from './syncStore'
@@ -62,6 +63,20 @@ export function applySyncExtrasToUi(doc: SyncDoc): void {
     ui.setPracticeMarkId(keep)
   }
   if (doc.range !== undefined) ui.setDynamicCamera({ range: doc.range })
+  /**
+   * adj1176（用户 2026-11-01「换个曲子就变风格，换回来却不会恢复」）：
+   * sidecar 里记了这套谱用的卡片模板，打开时切回去。
+   *
+   * 本机没有这套模板（别人发来的谱 / 模板删了）⇒ **不要**灌一个不存在的 id，
+   * 保持当前模板并明确提示一句，用户重新导入模板 zip 即可。
+   */
+  if (doc.card !== undefined) {
+    if (hasCardStyle(doc.card.template, ui.cardTemplates)) {
+      ui.setDynamicCardStyle(doc.card.template)
+    } else {
+      ui.showNotice(syncCopy.cardTemplateMissing(doc.card.template), 'warn')
+    }
+  }
 }
 
 /** 当前 UI 里的 extras（写进 sidecar 用） */
@@ -69,9 +84,34 @@ export function currentSyncExtras(): {
   marks?: SyncDoc['marks']
   markId?: string
   range?: SyncDoc['range']
+  card?: SyncDoc['card']
 } {
   const ui = useUiStore.getState()
-  return { marks: ui.practiceMarks, markId: ui.practiceMarkId, range: ui.dynamicCamera.range }
+  return {
+    marks: ui.practiceMarks,
+    markId: ui.practiceMarkId,
+    range: ui.dynamicCamera.range,
+    card: { template: ui.dynamicCardStyle },
+  }
+}
+
+/**
+ * adj1176：用户改了卡片模板 ⇒ 记到**这首歌**的 sidecar 里（没 sidecar 就先建一份）。
+ *
+ * 为什么不放在"应用打开的瞬间"：那样只是打开相机位就会把上次的模板盖到这首歌头上；
+ * 这里只在**用户真的选了模板**时调用（相机位下拉 / 模板对话框保存）。
+ * 值没变就直接返回，避免和 sidecar 回灌互相触发。
+ */
+export function recordCardTemplate(templateId: string): void {
+  const st = useSyncStore.getState()
+  if (st.doc !== null && st.doc.card?.template === templateId) return
+  const ds = useDocStore.getState()
+  if (st.doc === null) st.ensureFor(ds.fileName, ds.code)
+  const cur = useSyncStore.getState()
+  if (cur.doc === null) return
+  // 相机位比 App 的 sidecar 钩子更早动起来时，owner 可能还没登记；补一次，否则自动保存会放弃
+  if (syncDocOwnerOf() === '') setSyncDocOwner(identityOf(ds))
+  cur.setExtras({ card: { template: templateId } })
 }
 
 /** 包一层"别触发自动保存"（加载 sidecar 回灌 UI 时用） */
@@ -141,9 +181,16 @@ async function flushSidecarSave(): Promise<void> {
   suppressSyncAutoSave(() => st.save(ds.code, ds.fileName))
   const latest = useSyncStore.getState().doc
   if (latest === null) return
-  // 没有伴奏时也可以只为 marks/range 写 sidecar（adj1167：打开 .jps 要恢复标记段；
-  // 但既没有 audio 也没有 extras 的文件没有意义，不写）
-  if (latest.audio === '' && latest.marks === undefined && latest.range === undefined) return
+  // 没有伴奏时也可以只为 marks/range/card 写 sidecar（adj1167：打开 .jps 要恢复标记段；
+  // adj1176：只记了卡片模板的 sidecar 同样有意义；三者都没有的空文件没有意义，不写）
+  if (
+    latest.audio === '' &&
+    latest.marks === undefined &&
+    latest.range === undefined &&
+    latest.card === undefined
+  ) {
+    return
+  }
 
   const target = await resolveSidecarPath(ds.nativePath, ds.binding)
   if (target === null) return // 网页/没有磁盘落点：L1 已写，别反复下载

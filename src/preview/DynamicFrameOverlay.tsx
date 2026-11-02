@@ -20,12 +20,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { parseJps, inferBpm, gmVoiceRef, type DynamicPresetId } from '@ijipu/engine'
 import { playbackVoiceOptions } from '@ijipu/engine/playback/voiceOptions'
 import { useDocStore } from '../store/docStore'
-import { useUiStore, enabledVoicesOf, type DynamicAspect, type DynamicCardStyleId, type DynamicMode } from '../store/uiStore'
+import { useUiStore, enabledVoicesOf, type DynamicAspect, type DynamicMode } from '../store/uiStore'
 import { dynamicVideoCopy, syncCopy } from '../brand/copy'
 import { createDynamicSession, type DynamicSession } from '../export/video/renderer'
-import { CARD_TEMPLATES, cardStyleById, type CardStyle } from '../export/video/cardTemplates'
+import { CARD_TEMPLATES, resolveCardStyle, type CardStyle } from '../export/video/cardTemplates'
 import { resolveCardImage } from '../store/cardImageStore'
 import { canGenerateVideo, canUseDynamicVideo } from '../export/video/capability'
+// adj1183：桌面壳导出走原生保存对话框，MP4 字节以 base64 过 IPC
+import { bytesToBase64 } from '../export/zip'
 import { EXPORT_MAX_MS, LEAD_IN_MS, exportDynamicVideo } from '../export/video/exportDynamic'
 import { DynamicAudioPlayer } from '../export/video/audioPlayer'
 import { renderToAudioBuffer } from '../export/audio'
@@ -38,11 +40,11 @@ import { buildAccompanimentTrack, decodeAccompaniment, mixAudioBuffers, preRollM
 import type { SyncMix } from '../export/video/syncDoc'
 import { audioRefOf, effectiveSyncFitOf } from '../export/video/syncDoc'
 import { pickAudioFileNative, readSidecarAudio } from '../export/video/syncIo'
-import { isTauriShell } from '../brand/env'
+import { isTauriShell, tauriInvoke } from '../brand/env'
 // adj1150：相机位打开时自己找同目录的 sidecar（与对拍台共用路径规则）
 import { loadSidecarAudioFor, loadSidecarFor } from '../store/syncSidecar'
 // adj1155：sidecar 里的练习段/相机段也灌回 UI
-import { applySyncExtrasToUi } from '../store/syncExtras'
+import { applySyncExtrasToUi, recordCardTemplate } from '../store/syncExtras'
 
 /**
  * adj1097（用户 2026-10-23 实报「卡片加了背景图片，但导出的视频没有背景图片」）：
@@ -53,7 +55,14 @@ import { applySyncExtrasToUi } from '../store/syncExtras'
  * `renderer.ts` 的 `decode()` 失败就退成"没有背景图"。上一版只有预览解析了，导出漏了。
  */
 async function withResolvedCardImage(style: CardStyle): Promise<CardStyle> {
-  return { ...style, backgroundImage: await resolveCardImage(style.backgroundImage) }
+  return {
+    ...style,
+    backgroundImage: await resolveCardImage(style.backgroundImage),
+    // adj1178：图片印章也是 `ijipu-blob:` 引用——预览/导出前同样解析成 data URL
+    seal: style.seal
+      ? { ...style.seal, image: await resolveCardImage(style.seal.image) }
+      : style.seal,
+  }
 }
 
 const ASPECTS: { id: DynamicAspect; label: string; ratio: number }[] = [
@@ -104,7 +113,8 @@ export function DynamicFrameOverlay() {
   }, [instrument, instrumentOptions, setDynamicCamera])
   const cardStyle = useUiStore((s) => s.dynamicCardStyle)
   const setDynamicCardStyle = useUiStore((s) => s.setDynamicCardStyle)
-  const customCardStyle = useUiStore((s) => s.dynamicCardStyleCustom)
+  /** adj1176：用户模板库（相机位下拉列出"我的模板"；换谱时按 sidecar 恢复） */
+  const cardTemplates = useUiStore((s) => s.cardTemplates)
   /** adj1135：进对拍台时要把相机位的预览音**停下来**（用户实报"合成音停不住、两路声音叠在一起"） */
   const modal = useUiStore((s) => s.modal)
   /**
@@ -119,8 +129,15 @@ export function DynamicFrameOverlay() {
    */
   const rowLeadBeats = useUiStore((s) => s.rowLeadBeats)
   const openModal = useUiStore((s) => s.openModal)
-  const effectiveCardStyle =
-    cardStyle === 'custom' && customCardStyle ? customCardStyle : cardStyleById(cardStyle)
+  /** adj1183：导出成功/取消的提示（toast 可带「打开文件 / 打开文件夹」两个按钮） */
+  const showNotice = useUiStore((s) => s.showNotice)
+  /**
+   * adj1176：模板解析走「内置 → 用户模板库 → 默认」。
+   * `useMemo` 很重要：每次渲染都新建对象会让下面的"重建会话"effect 每帧都跑。
+   */
+  const effectiveCardStyle = useMemo(() => resolveCardStyle(cardStyle, cardTemplates), [cardStyle, cardTemplates])
+  /** 下拉里当前选中的值：模板被删/本机没有时显示默认项，而不是让 `<select>` 变成空白 */
+  const cardStyleValue = effectiveCardStyle.id
   /**
    * adj1078：网站/插件整块不显示相机位（连预览也不并入）；桌面壳才显示。
    * adj1077：桌面壳里生成视频还要 WebCodecs；缺 WebCodecs 时只保留预览并禁用生成。
@@ -184,6 +201,12 @@ export function DynamicFrameOverlay() {
    * 所以关掉之后预览也从第一拍开始；与「带声音」一样是**本次会话**的选项（L3，关掉相机位即回默认）。
    */
   const [withCards, setWithCards] = useState(true)
+  /**
+   * adj1185（用户实报「导出后还是没有提示」）：除了右上角 toast，在**相机位控制条里**也留一条
+   * 导出结果（路径 + 打开文件/文件夹）。相机位浮层 z-index 60，toast 若被别的浮层盖住，
+   * 这里的提示仍然看得见。
+   */
+  const [exportDone, setExportDone] = useState<{ path: string } | null>(null)
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const seekRef = useRef<HTMLInputElement | null>(null)
@@ -596,6 +619,7 @@ export function DynamicFrameOverlay() {
     cancelAnimationFrame(rafRef.current)
     setEncoding(true)
     setProgress(0)
+    setExportDone(null)
     const ac = new AbortController()
     abortRef.current = ac
     try {
@@ -630,12 +654,43 @@ export function DynamicFrameOverlay() {
         },
         signal: ac.signal,
       })
+      /**
+       * adj1183（用户 2026-11-02）：「桌面壳导出后无提示，建议添加导出成功的提示，
+       * 并提示打开文件/文件夹」。
+       *
+       * 桌面壳：走 Rust 原生保存对话框（能拿到真实路径）→ 成功提示带两个按钮；
+       * 用户取消保存 ⇒ 明确提示"已取消"，不再静默。
+       * 网页/开发浏览器：仍走 `<a download>`（拿不到路径），给一句"已开始下载"。
+       */
+      if (isTauriShell()) {
+        const bytes = new Uint8Array(await res.blob.arrayBuffer())
+        const savedPath = await tauriInvoke<string | null>('save_mp4_file', {
+          name: `动态谱-${aspect}.mp4`,
+          b64: bytesToBase64(bytes),
+        })
+        if (savedPath === null || savedPath === '') {
+          showNotice(dynamicVideoCopy.exportCanceled, 'warn')
+          return
+        }
+        setExportDone({ path: savedPath })
+        const openPath = (reveal: boolean) => {
+          void tauriInvoke('open_local_path', { path: savedPath, reveal }).catch((e: unknown) => {
+            showNotice(dynamicVideoCopy.openFailed(e instanceof Error ? e.message : String(e)), 'error')
+          })
+        }
+        showNotice(dynamicVideoCopy.exportedVideo(savedPath), 'ok', [
+          { label: dynamicVideoCopy.openFile, run: () => openPath(false) },
+          { label: dynamicVideoCopy.openFolder, run: () => openPath(true) },
+        ])
+        return
+      }
       const url = URL.createObjectURL(res.blob)
       const a = document.createElement('a')
       a.href = url
       a.download = `动态谱-${aspect}.mp4`
       a.click()
       setTimeout(() => URL.revokeObjectURL(url), 10_000)
+      showNotice(dynamicVideoCopy.exportedWeb, 'ok')
     } catch (e) {
       if (!(e instanceof DOMException && e.name === 'AbortError')) {
         setError(e instanceof Error ? e.message : String(e))
@@ -655,6 +710,15 @@ export function DynamicFrameOverlay() {
     setDynamicCamera({ on: false })
   }
 
+  /** adj1185：相机位里的导出结果条也能直接打开文件/文件夹 */
+  const openExportPath = (reveal: boolean) => {
+    const path = exportDone?.path
+    if (path === undefined) return
+    void tauriInvoke('open_local_path', { path, reveal }).catch((e: unknown) => {
+      showNotice(dynamicVideoCopy.openFailed(e instanceof Error ? e.message : String(e)), 'error')
+    })
+  }
+
   if (!on || !rect || !dynamicVideoEnabled) return null
 
   const spec = ASPECTS.find((a) => a.id === aspect) ?? ASPECTS[0]
@@ -663,7 +727,8 @@ export function DynamicFrameOverlay() {
    * 否则 controls 会超出预览区被 `.dyn-frame-layer { overflow:hidden }` 裁掉。
    * 控制条自身再加 `maxHeight + overflow:auto` 兜底（窄/矮预览区也能滚到）。
    */
-  const hasMixRow = syncDoc !== null
+  // adj1176：只记了卡片模板、没有伴奏的 sidecar 不算"有混音排"（别白让一块高度）
+  const hasMixRow = syncDoc !== null && syncDoc.audio !== ''
   const maxH = Math.min(rect.height * (hasMixRow ? 0.55 : 0.66), rect.height - (hasMixRow ? 230 : 150))
   const maxW = rect.width * 0.9
   let h = Math.max(120, maxH)
@@ -756,18 +821,31 @@ export function DynamicFrameOverlay() {
           <span className="dyn-frame-label">{dynamicVideoCopy.cardStyle}</span>
           <select
             className="dyn-frame-select"
-            value={cardStyle}
+            value={cardStyleValue}
             disabled={encoding || preparingAudio || !withCards}
             aria-label={dynamicVideoCopy.cardStyle}
-            onChange={(e) => setDynamicCardStyle(e.target.value as DynamicCardStyleId)}
+            onChange={(e) => {
+              const id = e.target.value
+              setDynamicCardStyle(id)
+              // adj1176：选择记到**这首歌**的 sidecar 里，换回来还能恢复
+              recordCardTemplate(id)
+            }}
           >
-            {CARD_TEMPLATES.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-            {customCardStyle && (
-              <option value="custom">{dynamicVideoCopy.cardCustomName}</option>
+            <optgroup label={dynamicVideoCopy.cardBuiltin}>
+              {CARD_TEMPLATES.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </optgroup>
+            {cardTemplates.length > 0 && (
+              <optgroup label={dynamicVideoCopy.cardMine}>
+                {cardTemplates.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </optgroup>
             )}
           </select>
           <button
@@ -776,7 +854,7 @@ export function DynamicFrameOverlay() {
             disabled={encoding || preparingAudio || !withCards}
             onClick={() => openModal('cardStyle')}
           >
-            {dynamicVideoCopy.cardCustom}
+            {dynamicVideoCopy.cardManage}
           </button>
           <span className="dyn-frame-meta">
             {withCards ? effectiveCardStyle.description : dynamicVideoCopy.cardsOffHint}
@@ -784,8 +862,9 @@ export function DynamicFrameOverlay() {
         </div>
 
         {/* adj1150（用户 2026-10-25）：对拍文件存在时，相机位直接给「输出声音」——
-            声音档 + 两条音量，与台面共用同一份 `syncDoc.mix`，出片/预览都按它混音。 */}
-        {syncDoc !== null && (
+            声音档 + 两条音量，与台面共用同一份 `syncDoc.mix`，出片/预览都按它混音。
+            adj1176：只记了卡片模板、还没有伴奏的 sidecar 不该冒出这一排。 */}
+        {syncDoc !== null && syncDoc.audio !== '' && (
           <div className="dyn-frame-controls-row dyn-frame-mix" data-sync="dyn-mix">
             <span className="dyn-frame-label" title={dynamicVideoCopy.outputSoundHint}>
               {dynamicVideoCopy.outputSound}
@@ -860,6 +939,24 @@ export function DynamicFrameOverlay() {
               </>
             )}
             {mixNotice !== '' && <span className="dyn-frame-meta">{mixNotice}</span>}
+          </div>
+        )}
+
+        {/* adj1185（用户实报「导出后还是没有提示」）：相机位里再留一条结果，不依赖 toast 的层级 */}
+        {exportDone && (
+          <div className="dyn-frame-controls-row dyn-frame-export-done" data-sync="dyn-export-done">
+            <span className="dyn-frame-meta dyn-frame-export-path">
+              {dynamicVideoCopy.exportedVideo(exportDone.path)}
+            </span>
+            <button type="button" className="btn" onClick={() => openExportPath(false)}>
+              {dynamicVideoCopy.openFile}
+            </button>
+            <button type="button" className="btn" onClick={() => openExportPath(true)}>
+              {dynamicVideoCopy.openFolder}
+            </button>
+            <button type="button" className="btn" onClick={() => setExportDone(null)}>
+              {dynamicVideoCopy.exportDoneClose}
+            </button>
           </div>
         )}
 
@@ -945,8 +1042,9 @@ export function DynamicFrameOverlay() {
             ))}
             {range !== null && selectedMarkId === '' && <option value="__current__">{dynamicVideoCopy.rangeUnlisted}</option>}
           </select>
-          {/* adj1121：对拍入口**挪到试听栏**（对拍是边听边对的活）；相机位只保留当前对拍状态 */}
-          {syncBpm !== null && (
+          {/* adj1121：对拍入口**挪到试听栏**（对拍是边听边对的活）；相机位只保留当前对拍状态
+              adj1176：只记了卡片模板的 sidecar 没有对拍，别显示一个假的「对拍 ♩=」徽标 */}
+          {syncDoc !== null && syncDoc.audio !== '' && syncBpm !== null && (
             <span className="dyn-frame-meta dyn-frame-sync-badge">
               {syncCopy.syncBadge} ♩={Math.round(syncBpm)}
               {syncFit ? ` · 偏移 ${(syncFit.offsetMs / 1000).toFixed(2)}s` : ''}

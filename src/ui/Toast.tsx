@@ -24,7 +24,7 @@ export function Toast() {
   useEffect(() => {
     if (!notice) return
     // adj728：带动作按钮的提示交由用户处置（点按钮 / 下一次提示把它换掉），不自动隐藏
-    if (notice.action) return
+    if (notice.action || (notice.actions?.length ?? 0) > 0) return
     // adj401：warn 提示常含操作指引（如手机端找不到 .jps 时怎么办），4s 读不完 → 给 6s
     const ms = notice.kind === 'ok' ? 1800 : notice.kind === 'warn' ? 6000 : 4000
     const t = setTimeout(clearNotice, ms)
@@ -32,12 +32,18 @@ export function Toast() {
   }, [notice, clearNotice])
 
   if (!notice) return null
-  const action = notice.action
+  const actions =
+    notice.actions !== undefined && notice.actions.length > 0
+      ? notice.actions
+      : notice.action
+        ? [notice.action]
+        : []
   return (
-    <div className={`toast toast-${notice.kind}${action ? ' toast-has-action' : ''}`}>
+    <div className={`toast toast-${notice.kind}${actions.length > 0 ? ' toast-has-action' : ''}`}>
       <span className="toast-text">{notice.text}</span>
-      {action && (
+      {actions.map((action) => (
         <button
+          key={action.label}
           type="button"
           className="toast-action btn"
           onClick={() => {
@@ -48,7 +54,7 @@ export function Toast() {
         >
           {action.label}
         </button>
-      )}
+      ))}
     </div>
   )
 }

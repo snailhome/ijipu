@@ -9,8 +9,9 @@
 | 层 | 内容 | 落点 |
 |---|---|---|
 | **L2 谱面配置** | 页边距、字号、行距、背景图、水印、`# jps-config` 全部字段 | **始终写在 `.jps` 里**；三端一致，**不进**本机配置 |
-| **L1 本机偏好** | 主题、缩放、拆分比例、卡片模板/自定义卡片、音色库选择、导出背景、草稿… | 桌面：`%APPDATA%\iJipu\settings.json`；网站/PWA：浏览器 `localStorage`；插件：插件目录 `data.json` |
-| **L1 大文件** | 自定义卡片背景图（≤2.5MB） | 桌面：`files\<hash>.<ext>`；网站/PWA：IndexedDB（`ijipu-assets`）；插件：仍内联在 `data.json`（宿主桥暂无写二进制 op） |
+| **L1 本机偏好** | 主题、缩放、拆分比例、**卡片模板库**、音色库选择、导出背景、草稿… | 桌面：`%APPDATA%\iJipu\settings.json`；网站/PWA：浏览器 `localStorage`；插件：插件目录 `data.json` |
+| **L1 大文件** | 卡片背景图、**印章图片**（均 ≤2.5MB；模板库里只存 `ijipu-blob:` 引用） | 桌面：`files\<hash>.<ext>`；网站/PWA：IndexedDB（`ijipu-assets`）；插件：仍内联在 `data.json`（宿主桥暂无写二进制 op） |
+| **谱面附属（sidecar）** | **这首歌用哪套卡片模板**（`card.template`）、对拍锚点/混音、练习段/导出段 | 与 `.jps` 同目录的 `xxx.jps.sync.json`；**只记引用，不复制样式本体**（adj1176） |
 | **L3 会话** | 当前弹窗、临时预览状态 | 内存，不落盘 |
 
 硬规则：**换台机器打开同一份 `.jps`，谱面必须一样** ⇒ L2 永远跟着谱走；

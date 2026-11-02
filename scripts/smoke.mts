@@ -176,8 +176,19 @@ import { clampRowCenter, CAMERA_WHITE_MARGIN } from '@ijipu/engine/index.ts'
 // adj1068：调号显示口径（描述头与动态视频片头卡共用）
 import { keySignatureOf } from '@ijipu/engine/index.ts'
 // adj1075：卡片模板 zip 往返（纯函数，Node 里直接验）
-import { createCardTemplateZip, readCardTemplateZip } from '../src/export/video/cardTemplateZip.ts'
-import { DEFAULT_CARD_STYLE } from '../src/export/video/cardTemplates.ts'
+import { cardTemplateZipNameOf, createCardTemplateZip, readCardTemplateZip } from '../src/export/video/cardTemplateZip.ts'
+// adj1176：卡片模板库解析 / 背景图取景几何 / 水印与印章多字
+import {
+  DEFAULT_CARD_STYLE,
+  cardFontStack,
+  cardImageRect,
+  fitFontSize,
+  normalizeCardStyle,
+  resolveCardStyle,
+  sealFramePoints,
+  sealImageRectOf,
+  sealLayoutOf,
+} from '../src/export/video/cardTemplates.ts'
 // adj1077：视频生成能力闸门（桌面壳 + WebCodecs；网站/插件不开放）
 import { canGenerateVideo, canUseDynamicVideo } from '../src/export/video/capability.ts'
 import { pickPracticeCandidate } from '../src/export/video/practicePick.ts'
@@ -21157,6 +21168,28 @@ runAdj927ExternalChangeTests()
       .then(() => runAdj1126Tests())
       // adj1127：横向滚动条（滑块位置/宽度）+ 预览缩放比率
       .then(() => runAdj1127Tests())
+      // adj1176：卡片模板库 + 每曲记模板 + 背景图取景 + 水印/印章多字
+      .then(() => runAdj1176Tests())
+      // adj1177：印章外框随文字变形成不规则椭圆
+      .then(() => runAdj1177Tests())
+      // adj1178：印章图片 + 大小/位置
+      .then(() => runAdj1178Tests())
+      // adj1179：卡片字体可选本机字体 + 菜单入口
+      .then(() => runAdj1179Tests())
+      // adj1180：本机字体列表来源可见（按钮不再静默禁用）
+      .then(() => runAdj1180Tests())
+      // adj1181：桌面壳 GDI 枚举系统字体 + 印章弧线
+      .then(() => runAdj1181Tests())
+      // adj1182：保存不关窗 + 起点模板随模板保存
+      .then(() => runAdj1182Tests())
+      // adj1183：导出成功提示 + 打开文件/文件夹
+      .then(() => runAdj1183Tests())
+      // adj1184：模板导出文件名 `ijipu-card-<模板名>.zip`
+      .then(() => runAdj1184Tests())
+      // adj1186：菜单统一「卡片模板」+ 印章效果预览
+      .then(() => runAdj1186Tests())
+      // adj1187：保存模板有成功/失败提示（底栏固定）
+      .then(() => runAdj1187Tests())
       .then(() => {
         console.log(failed === 0 ? '\nALL SMOKE TESTS PASSED ✅' : `\n${failed} CHECKS FAILED ❌`)
         process.exit(failed === 0 ? 0 : 1)
@@ -33370,8 +33403,10 @@ console.log('[adj1013] toast / update-prompt pinned below the topbar at top-righ
     toastBlock,
   )
   check(
-    'adj1013 提示层级低于顶栏下拉与模态框（z-index 45 < `.topbar` 的 50），不再盖住右上角的菜单',
-    /z-index:\s*45/.test(toastBlock) && /\.topbar \{[^}]*z-index:\s*50/.test(css),
+    'adj1013/1185 提示层级：高于相机位浮层（70 > 60），仍低于下拉（1200）与模态框（200），不盖菜单',
+    /z-index:\s*70/.test(toastBlock) &&
+      /\.menu-dropdown \{[^}]*z-index:\s*1200/.test(css) &&
+      /\.modal-mask \{[^}]*z-index:\s*200/.test(css),
     '',
   )
   check(
@@ -35823,13 +35858,14 @@ function runAdj1150Tests(): void {
   const syncSrc = readFileSync(join(root, 'src/dialogs/SyncDialog.tsx'), 'utf8')
   const storeSrc = readFileSync(join(root, 'src/store/syncStore.ts'), 'utf8')
   check(
-    'adj1150 相机位有「声音档 + 伴奏音量 + 合成音音量 + 百分比」（对拍文件存在时才出现）',
+    'adj1150 相机位有「声音档 + 伴奏音量 + 合成音音量 + 百分比」（有伴奏的 sidecar 才出现）',
     /data-sync="dyn-mix-source"/.test(overlaySrc) &&
       /data-sync="dyn-mix-accomp"/.test(overlaySrc) &&
       /data-sync="dyn-mix-synth"/.test(overlaySrc) &&
       /Math\.round\(syncDoc\.mix\.accomp \* 100\)/.test(overlaySrc) &&
       /Math\.round\(syncDoc\.mix\.synth \* 100\)/.test(overlaySrc) &&
-      /syncDoc !== null && \(/.test(overlaySrc),
+      // adj1176：只记了卡片模板、没有伴奏的 sidecar 不该冒出这一排
+      /syncDoc !== null && syncDoc\.audio !== '' && \(/.test(overlaySrc),
     '',
   )
   check(
@@ -37053,5 +37089,727 @@ function runAdj1127Tests(): void {
     scrollThumb(VIEW_ALL, dur).visible === false &&
       scrollThumb(VIEW_ALL, dur).widthPct === 100,
     JSON.stringify(scrollThumb(VIEW_ALL, dur)),
+  )
+}
+
+/**
+ * adj1176（用户 2026-11-01）：
+ *  ① 卡片风格要**随谱**：每首歌记自己那套（sidecar 只存模板引用）；
+ *  ② 自定义风格要有名字、集中存、能导入/导出/删，保存后进相机位卡片列表；
+ *  ③ 背景图可调取景位置与放大；水印/印章可多字、可选字体。
+ *
+ * 这里钉住纯函数（几何/夹紧/多字排版）与接线（模板库、sidecar 字段、UI 入口）。
+ */
+function runAdj1176Tests(): void {
+  console.log('[adj1176] 卡片模板库 + 每曲记模板 + 背景图取景 + 水印/印章多字')
+
+  // ① 背景图取景几何：cover 之后按取景点平移，zoom 再放大
+  const center = cardImageRect(1000, 1000, 1000, 2000, { x: 0.5, y: 0.5 }, 1)
+  check(
+    'adj1176 背景图取景：cover 后居中（1000×1000 图铺 1000×2000 ⇒ 左右各裁 500）',
+    center.w === 2000 && center.h === 2000 && center.x === -500 && center.y === 0,
+    JSON.stringify(center),
+  )
+  const leftBottom = cardImageRect(1000, 1000, 2000, 1000, { x: 0, y: 1 }, 1)
+  check(
+    'adj1176 取景位置 0/1：左右 0 ⇒ 贴左；上下 1 ⇒ 贴下',
+    leftBottom.x === 0 && leftBottom.y === -1000,
+    JSON.stringify(leftBottom),
+  )
+  const zoomed = cardImageRect(1000, 1000, 1000, 2000, { x: 0.5, y: 0.5 }, 2)
+  check(
+    'adj1176 放大 2 倍：在 cover 的基础上再放大（2000 ⇒ 4000）',
+    zoomed.w === 4000 && zoomed.h === 4000,
+    JSON.stringify(zoomed),
+  )
+  const clamped = normalizeCardStyle({
+    ...DEFAULT_CARD_STYLE,
+    backgroundImagePos: { x: 9, y: -3 },
+    backgroundImageZoom: 99,
+  })
+  check(
+    'adj1176 取景参数越界要夹紧（左右 0~1、放大 1~3）',
+    clamped.backgroundImagePos?.x === 1 &&
+      clamped.backgroundImagePos?.y === 0 &&
+      clamped.backgroundImageZoom === 3,
+    JSON.stringify({ pos: clamped.backgroundImagePos, zoom: clamped.backgroundImageZoom }),
+  )
+
+  // ② 水印/印章多字 + 字体 + 旧模板缺字段的默认值
+  const multi = normalizeCardStyle({
+    ...DEFAULT_CARD_STYLE,
+    watermark: { intro: '赤伶', end: '终', color: '#fff', alpha: 0.05, scale: 0.5, font: 'score' },
+    seal: { text: '赤伶印', color: '#b23a2b', font: 'sans' },
+  })
+  check(
+    'adj1176 水印可多字、可单独选字体（片头「赤伶」原样保留）',
+    multi.watermark.intro === '赤伶' && multi.watermark.font === 'score',
+    JSON.stringify(multi.watermark),
+  )
+  check(
+    'adj1176 印章可多字、可单独选字体（最多 6 字，多的截掉）',
+    multi.seal?.text === '赤伶印' &&
+      multi.seal.font === 'sans' &&
+      normalizeCardStyle({ ...DEFAULT_CARD_STYLE, seal: { text: '一二三四五六七八', color: '#b23a2b' } }).seal?.text === '一二三四五六',
+    JSON.stringify(multi.seal),
+  )
+  const legacy = normalizeCardStyle({ ...DEFAULT_CARD_STYLE, watermark: { intro: '♪', end: 'i', color: '#fff', alpha: 0.03, scale: 0.52 } })
+  check(
+    'adj1176 旧模板没有字体字段 ⇒ 水印默认无衬线、印章默认衬线（不改旧观感）',
+    legacy.watermark.font === 'sans' &&
+      normalizeCardStyle({ ...DEFAULT_CARD_STYLE, seal: { text: '谱', color: '#b23a2b' } }).seal?.font === 'serif',
+    '',
+  )
+
+  // ③ 印章竖排：多字字更小（外框形状由 adj1177 单独断言）
+  const oneChar = sealLayoutOf('谱', 100)
+  const threeChars = sealLayoutOf('赤伶印', 100)
+  check(
+    'adj1176 印章多字：3 个字仍竖排、字号小于 1 个字（外框形状见 adj1177）',
+    oneChar.chars.length === 1 &&
+      threeChars.chars.length === 3 &&
+      threeChars.font < oneChar.font &&
+      Math.abs(threeChars.lineHeight - threeChars.font * 1.04) < 1e-9,
+    JSON.stringify({ oneChar, threeChars }),
+  )
+
+  // ④ 水印长文字自动收字号（不溢出画面）
+  const size = fitFontSize((text, px) => [...text].length * px, '赤伶印', 100, 62)
+  check(
+    'adj1176 水印按可用宽度自动收字号（3 字 × 20px = 60 ≤ 62）',
+    size === 20,
+    String(size),
+  )
+
+  // ⑤ 模板库解析：内置优先，其次用户模板，找不到回退默认
+  const mine = normalizeCardStyle({ ...DEFAULT_CARD_STYLE, id: 'tpl-1', name: '我的' })
+  check(
+    'adj1176 模板解析：用户模板按 id 取到；未知 id 回退默认（不会让相机位空着）',
+    resolveCardStyle('tpl-1', [mine]).name === '我的' &&
+      resolveCardStyle('brand', [mine]).id === 'brand' &&
+      resolveCardStyle('nope', [mine]).id === DEFAULT_CARD_STYLE.id,
+    '',
+  )
+
+  // ⑥ sidecar 只记模板引用：往返、只有卡片也能读、空引用不算
+  const cardDoc = makeSyncDoc({
+    audio: '',
+    audioDurationMs: 0,
+    anchors: [],
+    code: 'X',
+    card: { template: 'tpl-abc' },
+  })
+  const cardBack = parseSyncDoc(serializeSyncDoc(cardDoc))
+  check(
+    'adj1176 sidecar 往返：`card.template` 原样读回（没有伴奏也允许只记卡片）',
+    cardBack.doc !== null && cardBack.doc.card?.template === 'tpl-abc' && cardBack.doc.audio === '',
+    JSON.stringify(cardBack.doc?.card ?? null),
+  )
+  const bare = parseSyncDoc(
+    serializeSyncDoc(makeSyncDoc({ audio: '', audioDurationMs: 0, anchors: [], code: '' })),
+  )
+  check(
+    'adj1176 负对照：既没有 audio 也没有卡片/标记段的 sidecar 仍判"无效"',
+    bare.doc === null && bare.error !== undefined,
+    String(bare.error),
+  )
+  const emptyCard = parseSyncDoc(
+    JSON.stringify({ ...JSON.parse(serializeSyncDoc(cardDoc)), card: { template: '   ' } }),
+  )
+  check(
+    'adj1176 负对照：空模板 id 不灌回 UI（读成"没记过"）',
+    emptyCard.doc === null || emptyCard.doc.card === undefined,
+    JSON.stringify(emptyCard.doc?.card ?? null),
+  )
+
+  // ⑦ 接线：模板库 / 相机位 / sidecar / 出片渲染器
+  const uiSrc = readFileSync(join(root, 'src/store/uiStore.ts'), 'utf8')
+  const docSrc = readFileSync(join(root, 'src/export/video/syncDoc.ts'), 'utf8')
+  const storeSrc = readFileSync(join(root, 'src/store/syncStore.ts'), 'utf8')
+  const extrasSrc = readFileSync(join(root, 'src/store/syncExtras.ts'), 'utf8')
+  const overlaySrc = readFileSync(join(root, 'src/preview/DynamicFrameOverlay.tsx'), 'utf8')
+  const dialogSrc = readFileSync(join(root, 'src/dialogs/CardStyleDialog.tsx'), 'utf8')
+  const renderSrc = readFileSync(join(root, 'src/export/video/renderer.ts'), 'utf8')
+  check(
+    'adj1176 模板库是 L1 的公共一份（`ijipu.cardTemplates`），旧的单槽自定义会迁移进来',
+    /const CARD_TEMPLATES_KEY = 'ijipu\.cardTemplates'/.test(uiSrc) &&
+      /LEGACY_CARD_STYLE_CUSTOM_KEY = 'ijipu\.dynamicCardStyleCustom'/.test(uiSrc) &&
+      /saveCardTemplate: \(style\) =>/.test(uiSrc) &&
+      /deleteCardTemplate: \(id\) =>/.test(uiSrc) &&
+      /迁移成模板库里的一项/.test(uiSrc),
+    '',
+  )
+  check(
+    'adj1176 每首谱记模板：sidecar `card` 字段 + 存盘透传 + 打开时回灌 + 用户改模板时写入',
+    /card\?: SyncCard/.test(docSrc) &&
+      /input\.card !== undefined \? \{ card: input\.card \}/.test(docSrc) &&
+      /cur\.card !== undefined \? \{ card: cur\.card \}/.test(storeSrc) &&
+      /ui\.setDynamicCardStyle\(doc\.card\.template\)/.test(extrasSrc) &&
+      /export function recordCardTemplate/.test(extrasSrc),
+    '',
+  )
+  check(
+    'adj1176 相机位：下拉列出「我的模板」、选中即记到这首歌、模板对话框入口是「管理模板…」',
+    /cardTemplates = useUiStore/.test(overlaySrc) &&
+      /resolveCardStyle\(cardStyle, cardTemplates\)/.test(overlaySrc) &&
+      /optgroup label=\{dynamicVideoCopy\.cardMine\}/.test(overlaySrc) &&
+      /recordCardTemplate\(id\)/.test(overlaySrc) &&
+      /openModal\('cardStyle'\)/.test(overlaySrc),
+    '',
+  )
+  check(
+    'adj1176 对话框：可命名保存 / 另存为 / 删除 / 导入到库 / 背景图取景滑块',
+    /saveCardTemplate\(\{ \.\.\.draft, id: draftId, name: finalName, baseId: base/.test(dialogSrc) &&
+      /doSaveAs/.test(dialogSrc) &&
+      /deleteCardTemplate\(draftId\)/.test(dialogSrc) &&
+      /saveCardTemplate\(\{ \.\.\.style, id: '', name: finalName, backgroundImage/.test(dialogSrc) &&
+      /cardStyleCopy\.imagePosX/.test(dialogSrc) &&
+      /cardStyleCopy\.imageZoom/.test(dialogSrc),
+    '',
+  )
+  check(
+    'adj1176 出片渲染：背景图走同一套 `cardImageRect`，水印/印章用 `cardFontStack` 与多字排版',
+    /cardImageRect\(iw, ih, W, H, card\.backgroundImagePos, card\.backgroundImageZoom\)/.test(renderSrc) &&
+      /cardFontStack\(card\.watermark\.font, pageConfig\.biaoti_font, card\.watermark\.fontFamily\)/.test(renderSrc) &&
+      /sealLayoutOf\(card\.seal\.text, size,/.test(renderSrc) &&
+      /fitFontSize\(/.test(renderSrc),
+    '',
+  )
+
+  // ⑧ 旧版"只有一套自定义"的迁移不能把用户已删的模板复活
+  check(
+    'adj1176 迁移后立刻写回新键（删光模板也不会被旧键复活）',
+    /const migrated = \[normalizeCardStyle/.test(uiSrc) && /saveCardTemplates\(migrated\)/.test(uiSrc),
+    '',
+  )
+}
+
+/**
+ * adj1177（用户 2026-11-01）：「印章外框以适配文字大小的不规则椭圆形状为宜」。
+ * adj1181（用户 2026-11-02）改口径：「改为不规则弧线，贴合文字（预留一定间距）即可，不再用椭圆」。
+ *
+ * 所以现在外框按文字算包围盒（单字近方、多字竖长、6 字有上限），轮廓是**超椭圆**
+ * （|u|⁴+|v|⁴=1，圆角矩形观感）再叠轻微确定性起伏——不再是椭圆。
+ */
+function runAdj1177Tests(): void {
+  console.log('[adj1177] 印章外框：贴合文字的不规则弧线')
+  const one = sealLayoutOf('谱', 100)
+  check(
+    'adj1177 单字 ⇒ 近方外框（宽高比 1.07，不再是固定正方形硬塞）',
+    one.chars.length === 1 && Math.abs(one.boxW / one.boxH - 1) < 0.2,
+    JSON.stringify(one),
+  )
+  const three = sealLayoutOf('赤伶印', 100)
+  check(
+    'adj1177 3 个字 ⇒ 外框竖长（高 ≈ 2.07 × 宽，文字不被方框挤小）',
+    three.chars.length === 3 && three.boxH > three.boxW * 1.8,
+    JSON.stringify(three),
+  )
+  const six = sealLayoutOf('一二三四五六', 100)
+  check(
+    'adj1177 6 个字 ⇒ 外框有上限（高 ≤ 2.6×size），只收字号不把印章撑出画面',
+    six.chars.length === 6 && six.boxH <= 260.5 && six.font < three.font,
+    JSON.stringify(six),
+  )
+
+  const pts = sealFramePoints(three, 500, 400)
+  const rx = three.boxW / 2
+  const ry = three.boxH / 2
+  const u = pts.map((p) => Math.abs((p.x - 500) / rx))
+  const v = pts.map((p) => Math.abs((p.y - 400) / ry))
+  const residual = pts.map((p, i) => u[i] ** 4 + v[i] ** 4)
+  check(
+    'adj1181 外框是**超椭圆弧线**（|u|⁴+|v|⁴ ≈ 1，96 点左右，带 ±3.6% 起伏），不再用椭圆',
+    pts.length === 96 &&
+      Math.min(...residual) > 0.82 &&
+      Math.max(...residual) < 1.2 &&
+      Math.max(...u) < 1.05 &&
+      Math.max(...v) < 1.05,
+    `residual ${Math.min(...residual).toFixed(3)}..${Math.max(...residual).toFixed(3)} / max u=${Math.max(...u).toFixed(3)} v=${Math.max(...v).toFixed(3)}`,
+  )
+  // 45° 处：超椭圆 |u|=|v|≈0.841；椭圆才是 0.707 —— 这条专门证明"不是椭圆"
+  check(
+    'adj1181 45° 处 |x/rx| ≈ 0.84（椭圆会是 0.707）⇒ 轮廓确实贴合文字、不是椭圆',
+    Math.abs((pts[Math.round(pts.length / 8)].x - 500) / rx) > 0.78,
+    String(Math.abs((pts[Math.round(pts.length / 8)].x - 500) / rx).toFixed(3)),
+  )
+  check(
+    'adj1177 同一个印章每次顶点完全一致（确定性；不同文字形状不同）',
+    JSON.stringify(pts) === JSON.stringify(sealFramePoints(three, 500, 400)) &&
+      JSON.stringify(pts) !== JSON.stringify(sealFramePoints(one, 500, 400)),
+    '',
+  )
+
+  const renderSrc = readFileSync(join(root, 'src/export/video/renderer.ts'), 'utf8')
+  const sealSrc = renderSrc.slice(renderSrc.indexOf('const paintCardSeal'), renderSrc.indexOf('const cardReveal'))
+  const copySrc = readFileSync(join(root, 'src/brand/copy.ts'), 'utf8')
+  check(
+    'adj1181 渲染接线：沿 `sealFramePoints` 画闭合弧线、不再 `strokeRect`；提示文案写明"弧线"',
+    /sealFramePoints\(layout, cx, cy\)/.test(sealSrc) &&
+      /sealLayoutOf\(card\.seal\.text, size,/.test(sealSrc) &&
+      !/strokeRect\(/.test(sealSrc) &&
+      /sealHint: '.*弧线/.test(copySrc),
+    '',
+  )
+}
+
+/**
+ * adj1178（用户 2026-11-01）：「允许印章使用图片文件并可指定大小和位置」。
+ *
+ * 口径：`seal.image` 有值就画图（文字/字体/颜色只作退路），`size` 是相对短边 12% 的倍数，
+ * `x` / `y` 是图片中心在画布里的相对坐标；放得下就整枚留在画面内（0=贴左/上，1=贴右/下）。
+ */
+function runAdj1178Tests(): void {
+  console.log('[adj1178] 印章图片 + 大小/位置')
+  const base = normalizeCardStyle({
+    ...DEFAULT_CARD_STYLE,
+    seal: { text: '谱', color: '#b23a2b' },
+  }).seal
+  check(
+    'adj1178 旧印章缺字段 ⇒ 默认无图、大小 1、位置 0.86/0.84（不改旧观感）',
+    base !== null &&
+      base.image === null &&
+      base.size === 1 &&
+      base.x === 0.86 &&
+      base.y === 0.84,
+    JSON.stringify(base),
+  )
+  const tuned = normalizeCardStyle({
+    ...DEFAULT_CARD_STYLE,
+    seal: { text: '谱', color: '#b23a2b', image: 'ijipu-blob:aa11.png', size: 9, x: -1, y: 2 },
+  }).seal
+  check(
+    'adj1178 大小/位置越界要夹紧（0.4~2.5；左右/上下 0~1），图片引用保留',
+    tuned !== null &&
+      tuned.image === 'ijipu-blob:aa11.png' &&
+      tuned.size === 2.5 &&
+      tuned.x === 0 &&
+      tuned.y === 1,
+    JSON.stringify(tuned),
+  )
+
+  const r1 = sealImageRectOf(1000, 1000, 1000, 2000, 1, 0.86, 0.84)
+  check(
+    'adj1178 方图 size=1：边长 = 短边 12%（120），中心在 0.86/0.84',
+    r1.w === 120 && r1.h === 120 && r1.x === 800 && r1.y === 1620,
+    JSON.stringify(r1),
+  )
+  const r2 = sealImageRectOf(1000, 1000, 1000, 2000, 2, 0.86, 0.84)
+  check(
+    'adj1178 size=2 ⇒ 边长翻倍（240），仍以同一中心',
+    r2.w === 240 && r2.h === 240 && r2.x === 740 && r2.y === 1560,
+    JSON.stringify(r2),
+  )
+  const r3 = sealImageRectOf(1000, 1000, 1000, 2000, 1, 0, 0)
+  check(
+    'adj1178 位置 0/0 ⇒ 贴左上（整枚留在画面里，不是一半在画外）',
+    r3.x === 0 && r3.y === 0 && r3.w === 120,
+    JSON.stringify(r3),
+  )
+  const r4 = sealImageRectOf(2000, 1000, 1000, 2000, 1, 0.5, 0.5)
+  check(
+    'adj1178 按图片原比例：宽图 2:1 ⇒ 120×60',
+    r4.w === 120 && r4.h === 60,
+    JSON.stringify(r4),
+  )
+
+  const png =
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+  const style = {
+    ...DEFAULT_CARD_STYLE,
+    id: 'tpl-seal',
+    name: '印章图',
+    seal: { text: '谱', color: '#b23a2b', font: 'serif' as const, image: png, size: 1.6, x: 0.7, y: 0.6 },
+  }
+  const back = readCardTemplateZip(createCardTemplateZip(style))
+  check(
+    'adj1178 模板 zip 往返：印章图片单独放 seal-image.*，大小/位置一起回来',
+    back.seal?.image === png &&
+      back.seal?.size === 1.6 &&
+      back.seal?.x === 0.7 &&
+      back.seal?.y === 0.6,
+    JSON.stringify({ image: String(back.seal?.image).slice(0, 24), size: back.seal?.size, x: back.seal?.x, y: back.seal?.y }),
+  )
+
+  const renderSrc = readFileSync(join(root, 'src/export/video/renderer.ts'), 'utf8')
+  const overlaySrc = readFileSync(join(root, 'src/preview/DynamicFrameOverlay.tsx'), 'utf8')
+  const dialogSrc = readFileSync(join(root, 'src/dialogs/CardStyleDialog.tsx'), 'utf8')
+  const archiveSrc = readFileSync(join(root, 'src/store/settingsArchive.ts'), 'utf8')
+  const zipSrc = readFileSync(join(root, 'src/export/video/cardTemplateZip.ts'), 'utf8')
+  check(
+    'adj1178 渲染接线：先解码印章图，再按 `sealImageRectOf` 画 `drawImage`',
+    /let sealImage: HTMLImageElement \| null = null/.test(renderSrc) &&
+      /sealImageRectOf\(/.test(renderSrc) &&
+      /ctx\.drawImage\(sealImage, rect\.x, rect\.y, rect\.w, rect\.h\)/.test(renderSrc),
+    '',
+  )
+  check(
+    'adj1178 两个入口都解析印章图引用：相机位预览/导出（`withResolvedCardImage`）与模板 zip',
+    /seal: style\.seal\s*\n?\s*\? \{ \.\.\.style\.seal, image: await resolveCardImage\(style\.seal\.image\) \}/.test(overlaySrc) &&
+      /seal-image\./.test(zipSrc) &&
+      /sealForJson = seal \? \{ \.\.\.seal, image: null \}/.test(zipSrc),
+    '',
+  )
+  check(
+    'adj1178 对话框：可选印章图片、清除、大小/左右/上下三个滑块；设置导入会检查印章图缺失',
+    /onPickSealImage/.test(dialogSrc) &&
+      /cardStyleCopy\.chooseSealImage/.test(dialogSrc) &&
+      /cardStyleCopy\.clearSealImage/.test(dialogSrc) &&
+      /cardStyleCopy\.sealSize/.test(dialogSrc) &&
+      /cardStyleCopy\.sealX/.test(dialogSrc) &&
+      /cardStyleCopy\.sealY/.test(dialogSrc) &&
+      /seal: \{ \.\.\.s, image: null \}/.test(archiveSrc),
+    '',
+  )
+}
+
+/**
+ * adj1179（用户 2026-11-02）：
+ *  ① 「视频导出只在桌面壳上实现，要求卡片风格上的字体能够选择本地的字体」；
+ *  ② 「在菜单上添加卡片风格菜单项」。
+ *
+ * 口径：`CardStyle` 的标题/水印/印章各多一个 `fontFamily`（本机字体族），有值就优先于预设；
+ * 值经 `normalizeFontStack` 补兜底。菜单项跟动态谱视频同一道能力闸门（桌面/dev/测试注入）。
+ */
+function runAdj1179Tests(): void {
+  console.log('[adj1179] 卡片字体可选本机字体 + 菜单「卡片风格」')
+  const local = cardFontStack('sans', undefined, 'FZLanTingHei')
+  check(
+    'adj1179 本机字体优先于预设，并自动补通用族兜底',
+    local.includes('FZLanTingHei') &&
+      local.endsWith('sans-serif') &&
+      !local.includes('Microsoft YaHei'),
+    local,
+  )
+  const localOverSerif = cardFontStack('serif', undefined, '方正清刻本悦宋')
+  check(
+    'adj1179 本机字体有值时压过「衬线」预设（不会又掉回宋体栈）',
+    localOverSerif.includes('方正清刻本悦宋') && !localOverSerif.includes('Songti SC'),
+    localOverSerif,
+  )
+  check(
+    'adj1179 本机字体留空/只有空格 ⇒ 仍用预设（旧模板观感不变）',
+    cardFontStack('serif', undefined, '   ').includes('Songti SC') &&
+      cardFontStack('sans', undefined, undefined).includes('Microsoft YaHei'),
+    cardFontStack('serif', undefined, '   '),
+  )
+
+  const tuned = normalizeCardStyle({
+    ...DEFAULT_CARD_STYLE,
+    title: { ...DEFAULT_CARD_STYLE.title, fontFamily: '  方正清刻本悦宋  ' },
+    watermark: { ...DEFAULT_CARD_STYLE.watermark, fontFamily: 'FZLanTingHei' },
+    seal: { text: '谱', color: '#b23a2b', fontFamily: '  楷体_GB2312  ' },
+  })
+  check(
+    'adj1179 规范化：三处本机字体去空白后保留（标题/水印/印章）',
+    tuned.title.fontFamily === '方正清刻本悦宋' &&
+      tuned.watermark.fontFamily === 'FZLanTingHei' &&
+      tuned.seal?.fontFamily === '楷体_GB2312',
+    JSON.stringify({
+      title: tuned.title.fontFamily,
+      watermark: tuned.watermark.fontFamily,
+      seal: tuned.seal?.fontFamily,
+    }),
+  )
+
+  const zipBack = readCardTemplateZip(createCardTemplateZip(tuned))
+  check(
+    'adj1179 模板 zip 往返：三处本机字体一起带走（发给别人留作字段，缺字体自动落兜底）',
+    zipBack.title.fontFamily === '方正清刻本悦宋' &&
+      zipBack.watermark.fontFamily === 'FZLanTingHei' &&
+      zipBack.seal?.fontFamily === '楷体_GB2312',
+    '',
+  )
+
+  const renderSrc = readFileSync(join(root, 'src/export/video/renderer.ts'), 'utf8')
+  const dialogSrc = readFileSync(join(root, 'src/dialogs/CardStyleDialog.tsx'), 'utf8')
+  const topbarSrc = readFileSync(join(root, 'src/ui/TopBar.tsx'), 'utf8')
+  const localSrc = readFileSync(join(root, 'src/export/video/localFonts.ts'), 'utf8')
+  const copySrc = readFileSync(join(root, 'src/brand/copy.ts'), 'utf8')
+  check(
+    'adj1179 渲染接线：标题（片头/片尾）/水印/印章四处都把本机字体传给 `cardFontStack`',
+    (renderSrc.match(/cardFontStack\(card\.title\.font, pageConfig\.biaoti_font, card\.title\.fontFamily\)/g) ?? []).length === 2 &&
+      /cardFontStack\(card\.watermark\.font, pageConfig\.biaoti_font, card\.watermark\.fontFamily\)/.test(renderSrc) &&
+      /cardFontStack\(card\.seal\.font, pageConfig\.biaoti_font, card\.seal\.fontFamily\)/.test(renderSrc),
+    '',
+  )
+  check(
+    'adj1179 对话框：字体输入框 + 共享 datalist +「读取本机字体」（读不到也不挡手打）',
+    /list="ijipu-card-local-fonts"/.test(dialogSrc) &&
+      /<datalist id="ijipu-card-local-fonts">/.test(dialogSrc) &&
+      /listLocalFontFamilies/.test(dialogSrc) &&
+      /canQueryLocalFonts/.test(dialogSrc) &&
+      /cardStyleCopy\.loadLocalFonts/.test(dialogSrc),
+    '',
+  )
+  check(
+    'adj1179 本机字体读取：走 `navigator.queryLocalFonts()`，按 family 去重（不写死字体清单）',
+    /queryLocalFonts/.test(localSrc) && /new Set<string>/.test(localSrc),
+    '',
+  )
+  check(
+    'adj1179/1186 菜单：「设置」分组有「卡片模板」项，点开 `cardStyle` 对话框，非桌面端隐藏',
+    /label: '卡片模板\(&T\)…'/.test(topbarSrc) &&
+      /onPick: \(\) => openModal\('cardStyle'\)/.test(topbarSrc) &&
+      /hidden: !canUseDynamicVideo\(\)/.test(topbarSrc) &&
+      /entryCardStyle,/.test(topbarSrc) &&
+      /localFont:/s.test(copySrc),
+    '',
+  )
+}
+
+/**
+ * adj1180（用户 2026-11-02 追问「本机字体列表依据什么选、为什么没有我要的字体」）：
+ * 默认那 20 个是**常见字体提示**，不是系统扫描；读取接口不可用时按钮不能静默禁用，
+ * 必须把原因和"可以手打字体名"直接写在界面上。
+ */
+function runAdj1180Tests(): void {
+  console.log('[adj1180] 本机字体列表来源可见')
+  const dialogSrc = readFileSync(join(root, 'src/dialogs/CardStyleDialog.tsx'), 'utf8')
+  const copySrc = readFileSync(join(root, 'src/brand/copy.ts'), 'utf8')
+  check(
+    'adj1180 「读取本机字体」按钮不再因为接口缺失而静默禁用（点了会给原因）',
+    !/disabled=\{!canQueryLocalFonts\(\)\}/.test(dialogSrc) &&
+      /onClick=\{\(\) => void loadLocalFonts\(\)\}/.test(dialogSrc) &&
+      /localFontApi/.test(dialogSrc),
+    '',
+  )
+  check(
+    'adj1180 界面写明「默认只是常见字体提示」与「没列出来也能直接输入字体名」',
+    /localFontHint: '.*常见字体提示/.test(copySrc) &&
+      /localFontManual: '.*没列出来也能直接输入字体名/.test(copySrc) &&
+      /cardStyleCopy\.localFontManual/.test(dialogSrc) &&
+      /cardStyleCopy\.localFontsUnavailable/.test(dialogSrc),
+    '',
+  )
+}
+
+/**
+ * adj1181（用户 2026-11-02）：「桌面壳按说是可以读取本机的字体的」——
+ * 桌面壳不再只靠 WebView 的 `queryLocalFonts()`（实验性，部分 WebView2 不可用）：
+ * 走 Rust GDI `EnumFontFamiliesExW` 枚举系统字体族（中文族名），前端优先用它。
+ */
+function runAdj1181Tests(): void {
+  console.log('[adj1181] 桌面壳 GDI 枚举系统字体')
+  const localSrc = readFileSync(join(root, 'src/export/video/localFonts.ts'), 'utf8')
+  const rustSrc = readFileSync(join(root, 'src-tauri/src/lib.rs'), 'utf8')
+  const cargoSrc = readFileSync(join(root, 'src-tauri/Cargo.toml'), 'utf8')
+  const dialogSrc = readFileSync(join(root, 'src/dialogs/CardStyleDialog.tsx'), 'utf8')
+  check(
+    'adj1181 桌面壳优先走 Rust GDI 枚举（`list_system_fonts`），打开对话框即自动读一次',
+    /desktopSystemFonts/.test(localSrc) &&
+      /invoke\('list_system_fonts'\)/.test(localSrc) &&
+      /const desktop = await desktopSystemFonts\(\)/.test(localSrc) &&
+      /if \(desktop !== null && desktop\.length > 0\) return desktop/.test(localSrc) &&
+      /if \(isTauriShell\(\)\) void loadLocalFonts\(\)/.test(dialogSrc),
+    '',
+  )
+  check(
+    'adj1181 Rust：`EnumFontFamiliesExW` 枚举字体族、过滤 @ 竖排别名、注册进 invoke',
+    /fn list_system_fonts\(\) -> Result<Vec<String>, String>/.test(rustSrc) &&
+      /EnumFontFamiliesExW/.test(rustSrc) &&
+      /starts_with\('@'\)/.test(rustSrc) &&
+      /list_system_fonts,/.test(rustSrc),
+    '',
+  )
+  check(
+    'adj1181 Cargo：只加 `Win32_Graphics_Gdi` feature（不新增 crate）',
+    /Win32_Graphics_Gdi/.test(cargoSrc) && /windows-sys = \{ version = "0\.61"/.test(cargoSrc),
+    '',
+  )
+}
+
+/**
+ * adj1182（用户 2026-11-02）：
+ *  ① 「保存模板后不要关闭窗口」；
+ *  ② 「更换了起点模板后，保存模板，再打开，起点模板没有生效」——
+ *     起点模板要随模板存（`baseId`），重开时按它回显。
+ */
+function runAdj1182Tests(): void {
+  console.log('[adj1182] 保存不关窗 + 起点模板随模板保存')
+  const base = normalizeCardStyle({ ...DEFAULT_CARD_STYLE, id: 'tpl-a', baseId: 'paper' })
+  check(
+    'adj1182 规范化保留合法的 `baseId`（纸面），非法值丢掉',
+    base.baseId === 'paper' &&
+      normalizeCardStyle({ ...DEFAULT_CARD_STYLE, id: 'tpl-b', baseId: 'nope' as never }).baseId === undefined,
+    JSON.stringify({ ok: base.baseId, bad: normalizeCardStyle({ ...DEFAULT_CARD_STYLE, baseId: 'nope' as never }).baseId }),
+  )
+  const zipBack = readCardTemplateZip(createCardTemplateZip(base))
+  check('adj1182 模板 zip 往返带上 `baseId`', zipBack.baseId === 'paper', String(zipBack.baseId))
+
+  const dialogSrc = readFileSync(join(root, 'src/dialogs/CardStyleDialog.tsx'), 'utf8')
+  check(
+    'adj1182 保存后不关窗；保存时写入起点模板（`baseId: base`），重开按 `initial.baseId` 回显',
+    /saveCardTemplate\(\{ \.\.\.draft, id: draftId, name: finalName, baseId: base/.test(dialogSrc) &&
+      !/setMsg\(cardStyleCopy\.savedOk\(finalName\)\)\s*\n\s*\/\/[^\n]*\n\s*closeModal\(\)/.test(dialogSrc) &&
+      /initial\.baseId !== undefined && isBuiltInCardStyleId\(initial\.baseId\)/.test(dialogSrc) &&
+      /data-card="base"/.test(dialogSrc),
+    '',
+  )
+  check(
+    'adj1182 换起点模板时草稿也记下 `baseId`（`setDraft({ ...cloneStyle(...), baseId: id })`）',
+    /setDraft\(\{ \.\.\.cloneStyle\(cardStyleById\(id\)\), baseId: id/.test(dialogSrc),
+    '',
+  )
+}
+
+/**
+ * adj1183（用户 2026-11-02）：「桌面壳导出后无提示，建议添加导出成功的提示，
+ * 并提示打开文件/文件夹」。
+ */
+function runAdj1183Tests(): void {
+  console.log('[adj1183] 导出成功提示 + 打开文件/文件夹')
+  const overlaySrc = readFileSync(join(root, 'src/preview/DynamicFrameOverlay.tsx'), 'utf8')
+  const toastSrc = readFileSync(join(root, 'src/ui/Toast.tsx'), 'utf8')
+  const uiSrc = readFileSync(join(root, 'src/store/uiStore.ts'), 'utf8')
+  const rustSrc = readFileSync(join(root, 'src-tauri/src/lib.rs'), 'utf8')
+  const copySrc = readFileSync(join(root, 'src/brand/copy.ts'), 'utf8')
+  check(
+    'adj1183 桌面壳导出走原生保存（`save_mp4_file` 拿真实路径），成功后提示并给两个动作',
+    /isTauriShell\(\)/.test(overlaySrc) &&
+      /save_mp4_file/.test(overlaySrc) &&
+      /exportedVideo\(savedPath\)/.test(overlaySrc) &&
+      /label: dynamicVideoCopy\.openFile/.test(overlaySrc) &&
+      /label: dynamicVideoCopy\.openFolder/.test(overlaySrc) &&
+      /open_local_path/.test(overlaySrc),
+    '',
+  )
+  check(
+    'adj1183 用户取消保存 ⇒ 明确提示"已取消导出"（不静默）',
+    /exportCanceled/.test(overlaySrc) && /exportCanceled/.test(copySrc),
+    '',
+  )
+  check(
+    'adj1183 Toast 支持**多个**动作按钮（`notice.actions` 数组；有按钮就不自动消失）',
+    /actions\?: NoticeAction\[\]/.test(uiSrc) &&
+      /notice\.actions/.test(toastSrc) &&
+      /actions\.map/.test(toastSrc) &&
+      /notice\.action \|\| \(notice\.actions\?\.length \?\? 0\) > 0/.test(toastSrc),
+    '',
+  )
+  check(
+    'adj1183 Rust：原生保存 MP4（base64 → 写盘 → 长度校验）+ 打开文件/文件夹（opener 插件）',
+    /fn save_mp4_file/.test(rustSrc) &&
+      /crate::b64::decode/.test(rustSrc) &&
+      /fn open_local_path/.test(rustSrc) &&
+      /reveal_item_in_dir/.test(rustSrc) &&
+      /save_mp4_file,/.test(rustSrc) &&
+      /open_local_path,/.test(rustSrc),
+    '',
+  )
+  // adj1185（用户实报「导出后还是没有提示」）：相机位浮层是 z-index 60，
+  // 提示若仍是 45 就会被整个盖住——这正是"代码有 showNotice、界面看不到"的原因。
+  const cssSrc = readFileSync(join(root, 'src/index.css'), 'utf8')
+  check(
+    'adj1185 提示层级高于相机位/试听浮层（toast 70 > dyn-frame-layer 60），否则导出成功也看不见',
+    /\.toast \{[\s\S]{0,260}?z-index: 70;/.test(cssSrc) &&
+      /\.dyn-frame-layer \{[\s\S]{0,80}?z-index: 60;/.test(cssSrc),
+    '',
+  )
+  const overlaySrcForExport = readFileSync(join(root, 'src/preview/DynamicFrameOverlay.tsx'), 'utf8')
+  check(
+    'adj1185 相机位控制条里也有导出结果条（路径 + 打开文件/文件夹），不依赖 toast',
+    /data-sync="dyn-export-done"/.test(overlaySrcForExport) &&
+      /dyn-frame-export-path/.test(overlaySrcForExport) &&
+      /openExportPath\(false\)/.test(overlaySrcForExport) &&
+      /openExportPath\(true\)/.test(overlaySrcForExport) &&
+      /setExportDone\(\{ path: savedPath \}\)/.test(overlaySrcForExport),
+    '',
+  )
+}
+
+/**
+ * adj1184（用户 2026-11-02）：卡片模板导出 zip 的默认文件名 = `ijipu-card-<模板名>`。
+ */
+function runAdj1184Tests(): void {
+  console.log('[adj1184] 模板导出文件名')
+  check(
+    'adj1184 默认名：`ijipu-card-<模板名>.zip`',
+    cardTemplateZipNameOf('纸面模板') === 'ijipu-card-纸面模板.zip' &&
+      cardTemplateZipNameOf('  赤伶  ') === 'ijipu-card-赤伶.zip',
+    JSON.stringify([cardTemplateZipNameOf('纸面模板'), cardTemplateZipNameOf('  赤伶  ')]),
+  )
+  const weird = cardTemplateZipNameOf('a/b:c*d?e"f<g>h|i')
+  check(
+    'adj1184 非法字符替换成 `_`（Windows 文件名安全）',
+    !/[\\/:*?"<>|]/.test(weird) && weird.startsWith('ijipu-card-a_b_c_d_e_f_g_h_i'),
+    weird,
+  )
+  check(
+    'adj1184 空名回退「未命名」，不会出现 `ijipu-card-.zip`',
+    cardTemplateZipNameOf('') === 'ijipu-card-未命名.zip' &&
+      cardTemplateZipNameOf(undefined) === 'ijipu-card-未命名.zip',
+    cardTemplateZipNameOf(''),
+  )
+  const dialogSrc = readFileSync(join(root, 'src/dialogs/CardStyleDialog.tsx'), 'utf8')
+  check(
+    'adj1184 对话框导出走 `cardTemplateZipNameOf`（不再手拼文件名）',
+    /cardTemplateZipNameOf\(name\.trim\(\) \|\| draft\.name\)/.test(dialogSrc) &&
+      !/suggested \|\| CARD_ZIP_NAME/.test(dialogSrc),
+    '',
+  )
+}
+
+/**
+ * adj1186（用户 2026-11-02）：
+ *  ① 菜单项「卡片风格」统一为「卡片模板」；
+ *  ② 卡片模板对话框的「朱砂印章」框内右侧显示印章效果预览。
+ */
+function runAdj1186Tests(): void {
+  console.log('[adj1186] 菜单统一「卡片模板」+ 印章效果预览')
+  const topbarSrc = readFileSync(join(root, 'src/ui/TopBar.tsx'), 'utf8')
+  const dialogSrc = readFileSync(join(root, 'src/dialogs/CardStyleDialog.tsx'), 'utf8')
+  const copySrc = readFileSync(join(root, 'src/brand/copy.ts'), 'utf8')
+  check(
+    'adj1186 菜单项统一叫「卡片模板」（不再叫「卡片风格」）',
+    /label: '卡片模板\(&T\)…'/.test(topbarSrc) && !/label: '卡片风格/.test(topbarSrc),
+    '',
+  )
+  check(
+    'adj1186 朱砂印章右侧有效果预览（文字印章走 canvas，图片印章显示图片）',
+    /data-card="seal-effect"/.test(dialogSrc) &&
+      /sealCanvasRef/.test(dialogSrc) &&
+      /sealFramePoints\(\{ \.\.\.layout, boxW, boxH \}, cx, cy\)/.test(dialogSrc) &&
+      /cardStyleCopy\.sealEffect/.test(dialogSrc) &&
+      /cardStyleCopy\.sealEffectOff/.test(dialogSrc) &&
+      /sealEffect: '效果预览'/.test(copySrc),
+    '',
+  )
+}
+
+/**
+ * adj1187（用户 2026-11-02）：「卡片模板保存时无保存成功与否的提示，无法获知是否保存成功」。
+ *
+ * 根因：消息只渲染在「模板导入/导出」分区（要滚到最下面才看得到）；写入本机存储失败也被吞掉。
+ * 现在：保存结果固定显示在底栏（保存按钮旁）；`saveCardTemplate` 返回 `persisted`，失败明确标红。
+ */
+function runAdj1187Tests(): void {
+  console.log('[adj1187] 卡片模板保存结果提示')
+  const dialogSrc = readFileSync(join(root, 'src/dialogs/CardStyleDialog.tsx'), 'utf8')
+  const uiSrc = readFileSync(join(root, 'src/store/uiStore.ts'), 'utf8')
+  const copySrc = readFileSync(join(root, 'src/brand/copy.ts'), 'utf8')
+  check(
+    'adj1187 保存结果固定显示在底栏（`data-card="save-status"`，aria-live），不用滚到底部',
+    /data-card="save-status"/.test(dialogSrc) &&
+      /aria-live="polite"/.test(dialogSrc) &&
+      /card-style-footer-status/.test(dialogSrc) &&
+      /\.card-style-footer-status \{/.test(readFileSync(join(root, 'src/index.css'), 'utf8')),
+    '',
+  )
+  check(
+    'adj1187 写入本机存储失败时返回 `persisted:false`，对话框区分成功/失败文案（不再静默吞掉）',
+    /saveCardTemplates\(items\)/.test(uiSrc) &&
+      /const persisted = saveCardTemplates\(items\)/.test(uiSrc) &&
+      /return \{ id, persisted \}/.test(uiSrc) &&
+      /saveCardTemplate: \(style: CardStyle\) => \{ id: string; persisted: boolean \}/.test(uiSrc) &&
+      /setMsgError\(!res\.persisted\)/.test(dialogSrc) &&
+      /cardStyleCopy\.saveFailed/.test(dialogSrc) &&
+      /saveFailed: \(name: string\)/.test(copySrc),
+    '',
+  )
+  check(
+    'adj1187 导入也区分"已入库 / 只在本次会话"',
+    /importedUnsaved/.test(dialogSrc) && /importedUnsaved:/.test(copySrc),
+    '',
   )
 }

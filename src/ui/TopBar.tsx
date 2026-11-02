@@ -42,6 +42,8 @@ import { foldKeys } from './topbarFold'
 // adj879（用户实测）：它与状态栏那个入口**必须表现一致**（原先一个开新窗口、一个本窗口返回）
 // ⇒ 两者共用 `brand/siteHome.ts` 的 `goSiteHome()`：网页版本窗口返回、桌面壳交系统浏览器。
 import { goSiteHome } from '../brand/siteHome'
+// adj1179：卡片风格只服务桌面壳的动态谱视频（网站/插件不显示入口）
+import { canUseDynamicVideo } from '../export/video/capability'
 
 /** Alt+字母 → 菜单分组（adj185）
  *  adj383：主题组已移入「页面设置」对话框的「主题」标签，Alt+T 菜单分组随之取消 */
@@ -1241,6 +1243,19 @@ export function TopBar() {
   /** adj615（用户要求）：菜单里**紧跟在「导出」下面**加「打印」（打开打印对话框打印当前谱面） */
   const entryPrint: MenuEntry = { label: '打印(&D)…', kbd: KBD.print, hotkey: 'd', onPick: () => useDocStore.getState().printScore() }
   /**
+   * adj1179（用户 2026-11-02）：「在菜单上添加卡片风格菜单项」。
+   * adj1186：菜单文案统一为「卡片模板」（与对话框标题一致）。
+   *
+   * 卡片模板只用于动态谱视频 ⇒ 跟着同一道能力闸门（桌面壳 / dev / 测试注入）。
+   * 不再要求"先打开相机位"才能管模板；从菜单进来同样能新建/编辑/导入导出。
+   */
+  const entryCardStyle: MenuEntry = {
+    label: '卡片模板(&T)…',
+    hotkey: 't',
+    onPick: () => openModal('cardStyle'),
+    hidden: !canUseDynamicVideo(),
+  }
+  /**
    * adj723z（用户要求）：「在菜单文件组中增加一个打开历史二级菜单，二级菜单下为最近 10 个
    * 打开过的 jps 文件，按从最近到最早的顺序排列」；二级菜单名定为「**最近…**」。
    *
@@ -1300,6 +1315,8 @@ export function TopBar() {
   const settingsEntries: (MenuEntry | 'sep')[] = [
     { label: '全局设置(&G)…', hotkey: 'g', onPick: () => toggleDock('settings') },
     { label: '谱面设置(&P)…', hotkey: 'p', onPick: () => toggleDock('score') },
+    // adj1179：卡片风格（桌面专属；隐藏闸门与相机位同一道）
+    entryCardStyle,
   ]
   // adj422：原「编辑」子菜单（撤销/重做）已从菜单移除——用户要求菜单精简；
   // **功能保留**：撤销 Ctrl+Z / 重做 Ctrl+Shift+Z（见全局快捷键；adj619b 起重做从 Ctrl+Y 挪过来），

@@ -66,9 +66,25 @@ export interface SyncDoc {
    * 缺字段 = 这份 sidecar 还没管过它。
    */
   range?: SyncRange | null
+  /**
+   * adj1176（用户 2026-11-01）：**这首歌用哪套卡片模板**。
+   *
+   * 为什么只记引用、不记样式本体：样式在用户模板库里（L1，公共一份），
+   * 这里记全量的话，换首歌就复制一份、背景图还是本机附件引用（换机器打不开），
+   * 想统一微调还得逐首改。只记 id ⇒ 换回上一曲能恢复，改模板一处全生效。
+   *
+   * 缺字段 = 这份 sidecar 还没记过（打开时沿用上次选的模板）。
+   */
+  card?: SyncCard
   /** 存盘时谱面的 FNV-1a 指纹（改了谱 ⇒ 提示"锚点请复核"） */
   codeHash: string
   updatedAt: string
+}
+
+/** adj1176：sidecar 里的卡片引用（只存模板 id） */
+export interface SyncCard {
+  /** 内置模板 id（brand/paper/ink/minimal）或用户模板库里的 id（tpl-…） */
+  template: string
 }
 
 /** 练习段（与 `store/practiceMarks.ts` 的 `PracticeMark` 结构一致；export 层不反向依赖 store） */
@@ -196,10 +212,18 @@ export function parseSyncDoc(text: string): { doc: SyncDoc | null; error?: strin
    * `syncDocIsUsable` 仍为 false，相机/对拍不会误把它当可用音轨）；
    * 没有 audio 且没有任何 extras ⇒ 仍按旧口径明确报错。
    */
+  const cardRaw = o.card
+  const hasCardRef =
+    cardRaw !== null &&
+    typeof cardRaw === 'object' &&
+    !Array.isArray(cardRaw) &&
+    typeof (cardRaw as Record<string, unknown>).template === 'string' &&
+    ((cardRaw as Record<string, unknown>).template as string).trim() !== ''
   const hasExtras =
     Array.isArray(o.marks) ||
     o.range !== undefined ||
-    typeof o.markId === 'string'
+    typeof o.markId === 'string' ||
+    hasCardRef
   if (audio === '' && !hasExtras) return { doc: null, error: '对拍文件里没有记伴奏文件名（audio）' }
 
   const warnings: string[] = []
@@ -298,6 +322,14 @@ export function parseSyncDoc(text: string): { doc: SyncDoc | null; error?: strin
       range = { startId, endId, ...(pass !== undefined ? { pass } : {}) }
     }
   }
+  /**
+   * adj1176：卡片引用（可选）。空对象/空字符串都当"没记过"——
+   * 不能把一个空模板 id 灌回 UI，那会让相机位选中一个不存在的项。
+   */
+  let card: SyncCard | undefined
+  if (hasCardRef) {
+    card = { template: ((cardRaw as Record<string, unknown>).template as string).trim() }
+  }
   const doc: SyncDoc = {
     version: SYNC_VERSION,
     audio,
@@ -311,6 +343,7 @@ export function parseSyncDoc(text: string): { doc: SyncDoc | null; error?: strin
     ...(marks !== undefined ? { marks } : {}),
     ...(markId !== undefined ? { markId } : {}),
     ...(range !== undefined ? { range } : {}),
+    ...(card !== undefined ? { card } : {}),
     codeHash: typeof o.codeHash === 'string' ? o.codeHash : '',
     updatedAt: typeof o.updatedAt === 'string' ? o.updatedAt : new Date().toISOString(),
   }
@@ -334,6 +367,8 @@ export function makeSyncDoc(input: {
   marks?: SyncPracticeMark[]
   markId?: string
   range?: SyncRange | null
+  /** adj1176：这首歌用的卡片模板（缺省 = 不写，保持旧文件形状） */
+  card?: SyncCard
   code: string
   now?: string
 }): SyncDoc {
@@ -355,6 +390,7 @@ export function makeSyncDoc(input: {
     ...(input.marks !== undefined ? { marks: input.marks } : {}),
     ...(input.markId !== undefined ? { markId: input.markId } : {}),
     ...(input.range !== undefined ? { range: input.range } : {}),
+    ...(input.card !== undefined ? { card: input.card } : {}),
     codeHash: codeFingerprint(input.code),
     updatedAt: input.now ?? new Date().toISOString(),
   }

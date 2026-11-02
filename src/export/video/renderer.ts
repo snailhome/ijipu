@@ -51,7 +51,17 @@ import { svgToCanvas } from '../export'
 import { withOverlay } from '../../store/overlayAssets'
 import { pickPracticeCandidate } from './practicePick'
 import { brand } from '../../brand/tokens'
-import { CARD_SANS, CARD_SERIF, DEFAULT_CARD_STYLE, type CardStyle } from './cardTemplates'
+import {
+  CARD_SANS,
+  DEFAULT_CARD_STYLE,
+  cardFontStack,
+  cardImageRect,
+  fitFontSize,
+  sealFramePoints,
+  sealImageRectOf,
+  sealLayoutOf,
+  type CardStyle,
+} from './cardTemplates'
 import { endCardLayout, tempoLineOf } from './cardLayout'
 // adj1148：前奏等待的两条纯计算（时间轴后移 / 定格帧时刻；smoke 直接断言这一份）
 import { preRollFrameMs, shiftSequenceBy } from './preRoll'
@@ -192,6 +202,20 @@ export async function createDynamicSession(
       await cardImage.decode()
     } catch {
       cardImage = null
+    }
+  }
+  /**
+   * adj1178：图片印章也**一次性解码**（与背景图同口径，不在每帧 new Image）。
+   * 解码失败 ⇒ 退回文字印章（如果还写了字）。
+   */
+  let sealImage: HTMLImageElement | null = null
+  if (card.seal?.image) {
+    try {
+      sealImage = new Image()
+      sealImage.src = card.seal.image
+      await sealImage.decode()
+    } catch {
+      sealImage = null
     }
   }
   const parsed = parseJps(code)
@@ -373,13 +397,14 @@ export async function createDynamicSession(
     ctx.fillStyle = g
     ctx.fillRect(0, 0, W, H)
     if (cardImage) {
-      // 自定义背景图：cover 裁切，再压一层主题色，保证任何图上标题都可读
+      /**
+       * 自定义背景图：cover 裁切 + 取景位置 + 额外放大，再压一层主题色，保证任何图上标题都可读。
+       * adj1176：几何抽到 `cardImageRect`（与卡片对话框的小预览同源）。
+       */
       const iw = cardImage.naturalWidth || W
       const ih = cardImage.naturalHeight || H
-      const z = Math.max(W / iw, H / ih)
-      const dw = iw * z
-      const dh = ih * z
-      ctx.drawImage(cardImage, (W - dw) / 2, (H - dh) / 2, dw, dh)
+      const rect = cardImageRect(iw, ih, W, H, card.backgroundImagePos, card.backgroundImageZoom)
+      ctx.drawImage(cardImage, rect.x, rect.y, rect.w, rect.h)
       ctx.fillStyle = card.bg[1]
       ctx.globalAlpha = baseAlpha * 0.55
       ctx.fillRect(0, 0, W, H)
@@ -412,13 +437,25 @@ export async function createDynamicSession(
       ctx.restore()
     }
 
-    // 大号水印：每个模板决定字符/颜色/透明度/大小；空串不画
+    // 大号水印：每个模板决定文字/颜色/透明度/大小/字体；空串不画
+    // adj1176：允许不止一个字——按可用宽度自动收字号，长歌名也不会溢出画面
     if (mark && card.watermark.alpha > 0) {
       ctx.save()
       ctx.globalAlpha = baseAlpha * card.watermark.alpha
       ctx.fillStyle = card.watermark.color
       ctx.textAlign = 'right'
-      ctx.font = `700 ${Math.round(H * card.watermark.scale)}px ${CARD_FONT}`
+      const family = cardFontStack(card.watermark.font, pageConfig.biaoti_font, card.watermark.fontFamily)
+      const base = Math.max(8, Math.round(H * card.watermark.scale))
+      const size = fitFontSize(
+        (text, px) => {
+          ctx.font = `700 ${px}px ${family}`
+          return ctx.measureText(text).width
+        },
+        mark,
+        base,
+        W * 0.62,
+      )
+      ctx.font = `700 ${size}px ${family}`
       ctx.fillText(mark, W * 0.98, H * 0.84)
       ctx.restore()
     }
@@ -498,23 +535,73 @@ export async function createDynamicSession(
   }
 
   /** adj1073：纸面/水墨的角落印章；品牌模板不画 */
+  /**
+   * adj1177（用户 2026-11-01）：「印章外框以适配文字大小的不规则椭圆形状为宜」。
+   *
+   * 外框不再是固定正方形：`sealLayoutOf` 按文字算出包围盒（单字近圆、多字竖长），
+   * `sealFramePoints` 再给一圈贴合文字、带轻微起伏的弧线——同一个印章每次渲染完全一致。
+   */
   const paintCardSeal = (ctx: DrawCtx, W: number, H: number, t: number) => {
     if (!card.seal) return
     const unit = Math.min(W, H)
-    const size = unit * 0.075
-    const x = W * 0.86 - size / 2
-    const y = H * 0.84 - size / 2
     const reveal = card.motion ? cardReveal(t, 1000, 500) : 1
+    /**
+     * adj1178：印章可以是一张图——有图就画图，大小/位置同样由 `size` / `x` / `y` 决定。
+     * 图没解码成功（引用失效/图坏了）⇒ 退回下面的文字印章，不让片尾缺一块。
+     */
+    if (sealImage) {
+      const rect = sealImageRectOf(
+        sealImage.naturalWidth || 1,
+        sealImage.naturalHeight || 1,
+        W,
+        H,
+        card.seal.size,
+        card.seal.x,
+        card.seal.y,
+      )
+      ctx.save()
+      ctx.globalAlpha = Math.max(0, Math.min(1, ctx.globalAlpha)) * reveal
+      ctx.drawImage(sealImage, rect.x, rect.y, rect.w, rect.h)
+      ctx.restore()
+      return
+    }
+    const family = cardFontStack(card.seal.font, pageConfig.biaoti_font, card.seal.fontFamily)
+    /** 文字印章也吃 `size`：字号、外框、内边距一起按比例缩放 */
+    const size = unit * 0.075 * (card.seal.size ?? 1)
+    const layout = sealLayoutOf(card.seal.text, size, (text, px) => {
+      ctx.font = `${px}px ${family}`
+      return ctx.measureText(text).width
+    })
+    if (layout.chars.length === 0) return
+    // 与图片印章同一口径：放得下就整枚留在画面里（0=贴左/上，1=贴右/下）
+    const boxW = layout.boxW
+    const boxH = layout.boxH
+    const wantX = W * (card.seal.x ?? 0.86)
+    const wantY = H * (card.seal.y ?? 0.84)
+    const cx = boxW >= W ? W / 2 : Math.min(W - boxW / 2, Math.max(boxW / 2, wantX))
+    const cy = boxH >= H ? H / 2 : Math.min(H - boxH / 2, Math.max(boxH / 2, wantY))
     ctx.save()
     ctx.globalAlpha = Math.max(0, Math.min(1, ctx.globalAlpha)) * reveal
     ctx.strokeStyle = card.seal.color
     ctx.fillStyle = card.seal.color
     ctx.lineWidth = Math.max(1.4, unit * 0.0028)
-    ctx.strokeRect(x, y, size, size)
-    ctx.font = `${Math.round(size * 0.52)}px ${CARD_SERIF}`
+    ctx.lineJoin = 'round'
+    ctx.beginPath()
+    const points = sealFramePoints(layout, cx, cy)
+    points.forEach((p, i) => {
+      if (i === 0) ctx.moveTo(p.x, p.y)
+      else ctx.lineTo(p.x, p.y)
+    })
+    ctx.closePath()
+    ctx.stroke()
+    ctx.font = `${Math.round(layout.font)}px ${family}`
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    ctx.fillText(card.seal.text, x + size / 2, y + size / 2 + size * 0.04)
+    // 多字竖排：整列在外框里居中（单字就是中心）
+    const top = cy - (layout.lineHeight * layout.chars.length) / 2
+    layout.chars.forEach((ch, i) => {
+      ctx.fillText(ch, cx, top + layout.lineHeight * (i + 0.5))
+    })
     ctx.restore()
   }
 
@@ -636,12 +723,7 @@ export async function createDynamicSession(
       const wide = aspect > 1.3
       const titleScale = wide ? 1.14 : tall ? 1.0 : 1.04
       const maxW = W * (wide ? 0.78 : tall ? 0.86 : 0.84)
-      const titleFont =
-        card.title.font === 'score'
-          ? pageConfig.biaoti_font || CARD_SANS
-          : card.title.font === 'serif'
-            ? CARD_SERIF
-            : CARD_SANS
+      const titleFont = cardFontStack(card.title.font, pageConfig.biaoti_font, card.title.fontFamily)
       const titleBase = Math.round(unit * 0.1 * titleScale)
       const subBase = Math.round(unit * (wide ? 0.048 : tall ? 0.042 : 0.045))
       const authorBase = Math.round(unit * (wide ? 0.034 : tall ? 0.031 : 0.033))
@@ -857,12 +939,7 @@ export async function createDynamicSession(
     const W = camera.viewW
     const H = camera.viewH
     const font = CARD_FONT
-    const endTitleFont =
-      card.title.font === 'serif'
-        ? CARD_SERIF
-        : card.title.font === 'score'
-          ? pageConfig.biaoti_font || CARD_SANS
-          : CARD_SANS
+    const endTitleFont = cardFontStack(card.title.font, pageConfig.biaoti_font, card.title.fontFamily)
     ctx.save()
     ctx.globalAlpha = Math.max(0, Math.min(1, alpha))
     paintCardBackdrop(ctx, W, H, t, card.watermark.end)

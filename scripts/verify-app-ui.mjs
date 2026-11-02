@@ -176,6 +176,66 @@ async function openCliManualDialog(c) {
   await waitFor(c, `!!document.querySelector('.doc-toc-toggle')`, '帮助对话框 + 目录按钮')
 }
 
+/**
+ * adj1179（用户 2026-11-02）：「在菜单上添加卡片模板菜单项」。
+ *
+ * 走真实路径：点顶栏「菜单」→ 在「设置」分组里点「卡片模板」→ 模板对话框打开 → 取消。
+ * 这条只能真点：`hidden` 闸门（非桌面端不显示）与菜单分组渲染都在运行时。
+ */
+async function openCardStyleFromMenu(c) {
+  await waitFor(c, `!!document.querySelector('.topbar-hamburger-btn')`, '顶栏菜单按钮')
+  await evalJs(c, `document.querySelector('.topbar-hamburger-btn').click(), true`)
+  await waitFor(c, `!!document.querySelector('.topbar-hamburger.open .menu-dropdown')`, '菜单打开')
+  const hasEntry = await evalJs(
+    c,
+    `[...document.querySelectorAll('.topbar-hamburger.open .menu-entry')].some((el) => el.textContent.includes('卡片模板'))`,
+  )
+  check('adj1179 菜单「设置」分组里有「卡片模板」', hasEntry === true)
+  await evalJs(
+    c,
+    `[...document.querySelectorAll('.topbar-hamburger.open .menu-entry')].find((el) => el.textContent.includes('卡片模板')).click(), true`,
+  )
+  await waitFor(c, `!!document.querySelector('.card-style-form')`, '卡片模板对话框（从菜单打开）')
+  check('adj1179 从菜单能打开卡片模板对话框', true)
+  // adj1186：朱砂印章分区右侧必须有效果预览框
+  const sealEffectUi = await evalJs(
+    c,
+    `(() => {
+      const el = document.querySelector('[data-card="seal-effect"]')
+      return { has: !!el, text: el ? el.textContent : '' }
+    })()`,
+  )
+  check(
+    'adj1186 朱砂印章框内右侧有效果预览（未启用时显示提示）',
+    sealEffectUi.has && sealEffectUi.text.includes('效果预览'),
+    JSON.stringify(sealEffectUi),
+  )
+  // adj1180：「读取本机字体」不能因为接口缺失就静默禁用；界面必须写明可以手打字体名
+  const fontUi = await evalJs(
+    c,
+    `(() => {
+      const form = document.querySelector('.card-style-form')
+      if (!form) return { has: false, enabled: false, manual: false }
+      const btn = [...form.querySelectorAll('button')].find((b) => b.textContent.includes('读取本机字体'))
+      return {
+        has: !!btn,
+        enabled: btn ? !btn.disabled : false,
+        manual: (form.textContent || '').includes('没列出来也能直接输入字体名')
+      }
+    })()`,
+  )
+  check(
+    'adj1180 「读取本机字体」按钮可用，且界面写明"没列出来也能直接输入字体名"',
+    fontUi.has && fontUi.enabled && fontUi.manual,
+    JSON.stringify(fontUi),
+  )
+  await evalJs(
+    c,
+    `[...document.querySelectorAll('.card-style-footer .btn')].find((b) => b.textContent.trim() === '取消')?.click(), true`,
+  )
+  await waitFor(c, `!document.querySelector('.card-style-form')`, '卡片模板对话框关闭')
+}
+
 async function main() {
   if (!existsSync(DIST) || !existsSync(path.join(DIST, 'app', 'index.html'))) {
     console.error(`[verify-app-ui] 找不到 ${path.join(DIST, 'app', 'index.html')} —— 先跑 npm run build`)
@@ -354,6 +414,10 @@ async function main() {
       '关掉帮助对话框后回到编辑器（后面的用例要在编辑器上做）',
       (await evalJs(c, `!!document.querySelector('.editor-main textarea')`)) === true,
     )
+
+    // ---- adj1179：菜单 → 设置 → 卡片模板（桌面闸门下）----
+    console.log('[verify-app-ui] adj1179：菜单 → 卡片模板（真点）')
+    await openCardStyleFromMenu(c)
 
     // ---- ⑨ 窄屏菜单**常驻**「新建 / 保存 / 另存为」----
     //   来源：用户实报"菜单里没有新建和保存了" —— 窄屏分支（adj540）曾把这三项收进工作区面板，
@@ -2033,11 +2097,11 @@ async function main() {
           '相机位品牌卡片会话',
           60,
         )
-        // adj1074：打开“自定义卡片”对话框 → 保存 → 成为当前自定义模板
+        // adj1074 / adj1176：打开“卡片模板”对话框 → 保存 → 成为当前模板并发进下拉
         await evalJs(c, `document.querySelector('.dyn-frame-card-edit')?.click(), true`)
-        await waitFor(c, `!!document.querySelector('.card-style-form')`, '卡片风格对话框', 30)
+        await waitFor(c, `!!document.querySelector('.card-style-form')`, '卡片模板对话框', 30)
         check(
-          'adj1074 相机位能打开自定义卡片对话框',
+          'adj1074 相机位能打开卡片模板对话框',
           await evalJs(c, `!!document.querySelector('.card-style-save')`),
         )
         const cardDialog = await evalJs(
@@ -2049,38 +2113,126 @@ async function main() {
               scroll: !!scroll,
               overflow: scroll ? getComputedStyle(scroll).overflowY : '',
               save: !!document.querySelector('.card-style-save'),
-              exportZip: !!form && [...form.querySelectorAll('button')].some((b) => b.textContent.includes('导出模板')),
+              library: !!document.querySelector('.card-style-templates'),
+              name: !!form && !!form.querySelector('input[type=text]'),
+              exportZip: !!document.querySelector('.card-style-export'),
               importZip: !!form && !!form.querySelector('input[type=file][accept*="zip"]')
             }
           })()`,
         )
         check(
-          'adj1075 卡片对话框内容可滚动、底部保存固定、含导入/导出 zip',
+          'adj1075/adj1176 卡片对话框可滚动、底部保存固定、含模板库与导入/导出 zip',
           cardDialog.scroll &&
             cardDialog.overflow === 'auto' &&
             cardDialog.save &&
+            cardDialog.library &&
+            cardDialog.name &&
             cardDialog.exportZip &&
             cardDialog.importZip,
           JSON.stringify(cardDialog),
         )
+        const cardName = await evalJs(
+          c,
+          `(() => {
+            const input = document.querySelector('.card-style-form input[type=text]')
+            if (!input) return ''
+            const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set
+            setter.call(input, '真机模板')
+            input.dispatchEvent(new Event('input', { bubbles: true }))
+            return input.value
+          })()`,
+        )
+        check('adj1176 模板可以起名字（保存进列表时用这个名字）', cardName === '真机模板', String(cardName))
+        // adj1182（用户 2026-11-02）：换起点模板 → 保存后不关窗；重开后起点模板要生效
+        const baseAfter = await evalJs(
+          c,
+          `(() => {
+            const sel = document.querySelector('.card-style-form select[data-card="base"]')
+            if (!sel) return ''
+            const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set
+            setter.call(sel, 'paper')
+            sel.dispatchEvent(new Event('change', { bubbles: true }))
+            return sel.value
+          })()`,
+        )
+        check('adj1182 卡片对话框可以更换「起点模板」', baseAfter === 'paper', String(baseAfter))
         await evalJs(c, `document.querySelector('.card-style-save')?.click(), true`)
-        await waitFor(c, `!document.querySelector('.card-style-form')`, '卡片风格对话框关闭', 30)
+        await waitFor(c, `!!document.querySelector('.card-style-ok')`, '保存成功提示', 30)
+        const saveStatus = await evalJs(
+          c,
+          `(() => {
+            const el = document.querySelector('[data-card="save-status"]')
+            return { has: !!el, text: el ? el.textContent : '', inFooter: !!el?.closest('.card-style-footer') }
+          })()`,
+        )
+        check(
+          'adj1187 保存后在**底栏**（保存按钮旁）显示成功提示',
+          saveStatus.has && saveStatus.inFooter && saveStatus.text.includes('已保存模板'),
+          JSON.stringify(saveStatus),
+        )
+        check(
+          'adj1182 保存模板后**不关闭窗口**（还能继续调整/连续保存）',
+          (await evalJs(c, `!!document.querySelector('.card-style-form')`)) === true,
+        )
+        await evalJs(
+          c,
+          `[...document.querySelectorAll('.card-style-footer .btn')].find((b) => b.textContent.trim() === '取消')?.click(), true`,
+        )
+        await waitFor(c, `!document.querySelector('.card-style-form')`, '卡片模板对话框关闭', 30)
         await waitFor(
           c,
           `(() => {
             const c = document.querySelector('.dyn-frame-box canvas')
             return !!c && c.width === 1080 && c.height === 1920 &&
-              document.querySelector('.dyn-frame-select')?.value === 'custom'
+              (document.querySelector('.dyn-frame-select')?.value ?? '').startsWith('tpl-')
           })()`,
-          '相机位自定义卡片会话',
+          '相机位新模板会话',
           60,
         )
-        const customStored = await evalJs(c, `localStorage.getItem('ijipu.dynamicCardStyleCustom')`)
-        check(
-          'adj1074 自定义卡片已保存并成为当前模板',
-          typeof customStored === 'string' && customStored.includes('"id":"custom"'),
-          String(customStored).slice(0, 80),
+        const savedCard = await evalJs(
+          c,
+          `(() => {
+            const v = document.querySelector('.dyn-frame-select')?.value ?? ''
+            const c = document.querySelector('.dyn-frame-box canvas')
+            const raw = localStorage.getItem('ijipu.cardTemplates')
+            return { value: v, w: c ? c.width : 0, h: c ? c.height : 0, raw: raw ?? '' }
+          })()`,
         )
+        check(
+          'adj1176 保存后成为当前模板，并出现在卡片下拉（id 是 tpl- 开头）',
+          String(savedCard.value).startsWith('tpl-') && savedCard.w === 1080 && savedCard.h === 1920,
+          JSON.stringify(savedCard),
+        )
+        check(
+          'adj1176 模板存进公共模板库（ijipu.cardTemplates），带名字',
+          String(savedCard.raw).includes('真机模板') && String(savedCard.raw).includes('tpl-'),
+          String(savedCard.raw).slice(0, 120),
+        )
+        check(
+          'adj1182 起点模板随模板保存（`baseId: "paper"`）',
+          String(savedCard.raw).includes('"baseId":"paper"'),
+          String(savedCard.raw).slice(0, 200),
+        )
+        // 再打开：起点模板应回到「纸面」，而不是被重置成「深空蓝」
+        await evalJs(c, `document.querySelector('.dyn-frame-card-edit')?.click(), true`)
+        await waitFor(c, `!!document.querySelector('.card-style-form')`, '卡片模板对话框（重开）', 30)
+        const reopened = await evalJs(
+          c,
+          `(() => ({
+            base: document.querySelector('.card-style-form select[data-card="base"]')?.value ?? '',
+            name: document.querySelector('.card-style-form input[type=text]')?.value ?? ''
+          }))()`,
+        )
+        check(
+          'adj1182 重开对话框后起点模板仍是「纸面」（用户实报：之前会被重置成深空蓝）',
+          reopened.base === 'paper' && reopened.name === '真机模板',
+          JSON.stringify(reopened),
+        )
+        await evalJs(
+          c,
+          `[...document.querySelectorAll('.card-style-footer .btn')].find((b) => b.textContent.trim() === '取消')?.click(), true`,
+        )
+        await waitFor(c, `!document.querySelector('.card-style-form')`, '卡片模板对话框关闭（重开）', 30)
         // adj1071：控制条必须跟随主题变量（深/浅两套都验），不能写死深色
         const camBtnStyles = await evalJs(
           c,

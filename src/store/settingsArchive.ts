@@ -123,21 +123,70 @@ export async function exportSettingsZip(): Promise<Uint8Array> {
 
 /** 附件引用在导入后仍能读到吗（读不到就清掉那张图） */
 async function dropMissingCardImage(values: Record<string, string>): Promise<boolean> {
-  const key = 'ijipu.dynamicCardStyleCustom'
-  const raw = values[key]
-  if (typeof raw !== 'string') return false
-  let parsed: { backgroundImage?: unknown } & Record<string, unknown>
-  try {
-    parsed = JSON.parse(raw) as typeof parsed
-  } catch {
-    return false
+  const isMissing = async (bg: unknown): Promise<boolean> =>
+    typeof bg === 'string' && bg.startsWith(BLOB_REF_PREFIX) && (await readCardImageBytes(bg)) === null
+
+  let changed = false
+
+  // adj1074 的旧单槽自定义卡片
+  const legacyKey = 'ijipu.dynamicCardStyleCustom'
+  const legacyRaw = values[legacyKey]
+  if (typeof legacyRaw === 'string') {
+    try {
+      const parsed = JSON.parse(legacyRaw) as { backgroundImage?: unknown } & Record<string, unknown>
+      if (await isMissing(parsed.backgroundImage)) {
+        values[legacyKey] = JSON.stringify({ ...parsed, backgroundImage: null })
+        changed = true
+      }
+    } catch {
+      /* 旧键坏了：忽略（不因为一条坏数据让整个导入失败） */
+    }
   }
-  const bg = parsed.backgroundImage
-  if (typeof bg !== 'string' || !bg.startsWith(BLOB_REF_PREFIX)) return false
-  const got = await readCardImageBytes(bg)
-  if (got !== null) return false
-  values[key] = JSON.stringify({ ...parsed, backgroundImage: null })
-  return true
+
+  // adj1176 的模板库（`{version, items}` 或裸数组都认）
+  const libKey = 'ijipu.cardTemplates'
+  const libRaw = values[libKey]
+  if (typeof libRaw === 'string') {
+    try {
+      const parsed = JSON.parse(libRaw) as unknown
+      const items = Array.isArray(parsed)
+        ? parsed
+        : parsed !== null && typeof parsed === 'object' && Array.isArray((parsed as { items?: unknown }).items)
+          ? ((parsed as { items: unknown[] }).items as unknown[])
+          : []
+      let touched = false
+      const next: unknown[] = []
+      for (const v of items) {
+        if (v === null || typeof v !== 'object') continue
+        const entry = v as { backgroundImage?: unknown; seal?: unknown } & Record<string, unknown>
+        let fixed: Record<string, unknown> = entry
+        let touchedEntry = false
+        if (await isMissing(entry.backgroundImage)) {
+          fixed = { ...fixed, backgroundImage: null }
+          touchedEntry = true
+        }
+        // adj1178：印章图片也要检查（缺图就清空图、保留文字印章）
+        const seal = entry.seal
+        if (seal !== null && typeof seal === 'object' && !Array.isArray(seal)) {
+          const s = seal as { image?: unknown } & Record<string, unknown>
+          if (await isMissing(s.image)) {
+            fixed = { ...fixed, seal: { ...s, image: null } }
+            touchedEntry = true
+          }
+        }
+        if (touchedEntry) touched = true
+        next.push(fixed)
+      }
+      if (touched) {
+        const wrapped = Array.isArray(parsed) ? next : { ...(parsed as Record<string, unknown>), items: next }
+        values[libKey] = JSON.stringify(wrapped)
+        changed = true
+      }
+    } catch {
+      /* 库坏了：忽略 */
+    }
+  }
+  return changed
 }
 
 /**

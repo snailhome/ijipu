@@ -197,8 +197,8 @@
 | `ijipu.exportBg` | `none` | **导出底色**（adj1002）：`none`（透明，**默认**）/ `white` / `paper`（跟随 `previewSoften` 的纸色）。⚠ JPG/PDF 无透明通道 ⇒ 透明档落白 | 用户个性 | 保留 |
 | `ijipu.exportBgImage` | false | **导出是否带背景图/水印**（adj1002，默认**不带**；与底色独立，导出时临时置 `bgEnabled:false`，**不改用户设置**） | 用户个性 | 保留 |
 | `ijipu.playbackHqEnabledByLib` | `{}` | **每库一套收藏音色**（adj1012）：按音色库 id 存收藏集合 | 用户个性 | → 插件设置（保留） |
-| `ijipu.dynamicCardStyle` | `brand` | **动态谱片头/片尾卡片模板**（adj1073）：`brand`/`paper`/`ink`/`minimal`/`custom`；L1，不写进 `.jps` | 用户个性（视频样式） | 桌面端保留；网站/插件不显示动态谱视频 |
-| `ijipu.dynamicCardStyleCustom` | null | **自定义卡片样式 JSON**（adj1074）：颜色/字体/水印/效果/背景图 data URL（≤2.5MB）；L1，不随谱走 | 用户个性（视频样式） | 桌面端保留；换机器不跟谱 |
+| `ijipu.dynamicCardStyle` | `brand` | **动态谱片头/片尾卡片模板**（adj1073）：`brand`/`paper`/`ink`/`minimal` 或用户模板库里的 `tpl-…` id；L1，不写进 `.jps` | 用户个性（视频样式） | 桌面端保留；网站/插件不显示动态谱视频 |
+| `ijipu.cardTemplates` | `[]` | **用户卡片模板库**（adj1176）：`{version,items}`，每项是一份完整 `CardStyle`（含名字、背景图 `ijipu-blob:` 引用）。公共一份，相机位下拉直接列出；旧版单槽 `ijipu.dynamicCardStyleCustom` 在首次读取时迁入一项（id `custom`，名字「我的卡片」）。**每首谱用哪套**记在 sidecar 的 `card.template`，不复制样式本体 | 用户个性（视频样式） | 桌面端保留；网站/插件不显示动态谱视频 |
 | `ijipu.panMode` | `beat` | **动态视频/试听的行中平移方式**（adj1089；**adj1094 起默认 `beat`**）：`follow`（色块到右 4/5 才推、一次推到左 1/5）/ `beat`（按拍居中，默认）/ `bar`（按小节居中 + 行内 4/5 安全推）。三种都受"行首、行末左右露白 ≤ 画面 10%"约束（引擎 `CAMERA_WHITE_MARGIN` / `clampRowCenter`）；L1，不写进 `.jps` | 用户个性（怎么看谱/成片） | 桌面端保留；网站/插件不显示动态谱视频（试听跟随滚动仍读这个键） |
 | `ijipu.rowLeadBeats` | `0.5` | **行末提前平移量**（adj1094，单位：拍，0~2）：三种平移模式共用——换到下一行（横向 + 纵向）提前这么多拍**完成**，好提前看到下一行；`0` = 正好在行首那一下换行；L1，不写进 `.jps` | 用户个性（怎么看谱/成片） | 桌面端保留；试听同样读它 |
 

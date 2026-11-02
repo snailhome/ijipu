@@ -1027,6 +1027,124 @@ async fn pick_audio_file(app: tauri::AppHandle) -> Option<String> {
     .and_then(|fp| fp.as_path().map(|p| p.to_string_lossy().into_owned()))
 }
 
+/// adj1181（用户 2026-11-02 追问「本机字体列表依据什么选、为什么没有我要的字体」）：
+/// 列出系统已安装字体族，供卡片风格「本机字体」下拉使用。
+///
+/// 为什么走 GDI 而不是只靠 WebView 的 `queryLocalFonts()`：后者是实验性 API，
+/// 在部分 WebView2 里不可用/被拒绝；GDI 是系统自带、无需新增 crate
+/// （`windows-sys` 已在依赖树，本轮只加 `Win32_Graphics_Gdi` feature）。
+/// 返回的是**字体族名**（中文系统下常见「微软雅黑 / 宋体 / 楷体」这类名字），前端直接当
+/// `font-family` 用；`@` 开头的竖排别名去重。
+#[cfg(windows)]
+#[tauri::command]
+fn list_system_fonts() -> Result<Vec<String>, String> {
+    use windows_sys::Win32::Foundation::LPARAM;
+    use windows_sys::Win32::Graphics::Gdi::{
+        EnumFontFamiliesExW, GetDC, ReleaseDC, DEFAULT_CHARSET, LOGFONTW, TEXTMETRICW,
+    };
+
+    unsafe extern "system" fn collect(
+        lf: *const LOGFONTW,
+        _tm: *const TEXTMETRICW,
+        _font_type: u32,
+        lparam: LPARAM,
+    ) -> i32 {
+        if lf.is_null() {
+            return 1;
+        }
+        let face = &(*lf).lfFaceName;
+        let end = face.iter().position(|&c| c == 0).unwrap_or(face.len());
+        if end > 0 {
+            let name = String::from_utf16_lossy(&face[..end]);
+            // '@' 开头是竖排字体（同一族的另一份），列表里不要重复
+            if !name.starts_with('@') {
+                let out = &mut *(lparam as *mut Vec<String>);
+                out.push(name);
+            }
+        }
+        1
+    }
+
+    let dc = unsafe { GetDC(std::ptr::null_mut()) };
+    if dc.is_null() {
+        return Err("拿不到屏幕 DC".to_string());
+    }
+    let mut lf = LOGFONTW::default();
+    lf.lfCharSet = DEFAULT_CHARSET;
+    let mut names: Vec<String> = Vec::new();
+    unsafe {
+        EnumFontFamiliesExW(dc, &lf, Some(collect), &mut names as *mut _ as LPARAM, 0);
+        ReleaseDC(std::ptr::null_mut(), dc);
+    }
+    names.sort();
+    names.dedup();
+    Ok(names)
+}
+
+/// 非 Windows 目标（Android 等）没有 GDI：返回空表，前端会退回浏览器 `queryLocalFonts`/手打。
+#[cfg(not(windows))]
+#[tauri::command]
+fn list_system_fonts() -> Result<Vec<String>, String> {
+    Ok(Vec::new())
+}
+
+/// adj1183（用户 2026-11-02）：「桌面壳导出后无提示，建议添加导出成功的提示，并提示打开文件/文件夹」。
+///
+/// 原生「另存为 MP4」：对话框 → 写字节 → 回读长度校验 → 返回绝对路径。
+/// 前端拿到路径后弹成功提示，并提供「打开文件 / 打开文件夹」两个动作。
+#[tauri::command]
+async fn save_mp4_file(
+    app: tauri::AppHandle,
+    name: String,
+    b64: String,
+) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let picked = tauri::async_runtime::spawn_blocking(move || {
+        app.dialog()
+            .file()
+            .set_title("保存视频")
+            .set_file_name(&name)
+            .add_filter("MP4 视频", &["mp4"])
+            .blocking_save_file()
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    let Some(fp) = picked else {
+        return Ok(None); // 用户取消
+    };
+    let mut p = fp
+        .as_path()
+        .ok_or_else(|| "保存对话框没有返回本地路径".to_string())?
+        .to_path_buf();
+    if p.extension().is_none() {
+        p.set_extension("mp4");
+    }
+    let bytes = crate::b64::decode(&b64).ok_or_else(|| "视频数据不是合法 base64".to_string())?;
+    std::fs::write(&p, &bytes).map_err(|e| format!("{}: {}", p.display(), e))?;
+    let back = std::fs::metadata(&p).map_err(|e| format!("回读失败 {}: {}", p.display(), e))?;
+    if back.len() != bytes.len() as u64 {
+        return Err("写入后文件长度与预期不一致".to_string());
+    }
+    Ok(Some(p.to_string_lossy().into_owned()))
+}
+
+/// adj1183：打开刚导出的文件，或在资源管理器里定位它（reveal=true）。
+///
+/// 走 `tauri-plugin-opener` 的 Rust API（不经过前端 scope 检查）；路径只来自我们自己的保存对话框。
+#[tauri::command]
+fn open_local_path(app: tauri::AppHandle, path: String, reveal: bool) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+    if reveal {
+        app.opener()
+            .reveal_item_in_dir(path.as_str())
+            .map_err(|e| e.to_string())
+    } else {
+        app.opener()
+            .open_path(path, None::<&str>)
+            .map_err(|e| e.to_string())
+    }
+}
+
 /// adj1158（用户 2026-10-25 口径：操作要简单统一）：
 /// 桌面壳「另存为」也走**原生保存对话框**，并在同一个命令里写盘 + 回读校验。
 ///
@@ -1259,6 +1377,11 @@ pub fn run() {
             pick_audio_file,
             // adj1158：桌面壳「另存为」原生保存（一次完成写盘 + 回读，设置 nativePath）
             save_jps_file,
+            // adj1181：卡片风格「本机字体」列表（GDI 枚举系统字体族）
+            list_system_fonts,
+            // adj1183：导出视频成功提示 —— 原生保存 MP4 + 打开文件/文件夹
+            save_mp4_file,
+            open_local_path,
             ws_list_dir,
             ws_dir_exists,
             ws_is_dir_empty,

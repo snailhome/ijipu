@@ -49,8 +49,10 @@ tauri-plugin-opener = "2"
 #     与 App Paths；用官方绑定比自己拼 `reg.exe` 命令行稳（转义/编码/回读都要自己造 ✗）；
 #   · `Win32_UI_WindowsAndMessaging` —— 写完广播 `WM_SETTINGCHANGE`（`SendMessageTimeoutW`），
 #     让**新起的进程**看到新 PATH（已开着的终端看不到，见 `docs/CLI.md` 的说明）。
+# ⚠ adj1181：`Win32_Graphics_Gdi` —— 卡片风格「本机字体」在桌面壳里列系统字体
+#   （`EnumFontFamiliesExW`；WebView2 不一定开放 `queryLocalFonts`）。仍是同一个 crate、不新增依赖。
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Pipes", "Win32_Storage_FileSystem", "Win32_System_Console", "Win32_System_Registry", "Win32_UI_WindowsAndMessaging"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Pipes", "Win32_Storage_FileSystem", "Win32_System_Console", "Win32_System_Registry", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Gdi"] }
 
 # adj942（用户裁定「直接落，修」·路线②）：把**命令行内嵌进 `ijipu.exe`** —— 用嵌入的小 JS 引擎
 # 跑 `packages/ijipu-cli` 那段纯逻辑（`runCli(argv, io)`），用户**不必装 Node**。

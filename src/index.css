@@ -4086,7 +4086,9 @@ body {
   position: fixed;
   right: 20px;
   top: calc(var(--jp-topbar-h) + 10px);
-  z-index: 45;
+  /* adj1185（用户实报「导出后还是没有提示」）：相机位/试听浮层是 z-index 60，
+     提示必须压在它们上面才看得见；仍低于更新提示（1001）/对话框（200）/确认条（1200）。 */
+  z-index: 70;
   max-width: 340px;
   padding: 8px 14px;
   border-radius: 6px;
@@ -4114,12 +4116,13 @@ body {
 .toast-has-action {
   display: flex;
   align-items: center;
-  gap: 10px;
-  max-width: 460px;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  max-width: 560px;
   pointer-events: auto;
 }
 .toast-has-action .toast-text {
-  flex: 1;
+  flex: 1 1 220px;
   min-width: 0;
   white-space: pre-wrap;
 }
@@ -5749,6 +5752,19 @@ span.ws-check {
   gap: 8px;
   flex-wrap: wrap;
 }
+/* adj1185：相机位里的"导出完成"结果条（不依赖 toast 的层级） */
+.dyn-frame-export-done {
+  padding: 6px 8px;
+  border: 1px solid var(--jp-success);
+  border-radius: 6px;
+  background: rgb(0 0 0 / 18%);
+}
+.dyn-frame-export-path {
+  flex: 1 1 240px;
+  min-width: 0;
+  word-break: break-all;
+  color: var(--jp-text-primary);
+}
 .dyn-frame-controls input[type='range'] {
   flex: 1;
   min-width: 140px;
@@ -5948,6 +5964,123 @@ span.ws-check {
   max-height: 130px;
   border-radius: 6px;
 }
+/* adj1176：模板库（可命名的我的模板） */
+.card-style-templates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 24px;
+}
+.card-style-template {
+  padding: 3px 10px;
+  border: 1px solid var(--jp-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--jp-text-primary);
+  font-size: 12px;
+  cursor: pointer;
+}
+.card-style-template:hover {
+  border-color: var(--jp-accent);
+}
+.card-style-template.is-on {
+  border-color: var(--jp-accent);
+  background: var(--jp-accent);
+  color: var(--jp-on-accent);
+}
+.card-style-name-row {
+  margin-top: 8px;
+  grid-template-columns: minmax(220px, 1fr);
+}
+.card-style-delete {
+  color: var(--jp-danger);
+}
+/* adj1176：背景图取景预览（与出片同一套几何） */
+.card-style-image-canvas {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 240px;
+  border-radius: 6px;
+  cursor: grab;
+  touch-action: none;
+}
+.card-style-image-canvas:active {
+  cursor: grabbing;
+}
+.card-style-pos {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+/* adj1186：朱砂印章分区 = 左侧控件 + 右侧效果预览 */
+.card-style-seal-layout {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+.card-style-seal-controls {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.card-style-seal-effect {
+  flex: 0 0 168px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 168px;
+  padding: 8px;
+  border: 1px dashed var(--jp-border);
+  border-radius: 10px;
+}
+.card-style-seal-effect-label {
+  font-size: 12px;
+  color: var(--jp-text-secondary);
+}
+.card-style-seal-effect-off {
+  font-size: 12px;
+  color: var(--jp-text-muted);
+  text-align: center;
+}
+.card-style-seal-effect-canvas {
+  width: 150px;
+  height: 150px;
+  max-width: 100%;
+}
+.card-style-seal-effect-img {
+  max-width: 100%;
+  max-height: 150px;
+  height: auto;
+  object-fit: contain;
+}
+@media (max-width: 640px) {
+  .card-style-seal-layout {
+    flex-direction: column;
+  }
+  .card-style-seal-effect {
+    flex: 0 0 auto;
+    width: 100%;
+  }
+}
+/* adj1178：印章图片缩略图（棋盘格底，透明 PNG 也看得清） */
+.card-style-seal-thumb {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+  border: 1px solid var(--jp-border);
+  border-radius: 6px;
+  background-color: var(--jp-bg-panel);
+  background-image: linear-gradient(45deg, var(--jp-border) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--jp-border) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--jp-border) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--jp-border) 75%);
+  background-size: 10px 10px;
+  background-position: 0 0, 0 5px, 5px -5px, -5px 0;
+}
 .card-style-file {
   position: relative;
   overflow: hidden;
@@ -5973,6 +6106,15 @@ span.ws-check {
   border-top: 1px solid var(--jp-border);
   background: var(--jp-bg-panel);
   flex: 0 0 auto;
+}
+/* adj1187：保存/导入结果固定显示在底栏（保存按钮旁边），不用滚到最下面才看到 */
+.card-style-footer-status {
+  flex: 1 1 220px;
+  min-width: 0;
+  text-align: left;
+  align-self: center;
+  font-size: 12px;
+  line-height: 1.35;
 }
 .card-style-footer .card-style-save {
   border-color: var(--jp-accent);
