@@ -29287,8 +29287,10 @@ C2: 歌，@那么我@是想要画你的手。@ {tp 1// 2/.} 你看我多么 {tp 
   check('adj1191 八份谱都有分享卡 og.png（本地 `npm run score:og` 生成并提交）', ogCount >= 8, `${ogCount} 张`)
   const genScoresSrc1191 = readSrc('scripts/gen-scores.mts')
   check(
-    'adj1191 详情页接了 zip 下载（构建期用 `writeZip` 打 `.jps + README.txt`）',
-    genScoresSrc1191.includes('writeZip') && genScoresSrc1191.includes("name: 'README.txt'"),
+    'adj1191 详情页接了 zip 下载（构建期用 `writeZip` 打 meta + README.md + jps + assets）',
+    genScoresSrc1191.includes('writeZip') &&
+      genScoresSrc1191.includes("name: 'README.md'") &&
+      genScoresSrc1191.includes("name: 'meta.json'"),
   )
   check('adj1191 本地分享卡脚本与 npm 入口都在', existsSync(join(process.cwd(), 'scripts/gen-og.mjs')) &&
     pkg1190.scripts['score:og']?.includes('gen-og.mjs') === true)

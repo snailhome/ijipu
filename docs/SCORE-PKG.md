@@ -142,7 +142,7 @@ scores-library/
    现有 8 份可先留在 `public/scores/`，两边合并，迁移完再只读库。
 2. 每个条目：
    - 读 `meta.json` + `score.jps` + `assets/`；
-   - 资源读字节 → data URI；用头解析拿 PNG/JPEG/WebP 宽高；
+   - 资源读字节 → data URI；用头解析拿 PNG/JPEG/WebP/GIF/BMP 宽高（P2c 已实现）；
    - `renderScoreToSvg(layout, { assets })`，详情/封面/og 都带作者的水印/背景；
    - 生成 `dist/scores/<slug>/index.html`、`cover.svg`、`score.zip`；
    - 复制 `score.jps` / `assets/` 到 `dist/scores/<slug>/`（下载与 `?src=` 用）。

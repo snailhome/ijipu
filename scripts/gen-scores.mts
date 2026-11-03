@@ -28,7 +28,7 @@
  *   （`E-2026-396` 同族：反引号会提前终止字符串，报错行号还指向几百行外）。
  */
 import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
-import { basename, dirname, join, relative, resolve } from 'node:path'
+import { basename, dirname, extname, join, relative, resolve } from 'node:path'
 import {
   applyRangeToSvg,
   defaultPageConfig,
@@ -43,6 +43,7 @@ import {
   renderScoreToSvg,
   splitParseIssues,
 } from '@ijipu/engine'
+import type { RenderAssets } from '@ijipu/engine'
 import { brand } from '../src/brand/tokens'
 import { SITE_THEME_KEY, SITE_VARS } from '../src/brand/siteVars'
 import { writeZip } from '../src/export/zip'
@@ -148,6 +149,7 @@ interface ScoreMeta {
   cover?: string
   file?: string
   note?: string
+  assets?: { path: string; role: 'background' | 'watermark' | 'cover' }[]
   publishedAt: string
   updatedAt: string
 }
@@ -155,6 +157,16 @@ interface ScoreMeta {
 interface ScoreSource {
   dir: string
   kind: 'public' | 'library'
+}
+
+interface EntryAsset {
+  /** zip / 页面资源路径（`assets/bg.webp`） */
+  path: string
+  role: 'background' | 'watermark' | 'cover'
+  bytes: Buffer
+  mime: string
+  w: number
+  h: number
 }
 
 interface Entry {
@@ -173,6 +185,8 @@ interface Entry {
   sourceDir: string
   /** 来源：老内容在 public/scores，新的在 scores-library */
   kind: 'public' | 'library'
+  /** 背景/水印/封面（按 meta.assets 或 assets/bg.*、assets/wm.* 解析） */
+  assets: EntryAsset[]
 }
 
 /* ------------------------------------------------------------------ */
@@ -207,6 +221,134 @@ function needString(value: unknown, field: string, where: string): string {
     fail(`${where}/meta.json 的 ${field} 必须是非空字符串`)
   }
   return value.trim()
+}
+
+const IMAGE_EXT = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'])
+const IMAGE_MIME: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  webp: 'image/webp',
+  gif: 'image/gif',
+  bmp: 'image/bmp',
+}
+
+/**
+ * adj1196：Node 里没有 canvas，读图片宽高只能看文件头。
+ * 只支持包规范允许的 png/jpg/jpeg/webp/gif/bmp；读不出就报错（不静默不画）。
+ */
+function imageSizeOf(bytes: Buffer, ext: string): { w: number; h: number } | null {
+  try {
+    if (ext === 'png') {
+      if (bytes.length < 24 || bytes.readUInt32BE(0) !== 0x89504e47) return null
+      return { w: bytes.readUInt32BE(16), h: bytes.readUInt32BE(20) }
+    }
+    if (ext === 'gif') {
+      if (bytes.length < 10) return null
+      const sig = bytes.toString('ascii', 0, 3)
+      if (sig !== 'GIF') return null
+      return { w: bytes.readUInt16LE(6), h: bytes.readUInt16LE(8) }
+    }
+    if (ext === 'bmp') {
+      if (bytes.length < 26 || bytes.toString('ascii', 0, 2) !== 'BM') return null
+      return { w: Math.abs(bytes.readInt32LE(18)), h: Math.abs(bytes.readInt32LE(22)) }
+    }
+    if (ext === 'jpg' || ext === 'jpeg') {
+      let i = 2
+      while (i + 9 < bytes.length) {
+        if (bytes[i] !== 0xff) {
+          i += 1
+          continue
+        }
+        const marker = bytes[i + 1]
+        i += 2
+        if (marker === 0xd8 || marker === 0xd9) continue
+        if (i + 2 > bytes.length) return null
+        const len = bytes.readUInt16BE(i)
+        if (len < 2) return null
+        const isSof =
+          marker === 0xc0 || marker === 0xc1 || marker === 0xc2 || marker === 0xc3 ||
+          marker === 0xc5 || marker === 0xc6 || marker === 0xc7 ||
+          marker === 0xc9 || marker === 0xca || marker === 0xcb ||
+          marker === 0xcd || marker === 0xce || marker === 0xcf
+        if (isSof) {
+          if (i + 7 > bytes.length) return null
+          return { w: bytes.readUInt16BE(i + 5), h: bytes.readUInt16BE(i + 3) }
+        }
+        i += len
+      }
+      return null
+    }
+    if (ext === 'webp') {
+      if (bytes.length < 30 || bytes.toString('ascii', 0, 4) !== 'RIFF' || bytes.toString('ascii', 8, 12) !== 'WEBP') {
+        return null
+      }
+      const chunk = bytes.toString('ascii', 12, 16)
+      if (chunk === 'VP8X') {
+        const w = 1 + (bytes[24] | (bytes[25] << 8) | (bytes[26] << 16))
+        const h = 1 + (bytes[27] | (bytes[28] << 8) | (bytes[29] << 16))
+        return { w, h }
+      }
+      if (chunk === 'VP8L') {
+        if (bytes[20] !== 0x2f) return null
+        const b1 = bytes[21]
+        const b2 = bytes[22]
+        const b3 = bytes[23]
+        const b4 = bytes[24]
+        const w = 1 + (((b2 & 0x3f) << 8) | b1)
+        const h = 1 + (((b4 & 0x0f) << 10) | (b3 << 2) | (b2 >> 6))
+        return { w, h }
+      }
+      if (chunk === 'VP8 ') {
+        return { w: bytes.readUInt16LE(26) & 0x3fff, h: bytes.readUInt16LE(28) & 0x3fff }
+      }
+      return null
+    }
+  } catch {
+    return null
+  }
+  return null
+}
+
+/** 从 meta.assets 或 assets/bg.*、assets/wm.* 解析实际要画的资源 */
+function loadEntryAssets(dir: string, meta: ScoreMeta): EntryAsset[] {
+  const out: EntryAsset[] = []
+  const seen = new Set<string>()
+  const add = (relPath: string, role: EntryAsset['role']): void => {
+    const normalized = relPath.replace(/^\.\//, '')
+    if (!normalized.startsWith('assets/') || normalized.includes('..')) {
+      fail(`${meta.slug} 的 asset 路径必须是 assets/…（不许 ..）：${relPath}`)
+    }
+    const file = resolve(dir, normalized)
+    if (!file.startsWith(dir)) fail(`${meta.slug} 的 asset 越出了条目目录：${relPath}`)
+    if (!existsSync(file)) fail(`${meta.slug} 的 asset 不存在：${relPath}`)
+    const ext = extname(file).slice(1).toLowerCase()
+    if (!IMAGE_EXT.has(ext)) fail(`${meta.slug} 的 asset 扩展名不允许：${relPath}`)
+    const bytes = readFileSync(file)
+    if (bytes.length > 16 * 1024 * 1024) fail(`${meta.slug} 的 asset 超过 16MB：${relPath}`)
+    const size = imageSizeOf(bytes, ext)
+    if (!size || size.w <= 0 || size.h <= 0) fail(`${meta.slug} 的 asset 读不出宽高：${relPath}`)
+    if (seen.has(normalized)) return
+    seen.add(normalized)
+    out.push({ path: normalized, role, bytes, mime: IMAGE_MIME[ext] ?? 'application/octet-stream', w: size.w, h: size.h })
+  }
+
+  for (const a of meta.assets ?? []) add(a.path, a.role)
+  const roles = new Set(out.map((a) => a.role))
+  const assetsDir = join(dir, 'assets')
+  if (existsSync(assetsDir)) {
+    for (const name of readdirSync(assetsDir)) {
+      const rel = `assets/${name}`
+      if (!roles.has('background') && /^bg\./i.test(name)) {
+        add(rel, 'background')
+        roles.add('background')
+      } else if (!roles.has('watermark') && /^wm\./i.test(name)) {
+        add(rel, 'watermark')
+        roles.add('watermark')
+      }
+    }
+  }
+  return out
 }
 
 /** 两套 `--site-*` 变量写成 CSS 声明串（来源 `src/brand/siteVars.ts`，不在这里另抄色值） */
@@ -342,6 +484,24 @@ function readEntries(): Entry[] {
       if (src.kind === 'library') fail(`${slug}：scores-library 的条目必须自带 score.jps，不能用 file 引用`)
     }
 
+    let assets: ScoreMeta['assets']
+    if (obj.assets !== undefined) {
+      if (!Array.isArray(obj.assets)) fail(`${slug} 的 assets 必须是数组`)
+      assets = obj.assets.map((a, i) => {
+        if (typeof a !== 'object' || a === null || Array.isArray(a)) fail(`${slug} 的 assets[${i}] 必须是对象`)
+        const item = a as Record<string, unknown>
+        const path = item.path
+        const role = item.role
+        if (typeof path !== 'string' || !path.startsWith('assets/') || path.includes('..')) {
+          fail(`${slug} 的 assets[${i}].path 必须是 assets/…（不许 ..）`)
+        }
+        if (role !== 'background' && role !== 'watermark' && role !== 'cover') {
+          fail(`${slug} 的 assets[${i}].role 只能是 background / watermark / cover`)
+        }
+        return { path, role }
+      })
+    }
+
     const meta: ScoreMeta = {
       slug,
       title,
@@ -361,6 +521,7 @@ function readEntries(): Entry[] {
       cover: obj.cover as string | undefined,
       file: file as string | undefined,
       note: obj.note as string | undefined,
+      assets,
       publishedAt: obj.publishedAt,
       updatedAt: obj.updatedAt,
     }
@@ -378,6 +539,8 @@ function readEntries(): Entry[] {
           : `/scores/${slug}/${meta.cover.replace(/^\.\//, '')}`
         : `/scores/${slug}/cover.svg`
 
+    const entryAssets = loadEntryAssets(dir, meta)
+
     entries.push({
       meta,
       code: readFileSync(scorePath, 'utf8'),
@@ -387,6 +550,7 @@ function readEntries(): Entry[] {
       ogUrl: existsSync(join(dir, 'og.png')) ? `/scores/${slug}/og.png` : '',
       sourceDir: dir,
       kind: src.kind,
+      assets: entryAssets,
     })
   }
 
@@ -435,8 +599,22 @@ function renderEntry(entry: Entry): Rendered {
   }
 
   const cfg = mergeJpsConfig(code, defaultPageConfig)
-  const layout = layoutScore(parsed, cfg)
-  const svgs = renderScoreToSvg(layout)
+  const bg = entry.assets.find((a) => a.role === 'background')
+  const wm = entry.assets.find((a) => a.role === 'watermark')
+  /**
+   * adj1196（P2c）：资源角色来自 meta.assets（`.jps` 不写 bgImage/wmImage），
+   * 这里显式打开两层总开关并把 data URI 传给引擎；详情/封面/og 用同一份。
+   */
+  const effectiveCfg = {
+    ...cfg,
+    ...(bg ? { bgEnabled: true, bgImage: bg.path } : {}),
+    ...(wm ? { wmEnabled: true, wmType: 'image' as const, wmImage: wm.path } : {}),
+  }
+  const renderAssets: RenderAssets = {}
+  if (bg) renderAssets.bg = { href: `data:${bg.mime};base64,${bg.bytes.toString('base64')}`, w: bg.w, h: bg.h }
+  if (wm) renderAssets.wm = { href: `data:${wm.mime};base64,${wm.bytes.toString('base64')}`, w: wm.w, h: wm.h }
+  const layout = layoutScore(parsed, effectiveCfg)
+  const svgs = renderScoreToSvg(layout, bg || wm ? { assets: renderAssets } : undefined)
   const page = layout.pages[0]
   if (page === undefined || svgs[0] === undefined) fail(`${meta.slug} 没有排出任何页面`)
 
@@ -956,8 +1134,10 @@ function main(): void {
     writeFileSync(
       join(dir, 'score.zip'),
       writeZip([
+        { name: 'meta.json', data: readFileSync(join(r.entry.sourceDir, 'meta.json')) },
+        { name: 'README.md', data: encoder.encode(scoreReadme(r.entry)) },
         { name: 'score.jps', data: encoder.encode(r.entry.code) },
-        { name: 'README.txt', data: encoder.encode(scoreReadme(r.entry)) },
+        ...r.entry.assets.map((a) => ({ name: a.path, data: a.bytes })),
       ]),
     )
     writePage(join(dir, 'index.html'), meta.status === 'retired' ? retiredHTML(r.entry) : detailHTML(r))

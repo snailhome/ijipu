@@ -949,6 +949,10 @@ mo-li-hua.zip
 | **P2a** | 包格式 v1 + `scripts/import-scores.mts` + `score:pack`（测试用）+ 构建/dev 接线 + 校验 | 能把一个 zip 放进 `scores-inbox/` 自动出页面 |
 | **P2b** | 应用「导出乐谱包」表单 + 资产复制 + `meta.assets` role + `xx.jps.meta.json` | 作者在应用里一键导出可上传的包 |
 | **P2c** | 站点构建期内联 `assets` 到 `RenderAssets`（详情/封面/og） | 网站真的显示水印/背景 |
+
+结果（2026-11-03）：**P2b / P2c 已实现**。
+- P2b：应用「导出乐谱包」对话框（`ScorePackageDialog`，adj1195），导出 meta/README/jps/assets；
+- P2c：`gen-scores` 读 `meta.assets`，Node 头解析宽高，详情/封面/og 带图；`score.zip` 也带 assets（adj1196）。
 | **P2d** | （可选）网页上传：Worker + GitHub App + Access | 非技术用户拖拽上传 |
 
 ### 13.9 要拍板
