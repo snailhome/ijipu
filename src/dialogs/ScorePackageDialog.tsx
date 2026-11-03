@@ -281,7 +281,7 @@ export function ScorePackageDialog() {
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `ijipu-score-${form.slug}.zip`
+      a.download = `${form.slug}.zip`
       a.click()
       URL.revokeObjectURL(url)
       showNotice(C.done)
