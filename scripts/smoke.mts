@@ -29296,6 +29296,11 @@ C2: 歌，@那么我@是想要画你的手。@ {tp 1// 2/.} 你看我多么 {tp 
     'adj1191 曲库筛选的 `[hidden]` 有显式 display:none（`.card{display:flex}` 会盖掉 UA 规则）',
     readSrc('public/scores/scores.css').includes('.card[hidden]'),
   )
+  check(
+    'adj1191 角标是**完整 URL 链接**（`https://ijipu.pages.dev/`，写全协议、可点回官网）',
+    genScoresSrc1191.includes('class="site-mark"><a href=') &&
+      readSrc('public/scores/scores.css').includes('.site-mark a'),
+  )
 
   // ---- ⑥ 文档页与应用内帮助同源：渲染器抽成了纯模块，且目录锚点与标题 id 逐个一致 ----
   const mdSrc = readSrc('src/help/markdown.ts')

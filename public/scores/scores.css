@@ -212,10 +212,21 @@ h1 {
   padding: 1px 7px;
   border-radius: 4px;
   background: rgba(255, 255, 255, 0.78);
-  color: rgba(27, 27, 27, 0.52);
+  color: rgba(27, 27, 27, 0.62);
   font-size: 11px;
   line-height: 1.7;
-  pointer-events: none;
+}
+
+/* 角标是一个**完整链接**：写全 `https://ijipu.pages.dev/`，点一下能回官网。
+   白底上不能沿用全站的青色链接色（看不清），颜色继承角标自身。 */
+.site-mark a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.site-mark a:hover {
+  color: #1b1b1b;
+  text-decoration: underline;
 }
 
 .source {

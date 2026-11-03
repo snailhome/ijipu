@@ -525,7 +525,7 @@ ${topbarHTML('scores')}
     <section>
       <div class="paper">
         ${svgs.join('\n')}
-        <span class="site-mark">${esc(SITE.replace(/^https?:\/\//, ''))} · ${esc(brand.author)}</span>
+        <span class="site-mark"><a href="${esc(SITE)}/">${esc(SITE)}/</a> · ${esc(brand.author)}</span>
       </div>
       <div class="actions no-plain">
         <a class="btn btn-primary" href="${esc(appHref)}">在应用里编辑</a>

@@ -106,7 +106,7 @@ function cardHtml(meta) {
       <p class="sub">${esc(meta.composer)}</p>
       <div class="tags">${tags.map((t) => `<span class="tag">${esc(t)}</span>`).join('')}</div>
       <div class="badge">${esc(meta.license === 'PD' ? '公版 · 记谱 CC BY-NC-SA 4.0' : (LICENSE_LABEL[meta.license] ?? '查看许可证'))}</div>
-      <div class="foot">ijipu.pages.dev · 看源码 / 听效果 / 在应用里编辑</div>
+      <div class="foot">https://ijipu.pages.dev · 看源码 / 听效果 / 在应用里编辑</div>
     </div>
     <div class="right"><img src="/scores/${esc(meta.slug)}/cover.svg" alt=""></div>
   </div></body></html>`
