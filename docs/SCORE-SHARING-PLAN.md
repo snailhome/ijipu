@@ -746,6 +746,7 @@ https://ijipu.pages.dev/s/7k2m   → 301 →  https://ijipu.pages.dev/scores/xia
 
 1. **详情页默认显示"裁到墨迹"的谱面**，不是整页 A4——整页对 4 小节谱会留一大片白纸（见 E-2026-555）。
 2. **封面取"前两行"**，不是整页墨迹——整页对 8 行谱是竖长条，卡片里看不清。
+   （adj1191 已按用户 2026-11-03 口径改成「预览的第一页」，见第十二节。）
 3. **编辑入口用 `?jps=<源码>`**（P0），没有做 `/app/?src=<URL>`；8 份谱的源码都远小于 8000 字符上限。
    `?src=` 仍列在 P1，配合 P2 的 URL 取图通道一起做。
 4. **`og:image` 暂时用 `/icons/pwa-512.png`**，还没有每谱一张 `og.png`；P1 用本地无头 Chrome 生成。
@@ -780,6 +781,8 @@ CDP 390×844     ✔ innerWidth=390 / scrollWidth=390 / 超宽元素=[]；详情
 | 分享卡 | `scripts/gen-og.mjs` 用无头 Chrome 生成 8 张 1200×630 `og.png`（本地生成、提交进仓库）；`og:image` 指向它 |
 | 顶栏入口 | 首页顶栏从 5 条扩到 6 条：功能 / **乐谱** / 文档 / 下载桌面端 / GitHub / 打开应用（adj1080 断言同步改为 6 条 + 负对照） |
 | dev 支持 | `vite.config.ts` 加 `scoresDevPlugin()`：`npm run dev` 启动时跑一次 `scores:gen`，并把 `/scores/*` 转到 `dist/scores/`；改 `public/scores/**` 自动重生成 |
+| 封面 | 按用户 2026-11-03 口径改成「预览的第一页」；卡片竖版 3:4：扁平小谱用整页 A4（有页面感），竖长谱用裁到墨迹（放得更大） |
+| 筛选 | 修 `.card[hidden]` 被 `.card { display:flex }` 盖掉的问题；搜索/标签现在真的会让卡片消失（E-2026-558） |
 
 ### 关键取舍
 
@@ -799,6 +802,7 @@ npm run verify:site ✔ 241 / 0
 dev（5174）       ✔ /scores/ 200、/scores/star/ 200、score.zip 200 application/zip、score.jps 200
 ?src= 真界面      ✔ /app/?src=/scores/star/score.jps 打开后编辑器里是《小星星》
 zip 内容          ✔ Python zipfile：['score.jps','README.txt']，README 为 UTF-8
+搜索/标签（CDP）  ✔ 初始 8 张；搜「茉莉」⇒ 1 张；清空 ⇒ 8 张；点「多声部」⇒ 2 张
 ```
 
 ### 现在的状态

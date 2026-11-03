@@ -29292,6 +29292,10 @@ C2: 歌，@那么我@是想要画你的手。@ {tp 1// 2/.} 你看我多么 {tp 
   )
   check('adj1191 本地分享卡脚本与 npm 入口都在', existsSync(join(process.cwd(), 'scripts/gen-og.mjs')) &&
     pkg1190.scripts['score:og']?.includes('gen-og.mjs') === true)
+  check(
+    'adj1191 曲库筛选的 `[hidden]` 有显式 display:none（`.card{display:flex}` 会盖掉 UA 规则）',
+    readSrc('public/scores/scores.css').includes('.card[hidden]'),
+  )
 
   // ---- ⑥ 文档页与应用内帮助同源：渲染器抽成了纯模块，且目录锚点与标题 id 逐个一致 ----
   const mdSrc = readSrc('src/help/markdown.ts')

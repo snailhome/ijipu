@@ -31,7 +31,6 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import { dirname, join, resolve } from 'node:path'
 import {
   applyRangeToSvg,
-  computeRowTops,
   defaultPageConfig,
   inkBoxOfLayout,
   layoutScore,
@@ -367,22 +366,12 @@ interface Rendered {
 }
 
 /**
- * 把 `computeRowTops` 的基线 y 聚成"真正的行"。
+ * 封面 = 详情页预览的**第一页**（裁到墨迹）。
  *
- * 为什么不能直接取第 1/3 个值：`computeRowTops` 收的是**每个音符的基线**，
- * 倚音/装饰音会比主音高十几像素 ⇒ 直接取 `tops[2]` 可能落在第 1 行的倚音上，
- * 封面就会从某一行中间切断（《茉莉花》第一版就是这样）。
- * 同一行内的值相差不会超过约 2 个字号；行与行之间通常更远。
+ * 用户 2026-11-03 口径：「卡片里的预览建议使用预览页面的第一页，而不是头两行，
+ * 可以看到整体的效果」。所以不再按行裁；卡片容器改成竖版 3:4（见 `scores.css`），
+ * 一首 8 行的《茉莉花》能整体看到，而不是只有前两行。
  */
-function clusterRowTops(tops: number[], gap: number): number[] {
-  const out: number[] = []
-  for (const y of tops) {
-    const last = out[out.length - 1]
-    if (last === undefined || y - last > gap) out.push(y)
-  }
-  return out
-}
-
 function renderEntry(entry: Entry): Rendered {
   const { meta, code } = entry
   const parsed = parseJps(code)
@@ -417,28 +406,19 @@ function renderEntry(entry: Entry): Rendered {
   })
 
   /**
-   * 封面：取「前两行」，而不是整页墨迹。
-   * 整页墨迹对《茉莉花》这种 8 行谱是竖长条，塞进 16:10 的卡片会非常小；
-   * 前两行是横的，卡上看得清。行顶来自引擎的 `computeRowTops`（与排版虚线同源）。
+   * 封面直接用「预览的第一页」——与详情页看到的是同一份 SVG，不另算一次裁切。
+   * （旧版按"前两行"裁，卡片上只剩一个横条；用户要求改成看整体。）
+   *
+   * 但"第一页"有两种取法，按内容比例选：
+   *  · 竖长（墨迹高/宽 ≥ 0.85，如《茉莉花》《送别》）：用**裁到墨迹**的版本，
+   *    卡片 3:4 里能放得尽量大；
+   *  · 扁平（一行/两行的小谱）：用**整页 A4**，否则裁到墨迹只剩一条横带、上下大片白，
+   *    看起来不像"一页谱"。
    */
-  const ink = inkBoxOfLayout(layout, 0)
-  const noteSize = cfg.note_size ?? 18
-  const rows = clusterRowTops(computeRowTops(layout, noteSize)[0] ?? [], noteSize * 2.2)
-  const y0 = Math.max(0, (rows[0] ?? ink?.y ?? 0) - 16)
-  /**
-   * 裁到"第 3 行行顶再往上 0.6 个字号"：行顶是**基线减 1.1 个字号**，
-   * 而数字字形会从基线上方约 1 个字号处开始 ⇒ 正好切在行顶会把下一行的字头切进来
-   * （第一版封面上那排"半个 3"就是这么来的）。
-   */
-  const y1 = Math.min(page.height, (rows[2] ?? ((ink?.y ?? 0) + (ink?.h ?? page.height) + 4)) - noteSize * 0.6)
-  const x = Math.max(0, (ink?.x ?? 0) - 6)
-  const coverBox = {
-    x,
-    y: y0,
-    w: Math.min((ink?.w ?? page.width) + 12, page.width - x),
-    h: Math.max(80, y1 - y0),
-  }
-  const cover = applyRangeToSvg(svgs[0], coverBox)
+  const firstCropped = previewSvgs[0] ?? svgs[0]
+  const firstInk = inkBoxOfLayout(layout, 0)
+  const inkRatio = firstInk === null || firstInk === undefined || firstInk.w <= 0 ? 1 : firstInk.h / firstInk.w
+  const cover = inkRatio >= 0.85 ? firstCropped : svgs[0]
 
   return { entry, svgs, previewSvgs, cover, lines: code.split('\n').length }
 }
