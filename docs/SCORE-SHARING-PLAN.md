@@ -818,6 +818,9 @@ zip 内容          ✔ Python zipfile：['score.jps','README.txt']，README 为
 
 ## 十三、乐谱包（SCORE-PKG）：从"手写 meta"改成"导出一个 zip"
 
+> 详细规则（包结构 / 元数据 / 资产 / 库目录 / 工具 / 校验）已固化到
+> [`docs/SCORE-PKG.md`](SCORE-PKG.md)（SCORE-PKG v1）。本节是方案与取舍。
+
 > 用户 2026-11-03 提出：导出里增加「导出乐谱包(zip)」，导出时填写更完整的乐谱信息；
 > 这些信息也可存成 `xx.jps.sync.json` 或 `.jps` 旁边的文件；包里含 README、jps、水印图、背景图；
 > 把 zip 放到乐谱库目录，上传时/后自动建目录/解包。用户补充：zip 也方便交流，保证相关文件不遗漏。
