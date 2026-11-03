@@ -1,6 +1,6 @@
 {
   "name": "@ijipu/engine",
-  "version": "0.45.1",
+  "version": "0.45.2",
   "description": "iJipu（爱记谱）简谱引擎：纯 TypeScript，零 React/DOM 依赖 —— .jps 解析 → 排版 → SVG 渲染 → 播放序列 / MIDI / WAV",
   "type": "module",
   "license": "AGPL-3.0",

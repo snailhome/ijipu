@@ -1,6 +1,6 @@
 # iJipu 命令行使用手册
 
-> - 适用版本：**iJipu 0.77.0**
+> - 适用版本：**iJipu 0.77.1**
 > - 许可：**AGPL-3.0** ｜ 源码与问题反馈：<https://github.com/snailhome/ijipu>
 > - 共 13 个命令。下文示例均为**实跑输出**：以 `>` 开头的是输入的命令，紧随其后的是该命令的真实输出
 >   （这些示例都在 Windows 上**实跑过**，输出原文照录）。
@@ -55,7 +55,7 @@
 
 ```text
 > ijipu cli --version
-iJipu 0.77.0
+iJipu 0.77.1
 ```
 
 ```text
@@ -218,7 +218,7 @@ Q: 1"注释没闭合 2 3 4 |
 > ijipu cli lint -i 错谱.jps --json
 {
   "schema": 1,
-  "generator": "ijipu 0.77.0",
+  "generator": "ijipu 0.77.1",
   "input": "错谱.jps",
   "ok": false,
   …
@@ -232,7 +232,7 @@ Q: 1"注释没闭合 2 3 4 |
 > ijipu cli lint -i samples -r --json
 {
   "schema": 1,
-  "generator": "ijipu 0.77.0",
+  "generator": "ijipu 0.77.1",
   "files": [
 ```
 
@@ -333,7 +333,7 @@ Q: 1 2 3 4 |
 > ijipu cli info -i samples\ershenbu.jps --json
 {
   "schema": 1,
-  "generator": "ijipu 0.77.0",
+  "generator": "ijipu 0.77.1",
   …
   "groups": 3,
 ```
@@ -690,7 +690,7 @@ iJipu CLI doctor
 > ijipu cli doctor --json
 {
   "schema": 1,
-  "generator": "ijipu 0.77.0",
+  "generator": "ijipu 0.77.1",
   "capabilities": {
     "svg": true,
     "midi": true,
