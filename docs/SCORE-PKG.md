@@ -225,6 +225,8 @@ scores-library/
    - 资源读字节 → data URI；用头解析拿 PNG/JPEG/WebP/GIF/BMP 宽高（P2c 已实现）；
    - 用 `meta.overlay` 覆盖 `bgScale/bgOffset*/wmScale/wmOffset*/wmOpacity…`（应用导出的设置）；
    - `renderScoreToSvg(layout, { assets })`，详情/封面/og 都带作者的水印/背景；
+   - **有 assets/overlay 时详情页展示整页**（作者按 A4 页面设置的缩放/位置才不会被裁掉）；
+     纯谱仍裁到墨迹，保持紧凑。
    - 生成 `dist/scores/<slug>/index.html`、`cover.svg`、`score.zip`；
    - 复制 `score.jps` / `assets/` 到 `dist/scores/<slug>/`（下载与 `?src=` 用）。
 3. `score.zip` = 从库目录重新打的同结构包（含 `meta.json`/`README.md`/`assets/`），

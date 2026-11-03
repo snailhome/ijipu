@@ -795,13 +795,24 @@ function renderEntry(entry: Entry): Rendered {
    * 为什么不用整页：4 小节的小星星在 A4 上只占顶部一小条，整页会留一大片白纸，
    * 手机上要滚很久才看到按钮（实测截图就是这个样子）。整页版仍然保留在 `svgs` 里。
    */
-  const previewSvgs = svgs.map((svg, i) => {
-    const p = layout.pages[i]
-    if (p === undefined) return svg
-    const ink = inkBoxOfLayout(layout, i)
-    const out = rangeBox({ range: 'score', pageW: p.width, pageH: p.height, ink: ink ?? undefined })
-    return applyRangeToSvg(svg, out.box)
-  })
+  /**
+   * adj1200：有背景/水印（或包里带了 assets/overlay）时**展示整页**——
+   * 作者按 A4 页面设置图片的缩放/位置，裁到墨迹会把背景裁掉一大块，看起来像"设置没生效"。
+   * 纯谱（无 overlay/assets）仍裁到墨迹，保持原来的紧凑详情页。
+   */
+  const hasOverlay =
+    entry.assets.length > 0 ||
+    meta.overlay?.bg?.enabled === true ||
+    meta.overlay?.wm?.enabled === true
+  const previewSvgs = hasOverlay
+    ? svgs
+    : svgs.map((svg, i) => {
+        const p = layout.pages[i]
+        if (p === undefined) return svg
+        const ink = inkBoxOfLayout(layout, i)
+        const out = rangeBox({ range: 'score', pageW: p.width, pageH: p.height, ink: ink ?? undefined })
+        return applyRangeToSvg(svg, out.box)
+      })
 
   /**
    * 封面直接用「预览的第一页」——与详情页看到的是同一份 SVG，不另算一次裁切。
