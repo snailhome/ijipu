@@ -813,3 +813,142 @@ zip 内容          ✔ Python zipfile：['score.jps','README.txt']，README 为
 - 线上 2026-11-03 21:25 构建完成：`/scores/`（标题「乐谱 · 爱记谱 iJipu」）、
   `/s/star` → 301、`/scores/star/`、`og.png` / `score.zip` / `?src=` 已实测。
 - 版本号仍 `0.77.1`（站点功能已上线，但**未发版/tag**）。
+
+---
+
+## 十三、乐谱包（SCORE-PKG）：从"手写 meta"改成"导出一个 zip"
+
+> 用户 2026-11-03 提出：导出里增加「导出乐谱包(zip)」，导出时填写更完整的乐谱信息；
+> 这些信息也可存成 `xx.jps.sync.json` 或 `.jps` 旁边的文件；包里含 README、jps、水印图、背景图；
+> 把 zip 放到乐谱库目录，上传时/后自动建目录/解包。用户补充：zip 也方便交流，保证相关文件不遗漏。
+
+### 13.1 结论：方向对，但要改三处
+
+| 想法 | 判断 | 修正 |
+|---|---|---|
+| 导出乐谱包 zip | **对，推荐** | 包里要有 `meta.json` + `README.md` + `score.jps` + `assets/`；zip 是"发布单元"，也是"交流单元" |
+| 信息存 `xx.jps.sync.json` | **不建议** | `.sync.json` 是同步/音频/卡片状态，会被自动写；发布信息单独放 `xx.jps.meta.json`（或包内 `meta.json`） |
+| 放到目录就自动建目录/解包 | **在静态站上要加一步** | "上传" = 把 zip 提交到 `scores-inbox/`；`npm run build`（或 dev 插件）自动解包/校验。网页拖拽上传要 Worker + GitHub App（P3） |
+
+最关键的一条：**包里带了水印/背景图，不等于网站会显示**。当前站点生成器 `renderScoreToSvg(layout)` 没传 `RenderAssets`；
+必须让构建端读图片、量宽高、转 data URI，作为 `assets` 传给引擎，网站详情页/封面/分享卡才会画出这些图。
+
+### 13.2 包结构（SCORE-PKG v1）
+
+```
+mo-li-hua.zip
+├── meta.json          # 发布元数据（机器读；唯一权威）
+├── README.md          # 人读：曲名/来源/许可/怎么打开/资源清单
+├── score.jps          # 谱面（包里这份的 bgImage/wmImage 已改成 assets/…）
+└── assets/
+    ├── bg.webp        # 可选：背景图
+    └── wm.png         # 可选：水印图
+```
+
+`meta.json`（在现有 `meta.json` 字段上加 `format/version`）：
+
+```json
+{
+  "format": "ijipu-score-package",
+  "version": 1,
+  "slug": "mo-li-hua",
+  "short": "mlh",
+  "title": "茉莉花",
+  "composer": "中国民歌",
+  "license": "PD",
+  "source": "中国民歌；记谱：爱记谱示例",
+  "tags": ["民歌", "4/4"],
+  "difficulty": 2,
+  "card": "paper",
+  "watermark": "corner",
+  "note": "编配说明（可选）",
+  "publishedAt": "2026-11-03",
+  "updatedAt": "2026-11-03",
+  "assets": [
+    { "path": "assets/bg.webp", "role": "background" },
+    { "path": "assets/wm.png", "role": "watermark" }
+  ]
+}
+```
+
+- `slug` / `short` 发布后**不改**；导出对话框给建议值，用户可改。
+- `license` 仍是 `PD / ORIGINAL / AUTHORIZED`；`source` 必填（审计用）。
+- `README.md` 由导出器从 `meta.json` 生成，不是第二份真源。
+- `cover` 可选：包内 `assets/cover.webp`；没有就用站点自动封面。
+
+### 13.3 元数据放哪：不要塞 `.sync.json`
+
+| 位置 | 用途 | 建议 |
+|---|---|---|
+| 包内 `meta.json` | 发布的唯一权威；构建/导入只认它 | ✓ |
+| `xx.jps.meta.json`（`.jps` 旁边） | 应用复用：重新导出时预填，不用再填一遍 | ✓ 推荐 |
+| `xx.jps.sync.json` | 对拍锚点/伴奏/卡片模板等**机器状态**，会被同步功能自动写 | ✗ 不要混 |
+
+`.sync.json` 的风险很实际：自动保存会重写它；混入发布字段后，哪天同步逻辑只保留已知键，发布信息就没了。
+单独 `xx.jps.meta.json` 还有一个好处：它和 `.jps` 一起复制/发给人时，对方也能看到"这首谱的标题/来源/许可"。
+
+### 13.4 网站端怎么收：两条都支持
+
+1. **zip 入库 + 构建期解包（推荐，用户原意）**
+   - 把 `<slug>.zip` 提交到 `scores-inbox/`（仓库根，**不放 `public/`**）；
+   - `npm run build` 里加 `scores:import`：读 zip → 校验 → 解到 `dist/.scores-src/<slug>/`；
+   - `gen-scores` 合并 `public/scores/`（现有 8 份）与 `dist/.scores-src/`（zip 来的）；
+   - 生成的页面/封面/`score.zip` 都落在 `dist/`，**不把解包结果写回仓库**；
+   - dev 插件（`scoresDevPlugin`）同时 watch `scores-inbox/`，改 zip 自动重导入。
+   - 优点：上传=一个文件；不会漏 README/图；不动现有目录结构。
+2. **本地 `npm run score:import <zip>`**
+   - 解到 `public/scores/<slug>/`，人可以 review 每一份文件，再提交；
+   - 适合要审内容/做 PR 的场景；代价是 zip 与解包内容二选一（别同时提交）。
+
+**不做的**：在纯静态站上"网页拖一个 zip 就出现"。那需要后端（Cloudflare Worker + GitHub App 权限 + 审核），
+列为 P3；现在不做，也不假装能做。
+
+### 13.5 资产（水印/背景）怎么处理
+
+- 导出器把 `# jps-config` 里 `bgImage` / `wmImage` 指向的图片**复制进 `assets/`**，
+  并把**包里那份** `.jps` 的路径改写成 `assets/...`；原文件不动。
+- 只允许 `png/jpg/jpeg/webp/gif/bmp`；**拒绝 svg**（引擎既有安全口径）；单图 ≤16MB（站点建议 ≤2MB）。
+- 图片找不到 / 类型不对 / 超过上限 ⇒ 导出**明确报错并列出**，不要导出"少了背景"的包。
+- 站点构建端：
+  1. 读 `assets/` 字节，转 data URI；
+  2. 用约 60 行头解析拿 PNG/JPEG/WebP 的宽高（Node 里没有 canvas）；
+  3. 传给 `renderScoreToSvg(layout, { assets: { bg, wm } })`。
+  这样详情页、`cover.svg`、`og.png` 都会带上作者的背景/水印；`?plain=1` 只关站点装饰，不关作者的水印。
+- 站点「下载 .zip」应当就是**这个包本身**（或从解包目录重新打同结构），不再只是 `.jps + README`。
+
+### 13.6 校验与安全（构建期闸门）
+
+1. zip 路径：拒绝绝对路径、`..`、反斜杠穿越、符号链接；只允许上面四个位置。
+2. 解压上限：单文件 16MB、总解压 40MB、条目数 ≤50（防 zip bomb）。
+3. `meta.json`：`format/version` 对、字段齐全、`license` 枚举、`slug/short` 合法且**全局唯一**（含现有 8 份）。
+4. `score.jps`：引擎解析 **0 错误、0 告警**（站点不发布带告警的谱）。
+5. 资源：`assets` 里每个文件真实存在、扩展名白名单、能被头解析量出宽高。
+6. 重复：同一 slug 同时出现在 zip 与 `public/scores` ⇒ 构建失败，点名两处。
+7. `README.md` 若缺失可由生成器补；`meta.json` 缺失直接失败。
+
+### 13.7 应用端「导出乐谱包」
+
+- 入口：导出面板加第 9 个目标「乐谱包（zip）」（轻功能，三端都可做；插件端走宿主保存桥）。
+- 表单字段：标题、作曲/作词、许可证、来源、标签、难度、`slug`、`short`、编配说明；
+  预填来源：`.jps` 的 `B:`/`Z:` + 旁边的 `xx.jps.meta.json`（有就优先）。
+- 选项：☑ 包含水印/背景图（默认按 `# jps-config` 里是否有图）；☑ 同时保存 `xx.jps.meta.json`。
+- 生成：`writeZip`（已有）+ `score.jps` + `meta.json` + `README.md` + `assets/`；下载 `ijipu-score-<slug>.zip`。
+- 校验：导出前先跑一遍"站点会跑的同一套检查"（至少：license/source 非空、解析 0 错误、slug/short 格式、图存在）；
+  不通过就**不下载**，把原因写在对话框里。
+
+### 13.8 分期
+
+| 期 | 内容 | 产出 |
+|---|---|---|
+| **P2a** | 包格式 v1 + `scripts/import-scores.mts` + `score:pack`（测试用）+ 构建/dev 接线 + 校验 | 能把一个 zip 放进 `scores-inbox/` 自动出页面 |
+| **P2b** | 应用「导出乐谱包」表单 + 资产复制/改写 + `xx.jps.meta.json` | 作者在应用里一键导出可上传的包 |
+| **P2c** | 站点构建期内联 `assets` 到 `RenderAssets`（详情/封面/og） | 网站真的显示水印/背景 |
+| **P2d** | （可选）网页上传：Worker + GitHub App + Access | 非技术用户拖拽上传 |
+
+### 13.9 要拍板
+
+1. **发布单元**：`scores-inbox/*.zip` + 构建解包（推荐）／ `score:import` 解到 `public/scores` 再提交／两者都支持？
+2. **元数据 sidecar**：`xx.jps.meta.json`（推荐）／ 在 `.sync.json` 里加 `publish` 命名空间？
+3. **`slug`/`short`**：导出时让作者填（推荐，稳定）／自动从文件名生成、冲突再报错？
+4. **zip 是否提交进仓库**：提交（简单、可回溯）／只本地导入后提交解包文件（diff 可读）？
+5. **现有 8 份**：保持解包目录（推荐，先不动）／也打成 zip 统一模型？
