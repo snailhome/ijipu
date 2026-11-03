@@ -803,6 +803,7 @@ zip 内容          ✔ Python zipfile：['score.jps','README.txt']，README 为
 
 ### 现在的状态
 
-- 本地提交 `6d69eef`（P0）+ 本轮 P1 提交（未推送）。
-- **线上 `ijipu.pages.dev` 仍是旧版**：Cloudflare 只在 `git push` 后构建，所以现在线上点「乐谱」还是 404。
-  本地 `npm run dev` 与 `npm run preview` 都已能打开。
+- 提交：`6d69eef`（P0）+ `b025bed`（P1），**已推送到 `origin/main`**。
+- 线上 2026-11-03 21:25 构建完成：`/scores/`（标题「乐谱 · 爱记谱 iJipu」）、
+  `/s/star` → 301、`/scores/star/`、`og.png` / `score.zip` / `?src=` 已实测。
+- 版本号仍 `0.77.1`（站点功能已上线，但**未发版/tag**）。
