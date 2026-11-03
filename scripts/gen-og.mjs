@@ -101,7 +101,7 @@ function cardHtml(meta) {
   </style></head><body><div class="wrap">
     <div class="left">
       <div class="brand"><img src="/icons/Jianpu.png" alt=""> 爱记谱 <b>iJipu</b></div>
-      <div class="kicker">JPS 乐谱 · ${esc(LICENSE_LABEL[meta.license] ?? '乐谱')}</div>
+      <div class="kicker">JPS 乐谱</div>
       <h1>${esc(meta.title)}</h1>
       <p class="sub">${esc(meta.composer)}</p>
       <div class="tags">${tags.map((t) => `<span class="tag">${esc(t)}</span>`).join('')}</div>

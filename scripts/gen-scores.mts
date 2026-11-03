@@ -32,7 +32,10 @@ import { dirname, join, resolve } from 'node:path'
 import {
   applyRangeToSvg,
   defaultPageConfig,
+  highlightModel,
   inkBoxOfLayout,
+  JPS_HIGHLIGHT_COLORS,
+  JPS_PLAIN_COLORS,
   layoutScore,
   mergeJpsConfig,
   parseJps,
@@ -432,6 +435,23 @@ function difficultyDots(value: number | undefined): string {
   return '●'.repeat(n) + '○'.repeat(Math.max(0, 5 - n))
 }
 
+/**
+ * adj1192（用户要求）：右侧源码要**用应用同款的脚本高亮颜色**。
+ *
+ * 规则与颜色都从引擎来（`highlightModel` + `JPS_HIGHLIGHT_COLORS`），不在这里另写一套；
+ * 深/浅两套各一份，跟着页面 `data-site-mode` 切。
+ */
+function highlightCSS(): string {
+  const dark = JPS_HIGHLIGHT_COLORS.dark
+  const light = JPS_HIGHLIGHT_COLORS.light
+  const classes = Object.keys(dark) as (keyof typeof dark)[]
+  const darkRules = classes.map((c) => `.hl-${c}{color:${dark[c]}}`).join('')
+  const lightRules = classes
+    .map((c) => `:root[data-site-mode="light"] .hl-${c}{color:${light[c]}}`)
+    .join('')
+  return `<style>${darkRules}.hl-plain{color:${JPS_PLAIN_COLORS.dark}}${lightRules}:root[data-site-mode="light"] .hl-plain{color:${JPS_PLAIN_COLORS.light}}</style>`
+}
+
 function headHTML(options: {
   title: string
   description: string
@@ -504,12 +524,25 @@ function detailHTML(rendered: Rendered): string {
   const description = `${meta.title} · ${meta.composer}。用 .jps 脚本写的简谱，可看源码、预览，或在爱记谱里编辑。`
   const note = meta.note ? `<div class="note">${mdToHtml(meta.note)}</div>` : ''
   const title = `${meta.title} · 乐谱 · 爱记谱 iJipu`
+  /**
+   * adj1192（用户要求）：右侧源码用**应用同款语法高亮**（引擎 `highlightModel` 分词，
+   * 颜色来自 `JPS_HIGHLIGHT_COLORS`），并加行号。渲染只做"token → span"，不另写规则。
+   */
+  const hl = highlightModel(code)
+  const sourceHtml = hl.lines
+    .map((line) => {
+      const inner = line.tokens
+        .map((t) => (t.cls === 'plain' ? esc(t.text) : `<span class="hl-${t.cls}">${esc(t.text)}</span>`))
+        .join('')
+      return `<span class="src-line">${inner}</span>`
+    })
+    .join('\n')
 
   const body = `<body>
 ${topbarHTML('scores')}
 <main class="wrap">
   <header class="page-head">
-    <p class="kicker">乐谱 · ${esc(LICENSE_LABEL[meta.license])}</p>
+    <p class="kicker">乐谱 · <a href="/scores/">全部乐谱</a></p>
     <h1>${esc(meta.title)}</h1>
     <p class="sub">${esc(meta.composer)}</p>
     <div class="meta-row">
@@ -532,14 +565,13 @@ ${topbarHTML('scores')}
         <a class="btn" href="${esc(srcUrl)}" download>下载 .jps</a>
         <a class="btn" href="/scores/${esc(meta.slug)}/score.zip" download>下载 .zip</a>
         <button class="btn" type="button" id="copy">复制源码</button>
-        <a class="btn" href="/scores/">全部乐谱</a>
       </div>
       <p class="copy-note" id="copy-note" aria-live="polite"></p>
     </section>
 
     <aside class="source">
       <div class="source-head"><span>源码 · ${lines} 行</span><span class="spacer"></span><a href="${esc(srcUrl)}" download>.jps</a></div>
-      <pre><code id="src">${esc(code)}</code></pre>
+      <pre><code id="src">${sourceHtml}</code></pre>
     </aside>
   </div>
 
@@ -586,6 +618,7 @@ ${topbarHTML('scores')}
     description,
     canonical: `${SITE}${entry.pageUrl}`,
     ogImage: entry.ogUrl ? `${SITE}${entry.ogUrl}` : undefined,
+    extra: highlightCSS(),
   }) + body
 }
 

@@ -783,6 +783,7 @@ CDP 390×844     ✔ innerWidth=390 / scrollWidth=390 / 超宽元素=[]；详情
 | dev 支持 | `vite.config.ts` 加 `scoresDevPlugin()`：`npm run dev` 启动时跑一次 `scores:gen`，并把 `/scores/*` 转到 `dist/scores/`；改 `public/scores/**` 自动重生成 |
 | 封面 | 按用户 2026-11-03 口径改成「预览的第一页」；卡片竖版 3:4：扁平小谱用整页 A4（有页面感），竖长谱用裁到墨迹（放得更大） |
 | 筛选 | 修 `.card[hidden]` 被 `.card { display:flex }` 盖掉的问题；搜索/标签现在真的会让卡片消失（E-2026-558） |
+| 源码高亮 | 详情页源码改用引擎 `highlightModel` 分词 + `hl-*` 类（深/浅两套颜色来自 `JPS_HIGHLIGHT_COLORS`），带行号；复制/下载不带行号 |
 
 ### 关键取舍
 
@@ -803,6 +804,7 @@ dev（5174）       ✔ /scores/ 200、/scores/star/ 200、score.zip 200 applica
 ?src= 真界面      ✔ /app/?src=/scores/star/score.jps 打开后编辑器里是《小星星》
 zip 内容          ✔ Python zipfile：['score.jps','README.txt']，README 为 UTF-8
 搜索/标签（CDP）  ✔ 初始 8 张；搜「茉莉」⇒ 1 张；清空 ⇒ 8 张；点「多声部」⇒ 2 张
+源码高亮（真机）  ✔ 24 行《茉莉花》带行号；V/B/Z/P 行头青色、音符橙色、歌词绿色
 ```
 
 ### 现在的状态

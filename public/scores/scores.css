@@ -129,6 +129,17 @@ pre {
   text-transform: uppercase;
 }
 
+/* 「乐谱 · 全部乐谱」里的返回链接：与 kicker 同色，靠下划线表明可点 */
+.kicker a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.kicker a:hover {
+  color: var(--site-accent-hover);
+}
+
 h1 {
   margin: 0 0 8px;
   font-size: clamp(26px, 4vw, 38px);
@@ -263,12 +274,35 @@ h1 {
   font-size: 13px;
   line-height: 1.6;
   tab-size: 2;
+  /* 行是块级 span，靠它们自己换行；pre 的默认 pre 会把 span 之间的换行再算一遍 */
+  white-space: normal;
+  counter-reset: srcline;
+}
+
+/* adj1192：源码行号（伪元素不进 textContent，复制/下载不会带上行号） */
+.src-line {
+  display: block;
+  min-height: 1.6em;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.src-line::before {
+  display: inline-block;
+  width: 2.2em;
+  margin-right: 0.9em;
+  color: var(--site-muted);
+  text-align: right;
+  counter-increment: srcline;
+  content: counter(srcline);
+  user-select: none;
 }
 
 .source code {
   /* 曲库里的长行（`# jps-config`、长歌词）在窄屏上必须能读全：
-     宁可折行，也不要让用户去猜右边被裁掉了什么。 */
-  white-space: pre-wrap;
+     宁可折行，也不要让用户去猜右边被裁掉了什么。
+     行间距由块级 `.src-line` 控制；这里用 normal，免得 span 之间的换行再算一遍。 */
+  white-space: normal;
   overflow-wrap: anywhere;
 }
 

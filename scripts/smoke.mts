@@ -29301,6 +29301,16 @@ C2: 歌，@那么我@是想要画你的手。@ {tp 1// 2/.} 你看我多么 {tp 
     genScoresSrc1191.includes('class="site-mark"><a href=') &&
       readSrc('public/scores/scores.css').includes('.site-mark a'),
   )
+  check(
+    'adj1191 详情页顶部是「乐谱 · 全部乐谱」（返回链接在 kicker 里，不在按钮排）',
+    genScoresSrc1191.includes('乐谱 · <a href="/scores/">全部乐谱</a>'),
+  )
+  check(
+    'adj1192 详情页源码用引擎高亮（highlightModel + hl-* 类），且带行号',
+    genScoresSrc1191.includes('highlightModel(code)') &&
+      genScoresSrc1191.includes('class="hl-') &&
+      readSrc('public/scores/scores.css').includes('.src-line::before'),
+  )
 
   // ---- ⑥ 文档页与应用内帮助同源：渲染器抽成了纯模块，且目录锚点与标题 id 逐个一致 ----
   const mdSrc = readSrc('src/help/markdown.ts')
