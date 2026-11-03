@@ -69,6 +69,40 @@ import farewellSrc from '../../public/scores/duet/score.jps?raw'
 import auldLangSyneSrc from '../../public/scores/yydj/score.jps?raw'
 
 /**
+ * adj1197（S4）：首页示例改为 **tag 驱动**。
+ *
+ * 唯一规则：`meta.tags` 里含 `示例谱` 的条目才进首页；顺序按 `order`。
+ * 源码仍从曲库读（public/scores + scores-library），不在这里手写第二份。
+ * 现有 7 首的静态 import 保留，只是为了不改动下面那一大段"这段演示什么语法"的历史注释；
+ * 新加进库里的 `示例谱` 会自动走 glob，不用改这个文件。
+ */
+type HomeMeta = {
+  slug: string
+  title: string
+  tags?: string[]
+  order?: number
+  file?: string
+}
+const HOME_METAS = {
+  ...import.meta.glob('../../public/scores/*/meta.json', { eager: true, import: 'default' }),
+  ...import.meta.glob('../../scores-library/**/meta.json', { eager: true, import: 'default' }),
+} as Record<string, HomeMeta>
+const HOME_SOURCES = {
+  ...import.meta.glob('../../public/scores/*/score.jps', { eager: true, query: '?raw', import: 'default' }),
+  ...import.meta.glob('../../scores-library/**/score.jps', { eager: true, query: '?raw', import: 'default' }),
+} as Record<string, string>
+
+const HOME_LABELS: Record<string, string> = {
+  star: '小星星',
+  mlh: '茉莉花（完整）',
+  hls: '欢乐颂（倚音与连音）',
+  lzlh: '两只老虎（跳房子与反复）',
+  lexdd: '铃儿响叮当（临时伴奏）',
+  duet: '送别（临时多声部）',
+  yydj: '友谊地久天长（多声部）',
+}
+
+/**
  * 精简时**保留**的配置项（白名单）。
  *
  * 判据：**删了它，谱面看起来会明显不同**（不是"内部实现细节"）。
@@ -202,12 +236,32 @@ const AULD_LANG_SYNE = auldLangSyneSrc
  * 顺序即首页示例按钮的顺序。标签用**曲名 + 括号里的语法点** ——
  * 用户一眼能看出"这首是什么"，也能看出"这段演示什么写法"。
  */
-export const BRAND_SAMPLES: readonly { label: string; src: string }[] = [
-  { label: '小星星', src: XIAO_XING_XING },
-  { label: '茉莉花（完整）', src: simplifyJps(moly) },
-  { label: '欢乐颂（倚音与连音）', src: ODE_TO_JOY },
-  { label: '两只老虎（跳房子与反复）', src: FRERE_JACQUES },
-  { label: '铃儿响叮当（临时伴奏）', src: JINGLE_BELLS },
-  { label: '送别（临时多声部）', src: FAREWELL },
-  { label: '友谊地久天长（多声部）', src: AULD_LANG_SYNE },
-] as const
+/**
+ * 顺序即首页示例按钮的顺序；**只收 tags 里含 `示例谱` 的条目**（S4）。
+ * 标签优先 `HOME_LABELS`（保留"曲名 + 语法点"的老文案），新条目录直接用 title。
+ */
+const STATIC_SRC: Record<string, string> = {
+  star: XIAO_XING_XING,
+  mlh: moly,
+  hls: ODE_TO_JOY,
+  lzlh: FRERE_JACQUES,
+  lexdd: JINGLE_BELLS,
+  duet: FAREWELL,
+  yydj: AULD_LANG_SYNE,
+}
+
+export const BRAND_SAMPLES: readonly { label: string; src: string }[] = Object.entries(HOME_METAS)
+  .filter(([, meta]) => meta.tags?.includes('示例谱') === true)
+  .sort((a, b) => (a[1].order ?? 100) - (b[1].order ?? 100) || a[0].localeCompare(b[0]))
+  .map(([path, meta]) => {
+    const dir = path.slice(0, path.lastIndexOf('/'))
+    const raw =
+      STATIC_SRC[meta.slug] ??
+      HOME_SOURCES[`${dir}/score.jps`] ??
+      (meta.file ? moly : '')
+    if (raw === '') throw new Error(`首页示例 ${meta.slug} 缺少 score.jps`)
+    return {
+      label: HOME_LABELS[meta.slug] ?? meta.title,
+      src: simplifyJps(raw),
+    }
+  })

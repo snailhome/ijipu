@@ -149,9 +149,8 @@ scores-library/
 3. `score.zip` = 从库目录重新打的同结构包（含 `meta.json`/`README.md`/`assets/`），
    不再只是 `.jps + README.txt`。
 4. 下架：`status: retired` 仍生成 tombstone 页（链接不 404），列表不显示。
-5. 首页示例：构建期从 `示例谱` 生成 `src/gen/homeSamples.ts`（标签 + 源码），
-   `src/landing/samples.ts` 消费它；`index.html` 的首屏预置块由构建期注入或保留固定占位，
-   避免"静态块与第一首不一致"（详见计划文档 P4）。
+5. 首页示例：`samples.ts` 用 `import.meta.glob` 读 `public/scores` + `scores-library` 的 meta/score，
+   筛 `tags` 含 `示例谱` 的条目；按钮由 `playground.ts` 动态生成（S4 已实现，不用生成中间 TS 文件）。
 
 ---
 
@@ -235,7 +234,7 @@ scores-library/
 | **S1** | 本文定稿 + 库目录 + 构建读库 + 校验（不上工具也能加谱） |
 | **S2** | `score:pack` / `score:unpack` 命令行（zip ↔ 目录） |
 | **S3** | 本地管理工具（列表/预览/导入/编辑/下架/导出/一键更新） |
-| **S4** | 首页示例改为 tag 驱动（`示例谱`）+ 现有 8 份迁移 |
+| **S4** | 首页示例改为 tag 驱动（`示例谱`）+ 现有 8 份迁移 | 首页已实现；迁移待做 |
 
 ---
 
@@ -245,5 +244,5 @@ scores-library/
 2. **工具形态**：本地 Node + 浏览器 UI；不用 Tauri/Electron。
 3. **仓库**：工具 + 工作库放**私有仓**（`D:\Coding\JianpuScript\iJipu-Library`，本地 git，不建公开远程）；
    公开站点仓只接收已发布镜像 `scores-library/`。
-4. **首页示例**：`示例谱` tag；S4 做首页改造。
+4. **首页示例**：`示例谱` tag；S4 已实现（现有 7 首已打 tag；迁移待做）。
 5. **现有 8 份**：S2/S3 完成后再迁入私有库，站点侧迁到 `scores-library/`。

@@ -29332,6 +29332,12 @@ C2: 歌，@那么我@是想要画你的手。@ {tp 1// 2/.} 你看我多么 {tp 
       readSrc('src/store/uiStore.ts').includes("'package'") &&
       readSrc('src/ui/dock/ExportPanel.tsx').includes("openModal('package')"),
   )
+  check(
+    'adj1197 首页示例只由 `示例谱` tag 驱动（glob 读 public/scores + scores-library）',
+    readSrc('src/landing/samples.ts').includes("tags?.includes('示例谱')") &&
+      readSrc('src/landing/samples.ts').includes("import.meta.glob('../../scores-library/**/meta.json'") &&
+      BRAND_SAMPLES.length > 0,
+  )
 
   // ---- ⑥ 文档页与应用内帮助同源：渲染器抽成了纯模块，且目录锚点与标题 id 逐个一致 ----
   const mdSrc = readSrc('src/help/markdown.ts')

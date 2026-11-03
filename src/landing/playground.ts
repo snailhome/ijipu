@@ -25,6 +25,26 @@ export function mountPlayground(): void {
   // 挂上「脚本 / 预览」（与文档页同一套挂载逻辑）
   mountJpsBlocks(root)
 
+  /**
+   * adj1197（S4）：按钮也由 `BRAND_SAMPLES` 生成，不再依赖 `index.html` 里写死的 7 个。
+   * 这样"只有 `示例谱` tag 才进首页"才是真的：删/加 tag，按钮跟着变。
+   * 无 JS 时仍能看到 HTML 里预置的第一段源码（渐进增强）。
+   */
+  const bar = root.querySelector<HTMLElement>('.pg-samples')
+  if (bar) {
+    bar.replaceChildren()
+    BRAND_SAMPLES.forEach((sample, idx) => {
+      const b = document.createElement('button')
+      b.type = 'button'
+      b.setAttribute('role', 'tab')
+      b.dataset.pgSample = String(idx)
+      b.className = idx === 0 ? 'active' : ''
+      b.setAttribute('aria-selected', idx === 0 ? 'true' : 'false')
+      b.textContent = sample.label
+      bar.appendChild(b)
+    })
+  }
+
   const buttons = [...root.querySelectorAll<HTMLButtonElement>('[data-pg-sample]')]
   const openApp = document.getElementById('pg-open-app') as HTMLAnchorElement | null
 
