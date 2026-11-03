@@ -555,7 +555,11 @@ async function main() {
     await sleep(250)
 
     // 真打字：聚焦水印文本输入框后走 CDP 输入（React 的 onChange 才会触发）
-    await evalJs(c, `document.querySelector('.pcfg-text').focus(), true`)
+    // adj1189：默认文本已不是空串 ⇒ 先全选，再输入，避免把默认文字拼在前面
+    await evalJs(
+      c,
+      `(() => { const el = document.querySelector('.pcfg-text'); el.focus(); el.setSelectionRange(0, el.value.length); return true })()`,
+    )
     await c.send('Input.insertText', { text: '内部草稿' })
     await sleep(400)
     const wmInPreview = await evalJs(c, `!!document.querySelector('.score-page svg [data-overlay="wm"]')`)

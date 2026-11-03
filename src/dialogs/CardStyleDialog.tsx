@@ -915,7 +915,7 @@ export function CardStyleDialog() {
                     patch({
                       // 勾上时保留已经调过的图片/大小/位置（从 null 打开才用默认值）
                       seal: e.target.checked
-                        ? { text: '谱', color: draft.accent, font: 'serif', ...draft.seal }
+                        ? { text: '爱记谱', color: draft.accent, font: 'serif', ...draft.seal }
                         : null,
                     })
                   }

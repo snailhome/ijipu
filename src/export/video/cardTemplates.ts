@@ -157,7 +157,7 @@ export const CARD_TEMPLATES: CardStyle[] = [
     url: '#6b5f4e',
     accent: '#b23a2b',
     motion: true,
-    seal: { text: '谱', color: '#b23a2b' },
+    seal: { text: '爱记谱', color: '#b23a2b' },
     backgroundImage: null,
   },
   {
@@ -181,7 +181,7 @@ export const CARD_TEMPLATES: CardStyle[] = [
     url: '#a8997c',
     accent: '#c0392b',
     motion: true,
-    seal: { text: '谱', color: '#b23a2b' },
+    seal: { text: '爱记谱', color: '#b23a2b' },
     backgroundImage: null,
   },
   {
@@ -501,7 +501,7 @@ export function normalizeCardStyle(style: Partial<CardStyle> | null | undefined)
       seal === null
         ? null
         : {
-            text: String(seal.text ?? '谱').slice(0, 6),
+            text: String(seal.text ?? '爱记谱').slice(0, 6),
             color: String(seal.color ?? d.accent),
             font: fontOf(seal.font, 'serif'),
             fontFamily: localFamilyOf(seal.fontFamily),

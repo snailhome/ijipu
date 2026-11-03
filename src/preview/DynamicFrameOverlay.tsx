@@ -729,8 +729,16 @@ export function DynamicFrameOverlay() {
    */
   // adj1176：只记了卡片模板、没有伴奏的 sidecar 不算"有混音排"（别白让一块高度）
   const hasMixRow = syncDoc !== null && syncDoc.audio !== ''
-  const maxH = Math.min(rect.height * (hasMixRow ? 0.55 : 0.66), rect.height - (hasMixRow ? 230 : 150))
-  const maxW = rect.width * 0.9
+  /**
+   * adj1189（用户 2026-11-03）：「让相机位的预览界面更大一些，以显示更多的细节」。
+   * 放大取景框：高度上限从 66%/55% 提到 78%/68%，宽度从 90% 提到 96%，
+   * 同时给下方控制条预留固定高度（不够时控制条自己滚动，见 controlsMaxH/overflow）。
+   */
+  const maxH = Math.min(
+    rect.height * (hasMixRow ? 0.68 : 0.78),
+    rect.height - (hasMixRow ? 220 : 160),
+  )
+  const maxW = rect.width * 0.96
   let h = Math.max(120, maxH)
   let w = h * spec.ratio
   if (w > maxW) {
@@ -738,7 +746,7 @@ export function DynamicFrameOverlay() {
     h = w / spec.ratio
   }
   const left = rect.left + (rect.width - w) / 2
-  const top = rect.top + (hasMixRow ? 8 : Math.max(6, (rect.height - h) * 0.3))
+  const top = rect.top + 6
   const boxH = Math.max(h, 120)
   const controlsW = Math.min(rect.width - 24, Math.max(w, 560))
   const controlsLeft = rect.left + (rect.width - controlsW) / 2

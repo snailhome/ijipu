@@ -170,7 +170,7 @@ import { buildRectTrack, rectsActiveAt } from '@ijipu/engine/index.ts'
 // M1-1 第二段：流式视图（分页 → 条带行）与出帧（时刻 → 一帧）
 import { buildFlowView, frameAt, frameTimeMs, frameIndexAt, dynamicPageConfig } from '@ijipu/engine/index.ts'
 // M1-3：相机（满宽片头 → 推近 → 安全区跟拍）
-import { buildCameraTrack, cameraAt, ballAt, BALL_LANDING_TIMING } from '@ijipu/engine/index.ts'
+import { buildCameraTrack, cameraAt, clampCameraCenterX, ballAt, BALL_LANDING_TIMING } from '@ijipu/engine/index.ts'
 // adj1089：露白夹紧的算式与阈值（出片与试听共用一份；正/负对照都直接用它们）
 import { clampRowCenter, CAMERA_WHITE_MARGIN } from '@ijipu/engine/index.ts'
 // adj1068：调号显示口径（描述头与动态视频片头卡共用）
@@ -182,6 +182,7 @@ import {
   DEFAULT_CARD_STYLE,
   cardFontStack,
   cardImageRect,
+  cardStyleById,
   fitFontSize,
   normalizeCardStyle,
   resolveCardStyle,
@@ -14221,10 +14222,11 @@ function runAdj965OverlayTests() {
   const near = (a: number, b: number, tol = 0.15): boolean => Number.isFinite(a) && Math.abs(a - b) <= tol
 
   // ---- ① 回归：默认配置 + 无 assets ⇒ 一个字节都不插 ----
-  const plainLay = mkLayout()
+  // adj1189：默认水印文本已改为「爱记谱・iJipu」；这里显式清空文本，验证"没有内容"时不插字节
+  const plainLay = mkLayout({ wmText: '' })
   const plain = renderScoreToSvg(plainLay)[0]
   check(
-    'adj965 默认配置且无 assets ⇒ 产物里**没有** data-overlay、也没有 <defs>（不用这功能的谱逐字节不变）',
+    'adj965 空水印文本且无 assets ⇒ 产物里**没有** data-overlay、也没有 <defs>（不用这功能的谱逐字节不变）',
     plain !== undefined && !plain.includes('data-overlay') && !plain.includes('<defs>'),
     `长度 ${plain?.length ?? 0}`,
   )
@@ -14234,15 +14236,22 @@ function runAdj965OverlayTests() {
   const wm = renderScoreToSvg(mkLayout({ wmText: '草稿<&"' }))[0] ?? ''
   const rot = num(/transform="rotate\(([-\d.]+) ([-\d.]+) ([-\d.]+)\)"/, wm)
   check(
-    'adj965 文本水印：绕**页面中心**旋转（默认 -45°）、`opacity="0.25"`（25% 不许被四舍五入成 0.3）、字号 36',
+    'adj965/1189 文本水印：绕**页面中心**旋转（默认 -45°）、`opacity="0.25"`、字号 22',
     wm.includes('data-overlay="wm"') &&
       wm.includes('opacity="0.25"') &&
-      wm.includes('font-size="36"') &&
+      wm.includes('font-size="22"') &&
       rot.length === 3 &&
       near(rot[0] ?? 0, -45) &&
       near(rot[1] ?? 0, p0.width / 2) &&
       near(rot[2] ?? 0, p0.height / 2),
     `rotate=${rot.join(',')} 页中心=${p0.width / 2},${p0.height / 2}`,
+  )
+  check(
+    'adj1189 水印默认文本 `爱记谱・iJipu`、默认字号 22（仍受 wmEnabled=false 约束）',
+    defaultPageConfig.wmText === '爱记谱・iJipu' &&
+      defaultPageConfig.wmSize === 22 &&
+      defaultPageConfig.wmEnabled === false,
+    JSON.stringify({ text: defaultPageConfig.wmText, size: defaultPageConfig.wmSize }),
   )
   // adj965b（用户 2026-10-15 裁定）：默认旋转由 +45 改为 **-45**，且默认是"单个居中"（不重复）
   // adj965f（用户 2026-10-15 追加裁定）：平铺间隔默认由 100 改为 **300**（100 太密）
@@ -14257,7 +14266,7 @@ function runAdj965OverlayTests() {
   )
   // adj965b：重复水印（平铺满页面）——判据**双向**：不勾选必须只有一枚、勾选必须多枚
   const countWmText = (s: string): number => (s.match(/<text text-anchor="middle"/g) ?? []).length
-  const wmRepeatSvg = renderScoreToSvg(mkLayout({ wmText: '草稿', wmRepeat: true }))[0] ?? ''
+  const wmRepeatSvg = renderScoreToSvg(mkLayout({ wmText: '草稿', wmSize: 36, wmRepeat: true }))[0] ?? ''
   check(
     'adj965b 重复水印：勾选后**平铺满页面**（多枚、且仍受本页 clipPath 约束），不勾选**只画正中一枚**',
     countWmText(wm) === 1 &&
@@ -14267,8 +14276,8 @@ function runAdj965OverlayTests() {
     `单枚=${countWmText(wm)} 平铺=${countWmText(wmRepeatSvg)}`,
   )
   // 间隔越大铺得越疏（同一夹具下比较枚数 ⇒ 证明这个字段真的在起作用，不是摆设）
-  const dense = renderScoreToSvg(mkLayout({ wmText: '草稿', wmRepeat: true, wmRepeatGap: 100 }))[0] ?? ''
-  const sparse = renderScoreToSvg(mkLayout({ wmText: '草稿', wmRepeat: true, wmRepeatGap: 400 }))[0] ?? ''
+  const dense = renderScoreToSvg(mkLayout({ wmText: '草稿', wmSize: 36, wmRepeat: true, wmRepeatGap: 100 }))[0] ?? ''
+  const sparse = renderScoreToSvg(mkLayout({ wmText: '草稿', wmSize: 36, wmRepeat: true, wmRepeatGap: 400 }))[0] ?? ''
   check(
     'adj965b 平铺间隔真的生效：100 比默认 300 密、300 比 400 密（枚数单调 ⇒ 这个字段不是摆设）',
     countWmText(dense) > countWmText(wmRepeatSvg) &&
@@ -21190,6 +21199,8 @@ runAdj927ExternalChangeTests()
       .then(() => runAdj1186Tests())
       // adj1187：保存模板有成功/失败提示（底栏固定）
       .then(() => runAdj1187Tests())
+      // adj1189：水印默认值、印章默认文字、相机预览放大
+      .then(() => runAdj1189Tests())
       .then(() => {
         console.log(failed === 0 ? '\nALL SMOKE TESTS PASSED ✅' : `\n${failed} CHECKS FAILED ❌`)
         process.exit(failed === 0 ? 0 : 1)
@@ -33676,16 +33687,26 @@ function runDynamicCameraTests(): void {
   )
 
   check(
-    'M3 取景框始终有一半以上压在页面上（允许探出页边，但不能整屏空白）',
+    'adj1188 取景框始终**完全落在页面内**（不再允许探出页边 ⇒ 段首靠右时不会出现大块空白）',
     (() => {
       for (let t = 0; t <= track.endMs; t += 41) {
         const f = cameraAt(cam, t)
         const h = halfW(f.zoom)
-        const overlap = Math.max(0, Math.min(f.cx + h, cam.pageW) - Math.max(f.cx - h, 0))
-        if (overlap / (2 * h) < 0.5) return false
+        if (cam.pageW > 2 * h && (f.cx - h < -1e-6 || f.cx + h > cam.pageW + 1e-6)) return false
       }
       return true
     })(),
+  )
+  check(
+    'adj1188 `clampCameraCenterX`：靠右只到 `pageW − hw`（视口右缘恰好贴页边），页面比视口窄时居中',
+    Math.abs(clampCameraCenterX(590, 595, 1080, 4) - 460) < 1e-9 &&
+      Math.abs(clampCameraCenterX(-50, 595, 1080, 4) - 135) < 1e-9 &&
+      Math.abs(clampCameraCenterX(999, 200, 1080, 4) - 100) < 1e-9,
+    JSON.stringify([
+      clampCameraCenterX(590, 595, 1080, 4),
+      clampCameraCenterX(-50, 595, 1080, 4),
+      clampCameraCenterX(999, 200, 1080, 4),
+    ]),
   )
   check(
     'M3 相位中心始终落在页面内',
@@ -37810,6 +37831,48 @@ function runAdj1187Tests(): void {
   check(
     'adj1187 导入也区分"已入库 / 只在本次会话"',
     /importedUnsaved/.test(dialogSrc) && /importedUnsaved:/.test(copySrc),
+    '',
+  )
+}
+
+/**
+ * adj1189（用户 2026-11-03）：
+ *  ① 水印默认文本「爱记谱・iJipu」、字号 22；
+ *  ② 卡片模板默认印章文字「爱记谱」；
+ *  ③ 相机位预览界面放大（高度 78%/68%、宽度 96%）。
+ */
+function runAdj1189Tests(): void {
+  console.log('[adj1189] 水印/印章默认值 + 相机预览放大')
+  const paper = cardStyleById('paper')
+  const ink = cardStyleById('ink')
+  const norm = normalizeCardStyle({ ...DEFAULT_CARD_STYLE, seal: { color: '#b23a2b' } })
+  check(
+    'adj1189 卡片模板默认印章文字 =「爱记谱」（纸面/水墨/新建草稿/缺字段都一致）',
+    paper.seal?.text === '爱记谱' &&
+      ink.seal?.text === '爱记谱' &&
+      norm.seal?.text === '爱记谱',
+    JSON.stringify({ paper: paper.seal?.text, ink: ink.seal?.text, norm: norm.seal?.text }),
+  )
+  const dialogSrc = readFileSync(join(root, 'src/dialogs/CardStyleDialog.tsx'), 'utf8')
+  check(
+    'adj1189 勾选印章时的默认文字也是「爱记谱」',
+    /text: '爱记谱', color: draft\.accent/.test(dialogSrc),
+    '',
+  )
+  check(
+    'adj1189 水印默认文本/字号（文本爱记谱・iJipu、字号 22，仍默认关闭）',
+    defaultPageConfig.wmText === '爱记谱・iJipu' &&
+      defaultPageConfig.wmSize === 22 &&
+      defaultPageConfig.wmEnabled === false,
+    JSON.stringify({ text: defaultPageConfig.wmText, size: defaultPageConfig.wmSize }),
+  )
+  const overlaySrc = readFileSync(join(root, 'src/preview/DynamicFrameOverlay.tsx'), 'utf8')
+  check(
+    'adj1189 相机位预览放大：高度上限 78%/68%、宽度 96%（控制条预留高度不变）',
+    /rect\.height \* \(hasMixRow \? 0\.68 : 0\.78\)/.test(overlaySrc) &&
+      /rect\.height - \(hasMixRow \? 220 : 160\)/.test(overlaySrc) &&
+      /const maxW = rect\.width \* 0\.96/.test(overlaySrc) &&
+      /const top = rect\.top \+ 6/.test(overlaySrc),
     '',
   )
 }
