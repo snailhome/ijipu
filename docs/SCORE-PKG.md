@@ -63,15 +63,19 @@
 
 ## 三、`score.jps` 与资源
 
-1. 包里 `score.jps` 的 `# jps-config` 中：
-   - `bgImage` → `assets/<文件名>`；
-   - `wmImage` → `assets/<文件名>`；
-   - `cover` → `assets/cover.webp`（如有）。
-   导出器**只改包里这份**，作者原文件不动。
-2. 允许的图片：`png` / `jpg` / `jpeg` / `webp` / `gif` / `bmp`；**拒绝 `svg`**（引擎既有安全口径）。
-3. 单图 ≤16MB（引擎上限）；站点建议 ≤2MB。zip 解压总量 ≤40MB，条目数 ≤50。
-4. 图找不到、扩展名不对、宽高读不出 ⇒ **导出/导入都失败并列出文件名**，不静默少图。
-5. `.jps` 解析必须 **0 错误、0 告警**（站点不发布带告警的谱）。
+1. **`.jps` 保持纯谱面**：不要往 `# jps-config` 里写 `bgImage` / `wmImage`。
+   实测引擎会把它们当"不可识别的设置项"告警（`# jps-config` 的校验白名单不等于运行时 overlay 字段）。
+   资源改在 `meta.json` 的 `assets[]` 里声明角色：
+   - `background` → 背景图；
+   - `watermark` → 图形水印；
+   - `cover` → 作者封面（没有就自动封面）。
+2. 导出器**不改写** `.jps`；只把图片复制进 `assets/`，并在 `meta.json` 写 `assets[]`。
+   旧包如果 `.jps` 里已有 `bgImage`/`wmImage`，导入器可迁移到 `meta.assets` 并删掉旧键（可选；
+   至少新包不要新增）。
+3. 允许的图片：`png` / `jpg` / `jpeg` / `webp` / `gif` / `bmp`；**拒绝 `svg`**（引擎既有安全口径）。
+4. 单图 ≤16MB（引擎上限）；站点建议 ≤2MB。zip 解压总量 ≤40MB，条目数 ≤50。
+5. 图找不到、扩展名不对、宽高读不出 ⇒ **导出/导入都失败并列出文件名**，不静默少图。
+6. `.jps` 解析必须 **0 错误、0 告警**（站点不发布带告警的谱）。
 
 ---
 
@@ -210,7 +214,7 @@ scores-library/
 2. `meta.json`：`format/version` 对、必填齐全、枚举合法、未知字段报错、日期格式。
 3. `slug` / `short`：格式、唯一（库内 + zip 内）、发布后不改。
 4. `score.jps`：解析 0 错误、0 告警。
-5. `assets`：存在、扩展名白名单、≤16MB、宽高可读、`bgImage/wmImage` 指向的图都在。
+5. `assets`：存在、扩展名白名单、≤16MB、宽高可读；`meta.assets` 里每个 role 指向的图都在。
 6. 重复：同 slug 在多个位置 ⇒ 失败并点名。
 7. `status: retired`：必须有原因/时间。
 

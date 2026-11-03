@@ -432,6 +432,8 @@ B 的具体做法（不引新框架）：
    推荐 a（自动、无感）。
 5. 跨域：同源最省事。以后放 R2/图床必须配 CORS，否则 `fetch` 直接失败；不要用 `http:`（混合内容会被浏览器拦）。
 6. 写法：`bgImage: "assets/bg.webp"`，相对这份 `.jps` 的 URL；这样站点、下载后的本地目录（谱 + assets 一起）都能用。
+7. **包（SCORE-PKG）不走这条**：资源角色写 `meta.json` 的 `assets[]`（`background`/`watermark`），
+   `.jps` 不写 `bgImage`/`wmImage`；站点构建按 role 传给 `RenderAssets`。
 
 ### 5.3 站点展示层（卡片模板）
 
@@ -842,7 +844,7 @@ zip 内容          ✔ Python zipfile：['score.jps','README.txt']，README 为
 mo-li-hua.zip
 ├── meta.json          # 发布元数据（机器读；唯一权威）
 ├── README.md          # 人读：曲名/来源/许可/怎么打开/资源清单
-├── score.jps          # 谱面（包里这份的 bgImage/wmImage 已改成 assets/…）
+├── score.jps          # 谱面（保持纯谱面；资源角色在 meta.assets）
 └── assets/
     ├── bg.webp        # 可选：背景图
     └── wm.png         # 可选：水印图
@@ -908,8 +910,9 @@ mo-li-hua.zip
 
 ### 13.5 资产（水印/背景）怎么处理
 
-- 导出器把 `# jps-config` 里 `bgImage` / `wmImage` 指向的图片**复制进 `assets/`**，
-  并把**包里那份** `.jps` 的路径改写成 `assets/...`；原文件不动。
+- 导出器把背景/水印图片**复制进 `assets/`**，在 `meta.json` 的 `assets[]` 写
+  `{ "path": "assets/bg.webp", "role": "background" }` / `{ "path": "assets/wm.png", "role": "watermark" }`；
+  `.jps` 不改写（实测 `# jps-config` 里的 `bgImage`/`wmImage` 会被引擎当未知设置项告警）。
 - 只允许 `png/jpg/jpeg/webp/gif/bmp`；**拒绝 svg**（引擎既有安全口径）；单图 ≤16MB（站点建议 ≤2MB）。
 - 图片找不到 / 类型不对 / 超过上限 ⇒ 导出**明确报错并列出**，不要导出"少了背景"的包。
 - 站点构建端：
@@ -944,7 +947,7 @@ mo-li-hua.zip
 | 期 | 内容 | 产出 |
 |---|---|---|
 | **P2a** | 包格式 v1 + `scripts/import-scores.mts` + `score:pack`（测试用）+ 构建/dev 接线 + 校验 | 能把一个 zip 放进 `scores-inbox/` 自动出页面 |
-| **P2b** | 应用「导出乐谱包」表单 + 资产复制/改写 + `xx.jps.meta.json` | 作者在应用里一键导出可上传的包 |
+| **P2b** | 应用「导出乐谱包」表单 + 资产复制 + `meta.assets` role + `xx.jps.meta.json` | 作者在应用里一键导出可上传的包 |
 | **P2c** | 站点构建期内联 `assets` 到 `RenderAssets`（详情/封面/og） | 网站真的显示水印/背景 |
 | **P2d** | （可选）网页上传：Worker + GitHub App + Access | 非技术用户拖拽上传 |
 
