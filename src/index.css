@@ -3557,6 +3557,16 @@ body {
   color: var(--jp-text-secondary);
   font-size: 13px;
 }
+/* adj1198：表单区独立滚动，底部「取消/导出」永远留在对话框内可见 */
+.score-pkg-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+}
 .score-pkg-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -3606,7 +3616,10 @@ textarea.score-pkg-input { min-height: 64px; resize: vertical; }
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+  flex: none;
+  padding-top: 10px;
   margin-top: 2px;
+  border-top: 1px solid var(--jp-border);
 }
 @media (max-width: 640px) {
   .score-pkg-grid { grid-template-columns: 1fr; }

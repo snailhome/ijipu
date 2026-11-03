@@ -7,12 +7,13 @@
  * 规则见官网仓 `docs/SCORE-PKG.md`。应用侧只负责"把当前文档和已解析的图上打成包"，
  * 校验/入库/同步交给私有乐谱库工具。
  */
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { mimeOf } from '@ijipu/engine'
 import { Modal } from '../ui/Modal'
 import { useDocStore } from '../store/docStore'
 import { useUiStore } from '../store/uiStore'
 import { getOverlaySnapshot } from '../store/overlayAssets'
+import { loadScoreMetaFor } from '../store/scoreMeta'
 import { base64ToBytes, writeZip, type ZipEntry } from '../export/zip'
 import { scorePackageCopy as C } from '../brand/copy'
 
@@ -115,6 +116,8 @@ export function ScorePackageDialog() {
   const fileName = useDocStore((s) => s.fileName)
   const parseResult = useDocStore((s) => s.parseResult)
   const pageConfig = useDocStore((s) => s.pageConfig)
+  const nativePath = useDocStore((s) => s.nativePath)
+  const binding = useDocStore((s) => s.binding)
 
   const defaults = useMemo<FormState>(() => {
     const title = (parseResult.header.titles[0] ?? '').trim() || stripExt(fileName || '未命名') || '未命名'
@@ -137,6 +140,32 @@ export function ScorePackageDialog() {
   const [form, setForm] = useState<FormState>(defaults)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+
+  // adj1198：有 .jps.meta.json 就优先用维护好的发布信息预填
+  useEffect(() => {
+    let alive = true
+    void (async () => {
+      const r = await loadScoreMetaFor(nativePath, binding)
+      if (!alive || !r.meta) return
+      const m = r.meta
+      setForm((prev) => ({
+        ...prev,
+        title: m.title,
+        composer: m.composer,
+        license: m.license,
+        source: m.source,
+        tags: m.tags.join(', '),
+        slug: m.slug,
+        short: m.short,
+        difficulty: m.difficulty ? String(m.difficulty) : '',
+        excerpt: m.excerpt ?? '',
+        note: m.note ?? '',
+      }))
+    })()
+    return () => {
+      alive = false
+    }
+  }, [nativePath, binding])
 
   const assetPlan = useMemo(() => {
     const snap = getOverlaySnapshot()
@@ -235,8 +264,9 @@ export function ScorePackageDialog() {
   return (
     <Modal title={C.title} width={720} fill>
       <div className="score-pkg">
-        <p className="score-pkg-intro">{C.intro}</p>
-        <div className="score-pkg-grid">
+        <div className="score-pkg-scroll">
+          <p className="score-pkg-intro">{C.intro}</p>
+          <div className="score-pkg-grid">
           <label className="score-pkg-field">
             <span>{C.fieldTitle}</span>
             <input className="score-pkg-input" value={form.title} onChange={(e) => set('title', e.target.value)} />
@@ -298,6 +328,7 @@ export function ScorePackageDialog() {
         </div>
         <p className="score-pkg-hint">{C.hint}</p>
         {err !== null && <div className="score-pkg-err">{err}</div>}
+        </div>
         <div className="score-pkg-actions">
           <button type="button" className="btn" onClick={closeModal} disabled={busy}>
             {C.cancelBtn}

@@ -41,6 +41,7 @@ import { externalChangeCopy, persistPermissionCopy, workspaceCopy } from '../src
 import { mdToHtml, extractToc, parseJpsInfo, inlineMd } from '../src/help/markdown'
 // adj883：首页示例精简（去掉 `# jps-config:{…}` 与装饰线，但必须保住正文）
 import { BRAND_SAMPLES, simplifyJps } from '../src/landing/samples'
+import { metaPathOf } from '../src/store/scoreMeta'
 /**
  * adj930：官网首屏启动层的**色值 / 元素 id / 揭示时机的唯一口径**。
  * 五个官网页的 `<head>` 里各手写了一段同样的内联块（必须内联，外链样式表来不及防闪烁）
@@ -14938,7 +14939,7 @@ function runAdj963NewAndSaveTests() {
 
   // ---- ⑥ 菜单：窄屏常驻三项；嵌入版仍按 adj724b 只藏「工作区」----
   check('adj963 窄屏菜单常驻「新建/保存/另存为」，而「工作区」在嵌入版仍隐藏',
-    /isNarrow\s*\?\s*\[entryNew, entrySave, entrySaveAs, entryWorkspace/.test(topSrc) &&
+    /isNarrow\s*\?\s*\[entryNew, entrySave, entrySaveAs, entryMeta, entryWorkspace/.test(topSrc) &&
       /entryWorkspace: MenuEntry = \{[\s\S]{0,240}?hidden: isHostEmbedded\(\)/.test(topSrc) &&
       // **负对照**：嵌入版把「保存」也藏掉 ⇒ 判据判红（插件里就又没保存入口了）
       !/entrySave: MenuEntry = \{[^}]*hidden: isHostEmbedded\(\)/.test(topSrc),
@@ -15425,7 +15426,7 @@ async function runAdj540WorkspaceTests() {
     // adj963（**用户要求**）：改回**窄屏常驻** —— 因为嵌入版又隐藏了「工作区」项（adj724b
     // "文件操作交给 Obsidian"），两者叠加 ⇒ 窄的插件面板里**一个文件操作入口都没有**。
     // adj615：末尾有平台无关的「打印」；adj723z：中间有「最近…」（打开历史二级菜单）
-    /const fileEntries: \(MenuEntry \| 'sep'\)\[\] = isNarrow\s*\?\s*\[entryNew, entrySave, entrySaveAs, entryWorkspace, entrySamples, entryPaste, entryRecent, entryTryout, entryExport, entryPrint\]/.test(
+    /const fileEntries: \(MenuEntry \| 'sep'\)\[\] = isNarrow\s*\?\s*\[entryNew, entrySave, entrySaveAs, entryMeta, entryWorkspace, entrySamples, entryPaste, entryRecent, entryTryout, entryExport, entryPrint\]/.test(
       topSrc,
     ) &&
       // **负对照**：把「新建」从窄屏那组里去掉（＝退回 adj540 的写法）⇒ 同一判据判红
@@ -29337,6 +29338,12 @@ C2: 歌，@那么我@是想要画你的手。@ {tp 1// 2/.} 你看我多么 {tp 
     readSrc('src/landing/samples.ts').includes("tags?.includes('示例谱')") &&
       readSrc('src/landing/samples.ts').includes("import.meta.glob('../../scores-library/**/meta.json'") &&
       BRAND_SAMPLES.length > 0,
+  )
+  check(
+    'adj1198 文件菜单有「乐谱信息」+ meta 边车命名 foo.jps.meta.json',
+    readSrc('src/ui/TopBar.tsx').includes("openModal('meta')") &&
+      readSrc('src/store/uiStore.ts').includes("'meta'") &&
+      metaPathOf('C:\\a\\foo.jps') === 'C:\\a\\foo.jps.meta.json',
   )
 
   // ---- ⑥ 文档页与应用内帮助同源：渲染器抽成了纯模块，且目录锚点与标题 id 逐个一致 ----

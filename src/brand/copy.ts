@@ -1580,3 +1580,20 @@ export const scorePackageCopy = {
   needSource: '来源不能为空（公版写「传统」/ 授权写授权方）',
   fail: (e: string) => `导出失败：${e}`,
 } as const
+
+/** adj1198：文件菜单「乐谱信息」+ `.jps.meta.json` 维护 */
+export const scoreMetaCopy = {
+  menuLabel: '乐谱信息(&I)…',
+  title: '乐谱信息',
+  intro:
+    '这些是发布信息（不同于谱面里的 B/Z）：存到同目录的 `.jps.meta.json`，导出乐谱包/上传乐谱库会读它。',
+  pathHint: (path: string) => `保存到：${path}`,
+  noPathHint: '网页模式没有文件系统：保存会下载 `.jps.meta.json`，请放回 `.jps` 同目录。',
+  saveBtn: '保存信息',
+  cancelBtn: '取消',
+  saving: '保存中…',
+  saved: '已保存 .jps.meta.json',
+  downloaded: '已下载 .jps.meta.json；放回 .jps 同目录后，导出乐谱包会读它',
+  loadFailed: (e: string) => `读取 .jps.meta.json 失败：${e}`,
+  saveFailed: (e: string) => `保存失败：${e}`,
+} as const

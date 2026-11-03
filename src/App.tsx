@@ -64,6 +64,10 @@ const SyncDialog = lazy(() => import('./dialogs/SyncDialog').then((m) => ({ defa
 const ScorePackageDialog = lazy(() =>
   import('./dialogs/ScorePackageDialog').then((m) => ({ default: m.ScorePackageDialog })),
 )
+// adj1198：文件 → 乐谱信息（维护 .jps.meta.json）
+const ScoreMetaDialog = lazy(() =>
+  import('./dialogs/ScoreMetaDialog').then((m) => ({ default: m.ScoreMetaDialog })),
+)
 
 function App() {
   const viewType = useDocStore((s) => s.viewType)
@@ -704,6 +708,7 @@ function App() {
       {/* adj1119：对拍台（独立台面） */}
       {modal === 'sync' && <Suspense fallback={null}><SyncDialog /></Suspense>}
       {modal === 'package' && <Suspense fallback={null}><ScorePackageDialog /></Suspense>}
+      {modal === 'meta' && <Suspense fallback={null}><ScoreMetaDialog /></Suspense>}
       {/* adj928：两栏源码差异框（确认条 → 「查看差异」；左本地 / 右外部，可直接做决定） */}
       {fileDiff && <Suspense fallback={null}><FileDiffDialog /></Suspense>}
     </div>
