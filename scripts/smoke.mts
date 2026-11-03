@@ -15348,7 +15348,7 @@ async function runAdj540WorkspaceTests() {
       /\{ key: 'workspace', label: dockCopy\.tabWorkspace, icon: 'workspace', kbd: KBD\.workspace \}/.test(dockSrc) &&
       /workspace: '工作区'/.test(String(readFileSync('src/ui/toolIcons.ts', 'utf8'))) &&
       // adj587：三个同高页签由同一条分支给出（工作区 / 全局 / 导入）；adj603：再加「谱面」
-      /if \(key === 'workspace' \|\| key === 'settings' \|\| key === 'score' \|\| key === 'import'\)/.test(dockSrc) &&
+      /if \(key === 'workspace' \|\| key === 'settings' \|\| key === 'score' \|\| key === 'import' \|\| key === 'meta'\)/.test(dockSrc) &&
       /export const workspaceCopy/.test(copySrc) &&
       /tabWorkspace: '工作区'/.test(copySrc) &&
       !/modal === 'workspace'/.test(appSrc),
@@ -16100,13 +16100,13 @@ async function runAdj540WorkspaceTests() {
       ),
     '')
   check('adj562/adj587/adj603/adj641 「导入」与「全局 / 谱面」**不进 AUTO_FIT**（改用与工作区同一个建议高度）；查找替换进',
-    /if \(key === 'workspace' \|\| key === 'settings' \|\| key === 'score' \|\| key === 'import'\)/.test(dockSrc) &&
+    /if \(key === 'workspace' \|\| key === 'settings' \|\| key === 'score' \|\| key === 'import' \|\| key === 'meta'\)/.test(dockSrc) &&
       // adj641：AUTO_FIT 现在还会含 'find'（查找替换按内容自然高定高）⇒
       // 改成「这几项必须在、那三项必须不在」的语义判断，不再比对整条字面量（否则每加一个面板就误伤）。
       (['problems', 'tryout', 'export', 'about', 'find'] as const).every((k) =>
         new RegExp(`AUTO_FIT: readonly DockPanelKey\\[\\] = \\[[^\\]]*'${k}'`).test(dockSrc),
       ) &&
-      !/AUTO_FIT: readonly DockPanelKey\[\] = \[[^\]]*'(import|settings|score)'/.test(dockSrc) &&
+      !/AUTO_FIT: readonly DockPanelKey\[\] = \[[^\]]*'(import|settings|score|meta)'/.test(dockSrc) &&
       !/IMPORT_DEFAULT_CONTENT_H/.test(dockSrc.replace(/\/\*[\s\S]*?\*\//g, '')),
     '')
   check('adj562 `.pane-import` 走"填满 dock"链路（pane/modal-inline/import-body 层层 flex + 粘贴框吃剩余高）',
@@ -19228,7 +19228,7 @@ console.log('[116] settings 6 rows, About in dock, divider touch hit-area (adj49
   // ——外壳高度改为实测传入以适配手机 14px 抓手；断言改为不绑定具体参数表，只钉"用 rowPitch × SETTINGS_ROWS"）
   check('adj587/adj603（用户要求）工作区 / 导入 / 全局 / 谱面**同一个建议高度**（窄屏 = 5 项列表算式；宽屏 = maxH()）',
     // 一条分支同时管四个页签（adj603：设置拆成「全局」+「谱面」后，两个都走这条）
-    /if \(key === 'workspace' \|\| key === 'settings' \|\| key === 'score' \|\| key === 'import'\)\s*\n?\s*return narrow \? workspaceDefaultH\(workspaceRowH, workspaceHeadH, chromeH\) : maxH\(\)/.test(
+    /if \(key === 'workspace' \|\| key === 'settings' \|\| key === 'score' \|\| key === 'import' \|\| key === 'meta'\)\s*\n?\s*return narrow \? workspaceDefaultH\(workspaceRowH, workspaceHeadH, chromeH\) : maxH\(\)/.test(
       dockSrc,
     ) &&
       // 旧的"各算各的"三套算式与常量都已删除（设置 6 行 / 导入固定 300 / 设置字段行距实测）
@@ -29221,7 +29221,7 @@ C2: 歌，@那么我@是想要画你的手。@ {tp 1// 2/.} 你看我多么 {tp 
     scoreDirs.length >= 8,
     scoreDirs.join('、'),
   )
-  const scoreLicenses = ['PD', 'ORIGINAL', 'AUTHORIZED', 'CC-BY-4.0', 'CC-BY-NC-SA-4.0', 'EXCERPT']
+  const scoreLicenses = ['PD', 'ORIGINAL', 'AUTHORIZED', 'CC']
   const shortSeen1190 = new Set<string>()
   const scoreProblems: string[] = []
   for (const dir of scoreDirs) {
@@ -29341,7 +29341,8 @@ C2: 歌，@那么我@是想要画你的手。@ {tp 1// 2/.} 你看我多么 {tp 
   )
   check(
     'adj1198 文件菜单有「乐谱信息」+ meta 边车命名 foo.jps.meta.json',
-    readSrc('src/ui/TopBar.tsx').includes("openModal('meta')") &&
+    readSrc('src/ui/TopBar.tsx').includes("toggleDock('meta')") &&
+      readSrc('src/ui/ToolDock.tsx').includes("key: 'meta'") &&
       readSrc('src/store/uiStore.ts').includes("'meta'") &&
       metaPathOf('C:\\a\\foo.jps') === 'C:\\a\\foo.jps.meta.json',
   )

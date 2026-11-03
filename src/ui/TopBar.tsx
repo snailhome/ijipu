@@ -1227,7 +1227,7 @@ export function TopBar() {
   const entrySave: MenuEntry = { label: '保存(&S)', kbd: KBD.save, hotkey: 's', onPick: runSaveSmart }
   const entrySaveAs: MenuEntry = { label: '另存为(&A)…', hotkey: 'a', onPick: runSaveAsSmart }
   // adj1198：发布信息维护（.jps.meta.json），与导出乐谱包分开
-  const entryMeta: MenuEntry = { label: scoreMetaCopy.menuLabel, onPick: () => openModal('meta') }
+  const entryMeta: MenuEntry = { label: scoreMetaCopy.menuLabel, onPick: () => toggleDock('meta') }
   const entryWorkspace: MenuEntry = {
     label: workspaceCopy.menuLabel,
     kbd: KBD.workspace,

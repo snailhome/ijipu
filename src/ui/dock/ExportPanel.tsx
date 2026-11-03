@@ -83,8 +83,7 @@ export function ExportPanel() {
   const previewSoften = useUiStore((s) => s.previewSoften)
   const setExportJob = useUiStore((s) => s.setExportJob)
   // adj1195：导出乐谱包（zip）走独立对话框；三端轻功能
-  const openModal = useUiStore((s) => s.openModal)
-  // adj626：PDF 走打印（与 Ctrl+P / 菜单「打印」同一条路：同一份页面 + 同一个默认文件名）
+  const openModal = useUiStore((s) => s.openModal)  // adj626：PDF 走打印（与 Ctrl+P / 菜单「打印」同一条路：同一份页面 + 同一个默认文件名）
   const printScore = useDocStore((s) => s.printScore)
   const defaultInstrumentRef = useMemo(() => firstEnabledInstrumentRef(playbackHqEnabled), [playbackHqEnabled])
 

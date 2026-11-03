@@ -533,6 +533,7 @@ export const dockCopy = {
   tabProblems: '告警',
   tabTryout: '试听',
   tabExport: '导出',
+  tabMeta: '乐谱信息',
   /**
    * adj603（用户要求）：原「设置」页签**拆成两个**——「全局」（视图/主题/音色库，本机偏好）
    * 与「谱面」（布局/字体，随谱保存）。
@@ -1596,4 +1597,23 @@ export const scoreMetaCopy = {
   downloaded: '已下载 .jps.meta.json；放回 .jps 同目录后，导出乐谱包会读它',
   loadFailed: (e: string) => `读取 .jps.meta.json 失败：${e}`,
   saveFailed: (e: string) => `保存失败：${e}`,
+  rightsTitle: '权利分层',
+  arrangement: '编配权利',
+  arrangementNone: '未填',
+  rightsHolder: '权利人 / 授权方',
+  evidence: '依据 / 备注',
+  territory: '地域',
+  commercial: '允许商用',
+  pdReason: '公版原因',
+  pdNone: '未填',
+  pdAuthorDeath: '作者去世满保护期',
+  pdDedication: '公共领域奉献',
+  pdGovernment: '政府作品',
+  pdCc0: 'CC0 放弃',
+  pdOther: '其它',
+  ccLicense: 'CC 协议',
+  attribution: '署名',
+  sourceUrl: '来源链接',
+  ccHint: '许可选 CC 时，协议与署名/来源至少填一项',
+  rightsHint: '旋律看「许可」；编配/记谱在这里单独说明，别把「公版旋律 + 我的编配」写成整首公版。',
 } as const

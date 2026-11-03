@@ -13,12 +13,12 @@ import { Modal } from '../ui/Modal'
 import { useDocStore } from '../store/docStore'
 import { useUiStore } from '../store/uiStore'
 import { getOverlaySnapshot } from '../store/overlayAssets'
-import { loadScoreMetaFor } from '../store/scoreMeta'
+import { loadScoreMetaFor, type ScoreRights } from '../store/scoreMeta'
 import { base64ToBytes, writeZip, type ZipEntry } from '../export/zip'
-import { scorePackageCopy as C } from '../brand/copy'
+import { scoreMetaCopy as M, scorePackageCopy as C } from '../brand/copy'
 
 type Role = 'background' | 'watermark'
-type License = 'PD' | 'ORIGINAL' | 'AUTHORIZED'
+type License = 'PD' | 'ORIGINAL' | 'AUTHORIZED' | 'CC'
 
 interface FormState {
   title: string
@@ -31,6 +31,10 @@ interface FormState {
   difficulty: string
   excerpt: string
   note: string
+  arrangement: string
+  ccLicense: string
+  attribution: string
+  sourceUrl: string
 }
 
 function stripExt(name: string): string {
@@ -91,7 +95,7 @@ function readmeOf(meta: {
   slug: string
   assets: { path: string; role: string }[]
 }): string {
-  const license = meta.license === 'PD' ? '公版' : meta.license === 'ORIGINAL' ? '原创' : '已授权'
+  const license = meta.license === 'PD' ? '公版' : meta.license === 'CC' ? 'CC' : meta.license === 'ORIGINAL' ? '原创' : '已授权'
   return [
     `# ${meta.title}`,
     '',
@@ -134,10 +138,15 @@ export function ScorePackageDialog() {
       difficulty: '',
       excerpt: '',
       note: '',
+      arrangement: '',
+      ccLicense: '',
+      attribution: '',
+      sourceUrl: '',
     }
   }, [parseResult.header.titles, parseResult.header.authors, fileName])
 
   const [form, setForm] = useState<FormState>(defaults)
+  const [rightsBase, setRightsBase] = useState<ScoreRights | undefined>(undefined)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
@@ -160,7 +169,12 @@ export function ScorePackageDialog() {
         difficulty: m.difficulty ? String(m.difficulty) : '',
         excerpt: m.excerpt ?? '',
         note: m.note ?? '',
+        arrangement: m.rights?.arrangement ?? '',
+        ccLicense: m.rights?.ccLicense ?? '',
+        attribution: m.rights?.attribution ?? '',
+        sourceUrl: m.rights?.sourceUrl ?? '',
       }))
+      setRightsBase(m.rights)
     })()
     return () => {
       alive = false
@@ -202,6 +216,12 @@ export function ScorePackageDialog() {
     if (difficulty !== undefined && (!Number.isInteger(difficulty) || difficulty < 1 || difficulty > 5)) {
       return setErr('难度只能是 1-5 的整数')
     }
+    if (form.license === 'CC' && form.ccLicense.trim() === '') {
+      return setErr('许可选 CC 时必须填写 CC 协议（如 CC-BY-NC-SA-4.0）')
+    }
+    if (form.license === 'CC' && form.attribution.trim() === '' && form.sourceUrl.trim() === '') {
+      return setErr('许可选 CC 时必须填写署名或来源链接')
+    }
 
     setBusy(true)
     try {
@@ -218,6 +238,17 @@ export function ScorePackageDialog() {
       }
 
       const date = today()
+      const rights: ScoreRights = {
+        ...(rightsBase ?? {}),
+        work: form.license,
+        notation: 'CC-BY-NC-SA-4.0',
+        ...(form.arrangement !== ''
+          ? { arrangement: form.arrangement as NonNullable<ScoreRights['arrangement']> }
+          : {}),
+        ...(form.ccLicense.trim() !== '' ? { ccLicense: form.ccLicense.trim() } : {}),
+        ...(form.attribution.trim() !== '' ? { attribution: form.attribution.trim() } : {}),
+        ...(form.sourceUrl.trim() !== '' ? { sourceUrl: form.sourceUrl.trim() } : {}),
+      }
       const meta = {
         format: 'ijipu-score-package',
         version: 1,
@@ -234,6 +265,7 @@ export function ScorePackageDialog() {
         publishedAt: date,
         updatedAt: date,
         ...(assets.length > 0 ? { assets } : {}),
+        rights,
       }
 
       const encoder = new TextEncoder()
@@ -285,6 +317,7 @@ export function ScorePackageDialog() {
               <option value="PD">{C.licensePD}</option>
               <option value="ORIGINAL">{C.licenseOriginal}</option>
               <option value="AUTHORIZED">{C.licenseAuthorized}</option>
+              <option value="CC">CC</option>
             </select>
           </label>
           <label className="score-pkg-field">
@@ -302,10 +335,55 @@ export function ScorePackageDialog() {
             <span>{C.fieldSource}</span>
             <input className="score-pkg-input" value={form.source} onChange={(e) => set('source', e.target.value)} />
           </label>
+          <label className="score-pkg-field">
+            <span>{M.arrangement}</span>
+            <select
+              className="score-pkg-input"
+              value={form.arrangement}
+              onChange={(e) => set('arrangement', e.target.value)}
+            >
+              <option value="">{M.arrangementNone}</option>
+              <option value="NONE">无（不单独主张）</option>
+              <option value="PD">公版</option>
+              <option value="ORIGINAL">原创</option>
+              <option value="AUTHORIZED">已授权</option>
+              <option value="CC">CC</option>
+            </select>
+          </label>
           <label className="score-pkg-field score-pkg-span2">
             <span>{C.fieldTags}</span>
             <input className="score-pkg-input" value={form.tags} onChange={(e) => set('tags', e.target.value)} />
           </label>
+          {(form.license === 'CC' || form.arrangement === 'CC') && (
+            <>
+              <label className="score-pkg-field">
+                <span>{M.ccLicense}</span>
+                <input
+                  className="score-pkg-input"
+                  placeholder="CC-BY-NC-SA-4.0"
+                  value={form.ccLicense}
+                  onChange={(e) => set('ccLicense', e.target.value)}
+                />
+              </label>
+              <label className="score-pkg-field">
+                <span>{M.attribution}</span>
+                <input
+                  className="score-pkg-input"
+                  value={form.attribution}
+                  onChange={(e) => set('attribution', e.target.value)}
+                />
+              </label>
+              <label className="score-pkg-field score-pkg-span2">
+                <span>{M.sourceUrl}</span>
+                <input
+                  className="score-pkg-input"
+                  value={form.sourceUrl}
+                  onChange={(e) => set('sourceUrl', e.target.value)}
+                />
+              </label>
+              <p className="score-pkg-hint score-pkg-span2">{M.ccHint}</p>
+            </>
+          )}
           <label className="score-pkg-field">
             <span>{C.fieldSlug}</span>
             <input className="score-pkg-input" value={form.slug} onChange={(e) => set('slug', e.target.value)} />

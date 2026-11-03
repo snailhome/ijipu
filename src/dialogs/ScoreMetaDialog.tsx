@@ -20,7 +20,6 @@ import {
   type ScoreMetaDoc,
   type ScoreMetaLicense,
 } from '../store/scoreMeta'
-
 interface FormState {
   title: string
   composer: string
@@ -32,10 +31,20 @@ interface FormState {
   difficulty: string
   excerpt: string
   note: string
+  arrangement: string
+  rightsHolder: string
+  evidence: string
+  territory: string
+  commercial: boolean
+  pdReason: string
+  ccLicense: string
+  attribution: string
+  sourceUrl: string
 }
 
-export function ScoreMetaDialog() {
+export function ScoreMetaDialog({ inline = false }: { inline?: boolean }) {
   const closeModal = useUiStore((s) => s.closeModal)
+  const closeDock = useUiStore((s) => s.closeDock)
   const showNotice = useUiStore((s) => s.showNotice)
   const nativePath = useDocStore((s) => s.nativePath)
   const binding = useDocStore((s) => s.binding)
@@ -54,6 +63,15 @@ export function ScoreMetaDialog() {
     difficulty: '',
     excerpt: '',
     note: '',
+    arrangement: '',
+    rightsHolder: '',
+    evidence: '',
+    territory: '',
+    commercial: false,
+    pdReason: '',
+    ccLicense: '',
+    attribution: '',
+    sourceUrl: '',
   })
   const [assets, setAssets] = useState<ScoreMetaDoc['assets']>(undefined)
   const [path, setPath] = useState<string | null>(null)
@@ -80,6 +98,15 @@ export function ScoreMetaDialog() {
             difficulty: r.meta.difficulty ? String(r.meta.difficulty) : '',
             excerpt: r.meta.excerpt ?? '',
             note: r.meta.note ?? '',
+            arrangement: r.meta.rights?.arrangement ?? '',
+            rightsHolder: r.meta.rights?.rightsHolder ?? '',
+            evidence: r.meta.rights?.evidence ?? '',
+            territory: r.meta.rights?.territory ?? '',
+            commercial: r.meta.rights?.commercial === true,
+            pdReason: r.meta.rights?.pdReason ?? '',
+            ccLicense: r.meta.rights?.ccLicense ?? '',
+            attribution: r.meta.rights?.attribution ?? '',
+            sourceUrl: r.meta.rights?.sourceUrl ?? '',
           })
           setAssets(r.meta.assets)
         }
@@ -101,6 +128,19 @@ export function ScoreMetaDialog() {
   const save = async (): Promise<void> => {
     setErr(null)
     const difficulty = form.difficulty === '' ? undefined : Number(form.difficulty)
+    const rights: NonNullable<ScoreMetaDoc['rights']> = {
+      work: form.license,
+      notation: 'CC-BY-NC-SA-4.0',
+      ...(form.arrangement !== '' ? { arrangement: form.arrangement as NonNullable<ScoreMetaDoc['rights']>['arrangement'] } : {}),
+      ...(form.rightsHolder.trim() !== '' ? { rightsHolder: form.rightsHolder.trim() } : {}),
+      ...(form.evidence.trim() !== '' ? { evidence: form.evidence.trim() } : {}),
+      ...(form.territory.trim() !== '' ? { territory: form.territory.trim() } : {}),
+      ...(form.commercial ? { commercial: true } : {}),
+      ...(form.pdReason !== '' ? { pdReason: form.pdReason as NonNullable<ScoreMetaDoc['rights']>['pdReason'] } : {}),
+      ...(form.ccLicense.trim() !== '' ? { ccLicense: form.ccLicense.trim() } : {}),
+      ...(form.attribution.trim() !== '' ? { attribution: form.attribution.trim() } : {}),
+      ...(form.sourceUrl.trim() !== '' ? { sourceUrl: form.sourceUrl.trim() } : {}),
+    }
     const meta: ScoreMetaDoc = {
       format: 'ijipu-score-meta',
       version: 1,
@@ -115,6 +155,7 @@ export function ScoreMetaDialog() {
       ...(form.excerpt.trim() !== '' ? { excerpt: form.excerpt.trim() } : {}),
       ...(form.note.trim() !== '' ? { note: form.note.trim() } : {}),
       ...(assets !== undefined ? { assets } : {}),
+      rights,
     }
     const bad = validateScoreMeta(meta)
     if (bad !== '') {
@@ -130,7 +171,7 @@ export function ScoreMetaDialog() {
       }
       setPath(r.path)
       showNotice(r.downloaded ? M.downloaded : M.saved)
-      closeModal()
+      if (!inline) closeModal()
     } catch (e) {
       setErr(M.saveFailed(e instanceof Error ? e.message : String(e)))
     } finally {
@@ -139,7 +180,7 @@ export function ScoreMetaDialog() {
   }
 
   return (
-    <Modal title={M.title} width={720} fill>
+    <Modal title={M.title} width={720} fill inline={inline}>
       <div className="score-pkg">
         <div className="score-pkg-scroll">
           <p className="score-pkg-intro">{M.intro}</p>
@@ -162,6 +203,7 @@ export function ScoreMetaDialog() {
               <option value="PD">{C.licensePD}</option>
               <option value="ORIGINAL">{C.licenseOriginal}</option>
               <option value="AUTHORIZED">{C.licenseAuthorized}</option>
+              <option value="CC">CC</option>
             </select>
           </label>
           <label className="score-pkg-field">
@@ -199,13 +241,87 @@ export function ScoreMetaDialog() {
             <span>{C.fieldNote}</span>
             <textarea className="score-pkg-input" value={form.note} onChange={(e) => set('note', e.target.value)} />
           </label>
+
+          <div className="score-pkg-group-title score-pkg-span2">{M.rightsTitle}</div>
+          <label className="score-pkg-field">
+            <span>{M.arrangement}</span>
+            <select
+              className="score-pkg-input"
+              value={form.arrangement}
+              onChange={(e) => set('arrangement', e.target.value)}
+            >
+              <option value="">{M.arrangementNone}</option>
+              <option value="NONE">无（不单独主张）</option>
+              <option value="PD">公版</option>
+              <option value="ORIGINAL">原创</option>
+              <option value="AUTHORIZED">已授权</option>
+              <option value="CC">CC</option>
+            </select>
+          </label>
+          <label className="score-pkg-field">
+            <span>{M.pdReason}</span>
+            <select className="score-pkg-input" value={form.pdReason} onChange={(e) => set('pdReason', e.target.value)}>
+              <option value="">{M.pdNone}</option>
+              <option value="author-death">{M.pdAuthorDeath}</option>
+              <option value="public-domain-dedication">{M.pdDedication}</option>
+              <option value="government">{M.pdGovernment}</option>
+              <option value="cc0">{M.pdCc0}</option>
+              <option value="other">{M.pdOther}</option>
+            </select>
+          </label>
+          <label className="score-pkg-field">
+            <span>{M.rightsHolder}</span>
+            <input
+              className="score-pkg-input"
+              value={form.rightsHolder}
+              onChange={(e) => set('rightsHolder', e.target.value)}
+            />
+          </label>
+          <label className="score-pkg-field">
+            <span>{M.territory}</span>
+            <input className="score-pkg-input" value={form.territory} onChange={(e) => set('territory', e.target.value)} />
+          </label>
+          <label className="score-pkg-field score-pkg-span2">
+            <span>{M.evidence}</span>
+            <input className="score-pkg-input" value={form.evidence} onChange={(e) => set('evidence', e.target.value)} />
+          </label>
+          <label className="score-pkg-field">
+            <span>{M.ccLicense}</span>
+            <input
+              className="score-pkg-input"
+              placeholder="CC-BY-NC-SA-4.0"
+              value={form.ccLicense}
+              onChange={(e) => set('ccLicense', e.target.value)}
+            />
+          </label>
+          <label className="score-pkg-field">
+            <span>{M.attribution}</span>
+            <input
+              className="score-pkg-input"
+              value={form.attribution}
+              onChange={(e) => set('attribution', e.target.value)}
+            />
+          </label>
+          <label className="score-pkg-field score-pkg-span2">
+            <span>{M.sourceUrl}</span>
+            <input className="score-pkg-input" value={form.sourceUrl} onChange={(e) => set('sourceUrl', e.target.value)} />
+          </label>
+          <label className="score-pkg-field score-pkg-span2 score-pkg-check">
+            <input
+              type="checkbox"
+              checked={form.commercial}
+              onChange={(e) => set('commercial', e.target.checked)}
+            />
+            <span>{M.commercial}</span>
+          </label>
+          <p className="score-pkg-hint score-pkg-span2">{M.rightsHint}</p>
         </div>
         <div className="score-pkg-assets">{path !== null ? M.pathHint(path) : M.noPathHint}</div>
         <p className="score-pkg-hint">{C.hint}</p>
         {err !== null && <div className="score-pkg-err">{err}</div>}
         </div>
         <div className="score-pkg-actions">
-          <button type="button" className="btn" onClick={closeModal} disabled={busy}>
+          <button type="button" className="btn" onClick={inline ? closeDock : closeModal} disabled={busy}>
             {M.cancelBtn}
           </button>
           <button type="button" className="btn primary" onClick={() => void save()} disabled={busy || loading}>

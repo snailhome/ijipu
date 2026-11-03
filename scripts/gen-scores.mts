@@ -65,16 +65,14 @@ const SITE = brand.siteUrl.replace(/\/+$/, '')
 const CONTENT_LICENSE = 'CC BY-NC-SA 4.0'
 
 /** `meta.license` 允许值（作品状态，不是内容许可） */
-type License = 'PD' | 'ORIGINAL' | 'AUTHORIZED' | 'CC-BY-4.0' | 'CC-BY-NC-SA-4.0' | 'EXCERPT'
-const LICENSES: readonly License[] = ['PD', 'ORIGINAL', 'AUTHORIZED', 'CC-BY-4.0', 'CC-BY-NC-SA-4.0', 'EXCERPT']
+type License = 'PD' | 'ORIGINAL' | 'AUTHORIZED' | 'CC'
+const LICENSES: readonly License[] = ['PD', 'ORIGINAL', 'AUTHORIZED', 'CC']
 
 const LICENSE_LABEL: Record<License, string> = {
   PD: '公版',
   ORIGINAL: '原创',
   AUTHORIZED: '已授权',
-  'CC-BY-4.0': 'CC BY 4.0',
-  'CC-BY-NC-SA-4.0': 'CC BY-NC-SA 4.0',
-  EXCERPT: '教学片段',
+  CC: 'CC',
 }
 
 /** 短码保留字：不能和站点将来可能出现的路径打架 */
@@ -125,10 +123,26 @@ const META_KEYS = new Set([
   'publishedAt',
   'updatedAt',
   'assets',
+  'rights',
   'contentHash',
   'importedAt',
   'sourceZip',
 ])
+
+interface ScoreRights {
+  work?: License
+  arrangement?: 'NONE' | License
+  notation?: string
+  pdReason?: 'author-death' | 'public-domain-dedication' | 'government' | 'cc0' | 'other'
+  rightsHolder?: string
+  evidence?: string
+  territory?: string
+  commercial?: boolean
+  ccLicense?: string
+  attribution?: string
+  sourceUrl?: string
+  expires?: string
+}
 
 interface ScoreMeta {
   slug: string
@@ -150,6 +164,7 @@ interface ScoreMeta {
   file?: string
   note?: string
   assets?: { path: string; role: 'background' | 'watermark' | 'cover' }[]
+  rights?: ScoreRights
   publishedAt: string
   updatedAt: string
 }
@@ -502,6 +517,55 @@ function readEntries(): Entry[] {
       })
     }
 
+    let rights: ScoreRights | undefined
+    if (obj.rights !== undefined) {
+      if (typeof obj.rights !== 'object' || obj.rights === null || Array.isArray(obj.rights)) {
+        fail(`${slug} 的 rights 必须是对象`)
+      }
+      const r = obj.rights as Record<string, unknown>
+      const allowed = new Set([
+        'work', 'arrangement', 'notation', 'pdReason', 'rightsHolder', 'evidence',
+        'territory', 'commercial', 'ccLicense', 'attribution', 'sourceUrl', 'expires',
+      ])
+      const unknownRights = Object.keys(r).filter((k) => !allowed.has(k))
+      if (unknownRights.length > 0) fail(`${slug} 的 rights 有未知字段：${unknownRights.join('、')}`)
+      const isLicense = (v: unknown): v is License =>
+        v === 'PD' || v === 'ORIGINAL' || v === 'AUTHORIZED' || v === 'CC'
+      if (r.work !== undefined && !isLicense(r.work)) fail(`${slug} 的 rights.work 不合法`)
+      if (r.arrangement !== undefined && r.arrangement !== 'NONE' && !isLicense(r.arrangement)) {
+        fail(`${slug} 的 rights.arrangement 不合法`)
+      }
+      if (r.work !== undefined && r.work !== license) fail(`${slug} 的 rights.work 必须与 license 一致`)
+      for (const k of ['notation', 'rightsHolder', 'evidence', 'territory', 'ccLicense', 'attribution', 'sourceUrl', 'expires'] as const) {
+        if (r[k] !== undefined && typeof r[k] !== 'string') fail(`${slug} 的 rights.${k} 必须是字符串`)
+      }
+      if (r.commercial !== undefined && typeof r.commercial !== 'boolean') fail(`${slug} 的 rights.commercial 必须是布尔值`)
+      const pd = r.pdReason
+      if (pd !== undefined && !['author-death', 'public-domain-dedication', 'government', 'cc0', 'other'].includes(String(pd))) {
+        fail(`${slug} 的 rights.pdReason 不合法`)
+      }
+      rights = {
+        ...(r.work !== undefined ? { work: r.work } : {}),
+        ...(r.arrangement !== undefined ? { arrangement: r.arrangement as ScoreRights['arrangement'] } : {}),
+        ...(typeof r.notation === 'string' ? { notation: r.notation } : {}),
+        ...(pd !== undefined ? { pdReason: pd as ScoreRights['pdReason'] } : {}),
+        ...(typeof r.rightsHolder === 'string' ? { rightsHolder: r.rightsHolder } : {}),
+        ...(typeof r.evidence === 'string' ? { evidence: r.evidence } : {}),
+        ...(typeof r.territory === 'string' ? { territory: r.territory } : {}),
+        ...(typeof r.commercial === 'boolean' ? { commercial: r.commercial } : {}),
+        ...(typeof r.ccLicense === 'string' ? { ccLicense: r.ccLicense } : {}),
+        ...(typeof r.attribution === 'string' ? { attribution: r.attribution } : {}),
+        ...(typeof r.sourceUrl === 'string' ? { sourceUrl: r.sourceUrl } : {}),
+        ...(typeof r.expires === 'string' ? { expires: r.expires } : {}),
+      }
+    }
+    if (license === 'CC') {
+      if ((rights?.ccLicense ?? '').trim() === '') fail(`${slug} 的 license 为 CC 时必须写 rights.ccLicense`)
+      if ((rights?.attribution ?? '').trim() === '' && (rights?.sourceUrl ?? '').trim() === '') {
+        fail(`${slug} 的 license 为 CC 时必须写 rights.attribution 或 rights.sourceUrl`)
+      }
+    }
+
     const meta: ScoreMeta = {
       slug,
       title,
@@ -522,6 +586,7 @@ function readEntries(): Entry[] {
       file: file as string | undefined,
       note: obj.note as string | undefined,
       assets,
+      rights,
       publishedAt: obj.publishedAt,
       updatedAt: obj.updatedAt,
     }

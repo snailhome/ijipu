@@ -3584,6 +3584,18 @@ body {
   font-size: 12px;
 }
 .score-pkg-span2 { grid-column: 1 / -1; }
+.score-pkg-group-title {
+  margin-top: 2px;
+  color: var(--jp-text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+.score-pkg-check {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+.score-pkg-check input { width: auto; }
 .score-pkg-input {
   width: 100%;
   padding: 6px 10px;
@@ -4792,6 +4804,23 @@ textarea.score-pkg-input { min-height: 64px; resize: vertical; }
 .tool-dock-pane.pane-import .modal-inline {
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+/* adj1198：乐谱信息页签填满 dock 高度；表单滚动、底部保存按钮固定 */
+.tool-dock-pane.pane-meta {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.tool-dock-pane.pane-meta .modal-inline {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.tool-dock-pane.pane-meta .score-pkg {
   flex: 1 1 auto;
   min-height: 0;
 }

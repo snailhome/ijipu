@@ -14,7 +14,26 @@ import { downloadSidecarText, readSidecarText, writeSidecarText } from '../expor
 import { listWorkspaces } from './workspace'
 import type { WorkspaceBinding } from './docStore'
 
-export type ScoreMetaLicense = 'PD' | 'ORIGINAL' | 'AUTHORIZED'
+export type ScoreMetaLicense = 'PD' | 'ORIGINAL' | 'AUTHORIZED' | 'CC'
+export type ScoreArrangementLicense = 'NONE' | 'PD' | 'ORIGINAL' | 'AUTHORIZED' | 'CC'
+export type PdReason = 'author-death' | 'public-domain-dedication' | 'government' | 'cc0' | 'other'
+
+/** 权利分层：旋律（license）→ 编配 → 记谱/排版 */
+export interface ScoreRights {
+  work?: ScoreMetaLicense
+  arrangement?: ScoreArrangementLicense
+  /** 记谱/排版许可（站点固定 CC BY-NC-SA 4.0，也允许作者另注） */
+  notation?: string
+  pdReason?: PdReason
+  rightsHolder?: string
+  evidence?: string
+  territory?: string
+  commercial?: boolean
+  ccLicense?: string
+  attribution?: string
+  sourceUrl?: string
+  expires?: string
+}
 
 export interface ScoreMetaAsset {
   path: string
@@ -35,6 +54,7 @@ export interface ScoreMetaDoc {
   excerpt?: string
   note?: string
   assets?: ScoreMetaAsset[]
+  rights?: ScoreRights
 }
 
 export interface LoadedScoreMeta {
@@ -71,6 +91,25 @@ export async function resolveMetaPath(
   }
 }
 
+function normalizeRights(raw: unknown): ScoreRights | undefined {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return undefined
+  const o = raw as Record<string, unknown>
+  const r: ScoreRights = {}
+  if (o.work === 'PD' || o.work === 'ORIGINAL' || o.work === 'AUTHORIZED' || o.work === 'CC') r.work = o.work
+  if (o.arrangement === 'NONE' || o.arrangement === 'PD' || o.arrangement === 'ORIGINAL' || o.arrangement === 'AUTHORIZED' || o.arrangement === 'CC') {
+    r.arrangement = o.arrangement
+  }
+  if (typeof o.notation === 'string') r.notation = o.notation
+  if (o.pdReason === 'author-death' || o.pdReason === 'public-domain-dedication' || o.pdReason === 'government' || o.pdReason === 'cc0' || o.pdReason === 'other') {
+    r.pdReason = o.pdReason
+  }
+  for (const key of ['rightsHolder', 'evidence', 'territory', 'ccLicense', 'attribution', 'sourceUrl', 'expires'] as const) {
+    if (typeof o[key] === 'string') r[key] = o[key]
+  }
+  if (typeof o.commercial === 'boolean') r.commercial = o.commercial
+  return Object.keys(r).length > 0 ? r : undefined
+}
+
 function parseMeta(text: string): ScoreMetaDoc | null {
   try {
     const raw = JSON.parse(text) as unknown
@@ -85,7 +124,7 @@ function parseMeta(text: string): ScoreMetaDoc | null {
       title: o.title,
       composer: typeof o.composer === 'string' ? o.composer : '',
       license:
-        o.license === 'PD' || o.license === 'AUTHORIZED' || o.license === 'ORIGINAL'
+        o.license === 'PD' || o.license === 'AUTHORIZED' || o.license === 'ORIGINAL' || o.license === 'CC'
           ? o.license
           : 'ORIGINAL',
       source: typeof o.source === 'string' ? o.source : '',
@@ -94,6 +133,7 @@ function parseMeta(text: string): ScoreMetaDoc | null {
       ...(typeof o.excerpt === 'string' ? { excerpt: o.excerpt } : {}),
       ...(typeof o.note === 'string' ? { note: o.note } : {}),
       ...(Array.isArray(o.assets) ? { assets: o.assets as ScoreMetaAsset[] } : {}),
+      ...(normalizeRights(o.rights) ? { rights: normalizeRights(o.rights) } : {}),
     }
   } catch {
     return null
@@ -143,6 +183,15 @@ export function validateScoreMeta(meta: ScoreMetaDoc): string {
   if (meta.difficulty !== undefined && (!Number.isInteger(meta.difficulty) || meta.difficulty < 1 || meta.difficulty > 5)) {
     return '难度只能是 1-5 的整数'
   }
+  if (meta.license === 'CC') {
+    if ((meta.rights?.ccLicense ?? '').trim() === '') return '许可为 CC 时必须填写 CC 协议（如 CC-BY-NC-SA-4.0）'
+    if ((meta.rights?.attribution ?? '').trim() === '' && (meta.rights?.sourceUrl ?? '').trim() === '') {
+      return '许可为 CC 时必须填写署名或来源链接'
+    }
+  }
+  if (meta.rights?.work !== undefined && meta.rights.work !== meta.license) {
+    return 'rights.work 必须与顶层 license 一致'
+  }
   return ''
 }
 
@@ -185,5 +234,11 @@ export function defaultScoreMeta(titles: string[], authors: string[], fileName: 
     difficulty: undefined,
     excerpt: '',
     note: '',
+    rights: {
+      work: 'ORIGINAL',
+      arrangement: 'ORIGINAL',
+      notation: 'CC-BY-NC-SA-4.0',
+      commercial: false,
+    },
   }
 }

@@ -41,7 +41,8 @@
 | `short` | ✓ | `[a-z]{3,6}`，全局唯一，发布后不改 |
 | `title` | ✓ | 非空 |
 | `composer` | ✓ | 非空；公版写「传统」/作者 |
-| `license` | ✓ | `PD` / `ORIGINAL` / `AUTHORIZED`（不做 C/D） |
+| `license` | ✓ | `PD` / `ORIGINAL` / `AUTHORIZED` / `CC` |
+| `rights` | | 权利分层；见 §2.1 |
 | `source` | ✓ | 来源/卒年/授权方；审计用，页脚会显示 |
 | `tags` | ✓ | 字符串数组；`示例谱` 是**保留 tag**（见 §五） |
 | `difficulty` | | 1-5 整数 |
@@ -57,6 +58,46 @@
 | `publishedAt` / `updatedAt` | ✓ | `YYYY-MM-DD` |
 
 可选扩展字段（工具可写、构建忽略）：`contentHash`（SHA-256）、`importedAt`、`sourceZip`。
+
+### 2.1 `rights`：旋律 / 编配 / 记谱三层
+
+`license` 是**旋律（原作）**的主状态；`rights` 补充编配、记谱和证据，避免
+「公版旋律 + 我的编配」被写成整首公版。
+
+```json
+"license": "CC",
+"rights": {
+  "work": "CC",
+  "arrangement": "ORIGINAL",
+  "notation": "CC-BY-NC-SA-4.0",
+  "pdReason": "author-death",
+  "rightsHolder": "爱记谱示例",
+  "evidence": "作者卒于 1827 年",
+  "territory": "CN",
+  "commercial": false,
+  "ccLicense": "CC-BY-NC-SA-4.0",
+  "attribution": "作者名",
+  "sourceUrl": "https://example.com",
+  "expires": "2030-12-31"
+}
+```
+
+| 字段 | 说明 |
+|---|---|
+| `work` | 旋律状态；若填必须与顶层 `license` 一致 |
+| `arrangement` | 编配：`NONE` / `PD` / `ORIGINAL` / `AUTHORIZED` / `CC` |
+| `notation` | 记谱/排版许可；站点默认 CC BY-NC-SA 4.0 |
+| `pdReason` | `author-death` / `public-domain-dedication` / `government` / `cc0` / `other` |
+| `rightsHolder` / `evidence` / `territory` | 授权方、依据、地域 |
+| `commercial` | 是否允许商用 |
+| `ccLicense` / `attribution` / `sourceUrl` | CC 协议、署名、来源 |
+| `expires` | 授权期限（可选） |
+
+规则：
+
+- `license: "CC"` 时**必须**有 `rights.ccLicense`，且 `attribution` / `sourceUrl` 至少一个；
+- `EXCERPT` **不是许可**；片段范围用 `excerpt` 字段，底层仍写 `PD / ORIGINAL / AUTHORIZED / CC`；
+- 顶层 `license` 与 `rights.work` 不一致 ⇒ 构建失败。
 未知字段由校验器报错（防手滑）；需要扩展时先升 `version`。
 
 ---
