@@ -84,6 +84,18 @@ const LIGHT_VARS: Record<string, string> = {
 }
 
 /**
+ * 两套变量的只读快照。
+ *
+ * adj1190（曲库）：`/scores/` 的列表页与详情页是**构建期生成的静态 HTML**（不走 Vite 入口、
+ * 也不加载 `landing/main.ts`），但必须和首页用同一套品牌色 ⇒ 生成器从这里取两套变量，
+ * 直接写进页面的 `:root[data-site-mode=…]`。**不要在运行时改它**，也不要在别处另抄一份色值。
+ */
+export const SITE_VARS: Readonly<Record<SiteMode, Readonly<Record<string, string>>>> = {
+  dark: DARK_VARS,
+  light: LIGHT_VARS,
+}
+
+/**
  * 兜底背景色：与各 HTML `<head>` 里那段"防闪烁"内联样式**必须一致**（两处都改）。
  *
  * adj930：它同时是**首屏启动层**的底色（`brand/siteBoot.ts` 的 `SITE_BOOT_COLORS` 直接取它），

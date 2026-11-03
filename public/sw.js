@@ -59,6 +59,17 @@ function fallbackFor(pathname) {
   if (pathname === '/plugin' || pathname.startsWith('/plugin/')) return '/plugin/index.html'
   // adj948（新增 `/cli/` 命令行手册）：漏了这条 ⇒ 离线打开 /cli/ 会被喂成首页 HTML（白屏）
   if (pathname === '/cli' || pathname.startsWith('/cli/')) return '/cli/index.html'
+  /**
+   * adj1190（曲库）：`/scores/` 是构建期生成的静态页。
+   * 详情页有自己的一份 HTML，缓存键必须是**它自己**（`/scores/x/index.html`），
+   * 否则所有详情页会共用同一个键、离线打开谁都变成列表。
+   */
+  if (pathname === '/scores' || pathname === '/scores/') return '/scores/index.html'
+  if (/^\/scores\/[^/]+\/?$/.test(pathname)) {
+    return pathname.endsWith('/') ? `${pathname}index.html` : `${pathname}/index.html`
+  }
+  if (pathname.startsWith('/scores/')) return '/scores/index.html'
+  if (pathname === '/copyright' || pathname === '/copyright/') return '/copyright/index.html'
   return '/index.html'
 }
 // #endregion
@@ -162,7 +173,16 @@ self.addEventListener('fetch', (event) => {
           }
           return res
         })
-        .catch(() => caches.match(key)),
+        .catch(() =>
+          caches.match(key).then((hit) => {
+            if (hit) return hit
+            // 曲库详情页离线第一次打开：退回列表，而不是给一张空白
+            if (key.startsWith('/scores/') && key !== '/scores/index.html') {
+              return caches.match('/scores/index.html')
+            }
+            return undefined
+          }),
+        ),
     )
     return
   }

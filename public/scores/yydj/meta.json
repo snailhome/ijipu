@@ -1,0 +1,17 @@
+{
+  "slug": "yydj",
+  "title": "友谊地久天长",
+  "composer": "苏格兰民歌",
+  "license": "PD",
+  "source": "Auld Lang Syne，苏格兰民谣；四声部编配：爱记谱示例",
+  "short": "yydj",
+  "tags": ["多声部", "Q1-Q4", "4/4"],
+  "difficulty": 4,
+  "order": 80,
+  "status": "published",
+  "card": "paper",
+  "watermark": "corner",
+  "publishedAt": "2026-11-03",
+  "updatedAt": "2026-11-03",
+  "note": "四条 `Q` 轨的四声部编配；首小节是弱起。"
+}

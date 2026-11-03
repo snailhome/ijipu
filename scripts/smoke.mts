@@ -29155,6 +29155,12 @@ C2: 歌，@那么我@是想要画你的手。@ {tp 1// 2/.} 你看我多么 {tp 
       /* adj948：新增 `/cli/` 后漏了这条 ⇒ 离线打开命令行手册会被喂成首页 HTML（白屏） */
       ['/cli/', '/cli/index.html'],
       ['/cli', '/cli/index.html'],
+      /* adj1190：曲库（详情页按**自己的**键缓存，离线打开不会全变成列表） */
+      ['/scores/', '/scores/index.html'],
+      ['/scores/star', '/scores/star/index.html'],
+      ['/scores/star/', '/scores/star/index.html'],
+      ['/copyright', '/copyright/index.html'],
+      ['/copyright/', '/copyright/index.html'],
       ['/whatever', '/index.html'],
     ]
     const bad = cases
@@ -29187,6 +29193,68 @@ C2: 歌，@那么我@是想要画你的手。@ {tp 1// 2/.} 你看我多么 {tp 
     precacheBlock.replace(/\s+/g, ' ').slice(0, 120))
   check('adj948 负对照：把 `/cli/index.html` 塞进 PRECACHE ⇒ 判据判红（证明它真的在量那份清单）',
     precacheHasDocPages(precacheBlock.replace("'/app/index.html',", "'/app/index.html',\n  '/cli/index.html',")))
+
+  // ---- ⑤b 曲库（adj1190）----
+  /**
+   * 曲库的"内容闸门"放在冒烟里，而不是只靠生成器：
+   * 生成器只在 `npm run build` 末尾跑，而 `npm run smoke` 是每次改动的第一道门。
+   * 这里直接读 `public/scores/` 的真源，保证"加一份谱"不会悄悄带着错别字/重码进产物。
+   */
+  const scoresRoot = join(process.cwd(), 'public/scores')
+  const scoreDirs = readdirSync(scoresRoot, { withFileTypes: true })
+    .filter((d) => d.isDirectory())
+    .map((d) => d.name)
+    .sort()
+  check(
+    'adj1190 曲库至少有 8 个条目（起步 7 首曲子：送别含完整版 + 四小节演示；以后加谱不用改这条）',
+    scoreDirs.length >= 8,
+    scoreDirs.join('、'),
+  )
+  const scoreLicenses = ['PD', 'ORIGINAL', 'AUTHORIZED', 'CC-BY-4.0', 'CC-BY-NC-SA-4.0', 'EXCERPT']
+  const shortSeen1190 = new Set<string>()
+  const scoreProblems: string[] = []
+  for (const dir of scoreDirs) {
+    let meta: Record<string, unknown>
+    try {
+      meta = JSON.parse(readFileSync(join(scoresRoot, dir, 'meta.json'), 'utf8')) as Record<string, unknown>
+    } catch {
+      scoreProblems.push(`${dir}: meta.json 读不了`)
+      continue
+    }
+    const short = String(meta.short ?? '')
+    if (String(meta.slug ?? '') !== dir) scoreProblems.push(`${dir}: slug 与目录名不一致`)
+    if (!scoreLicenses.includes(String(meta.license ?? ''))) scoreProblems.push(`${dir}: license 不合法`)
+    if (!/^[a-z]{3,6}$/.test(short)) scoreProblems.push(`${dir}: short 不是 3-6 位小写字母`)
+    if (shortSeen1190.has(short)) scoreProblems.push(`${dir}: short 与别的条目重复（${short}）`)
+    shortSeen1190.add(short)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(meta.publishedAt ?? ''))) scoreProblems.push(`${dir}: publishedAt`)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(meta.updatedAt ?? ''))) scoreProblems.push(`${dir}: updatedAt`)
+
+    const file = typeof meta.file === 'string' ? meta.file : ''
+    const scorePath = file
+      ? join(process.cwd(), 'public', file.replace(/^\/+/, ''))
+      : join(scoresRoot, dir, 'score.jps')
+    if (!existsSync(scorePath)) {
+      scoreProblems.push(`${dir}: 谱面文件不存在`)
+      continue
+    }
+    const parsed = parseJpsRaw(readFileSync(scorePath, 'utf8'))
+    if (parsed.errors.length > 0) scoreProblems.push(`${dir}: 解析出 ${parsed.errors.length} 个问题`)
+  }
+  check('adj1190 每份 meta 字段 / 短码唯一 / 谱面零错误', scoreProblems.length === 0, scoreProblems.join('；'))
+
+  const samplesSrc1190 = readSrc('src/landing/samples.ts')
+  check(
+    'adj1190 首页示例读 `public/scores/`（不再内联第二份源码）',
+    samplesSrc1190.includes('public/scores/star/score.jps?raw') && !samplesSrc1190.includes("'B: 小星星'"),
+  )
+  const pkg1190 = JSON.parse(readFileSync('package.json', 'utf8')) as { scripts: Record<string, string> }
+  check(
+    'adj1190 `npm run build` 里包含 `scores:gen`（部署才会更新曲库）',
+    pkg1190.scripts.build.includes('scores:gen'),
+  )
+  check('adj1190 首页/页脚有曲库入口', readSrc('index.html').includes('href="/scores/"'))
+  check('adj1190 曲库共用样式 scores.css 存在', existsSync(join(scoresRoot, 'scores.css')))
 
   // ---- ⑥ 文档页与应用内帮助同源：渲染器抽成了纯模块，且目录锚点与标题 id 逐个一致 ----
   const mdSrc = readSrc('src/help/markdown.ts')

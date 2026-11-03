@@ -284,6 +284,8 @@ code {
 /* ---------- 入口链接 ---------- */
 .links { padding-bottom: 72px; }
 .links h2 { text-align: center; margin-bottom: 26px; }
+/* adj1190：曲库入口（放在「开始使用」上方，不占顶栏那 5 个名额） */
+.links-more { margin: -10px 0 22px; text-align: center; color: var(--site-text-2); font-size: 14px; }
 .link-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));

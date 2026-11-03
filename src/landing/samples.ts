@@ -53,6 +53,20 @@
  * 每一段都由 smoke 逐个验证 —— 3 拍还是 4 拍，眼睛看不出来，必须用引擎量。
  */
 import moly from '../../public/samples/茉莉花.jps?raw'
+/**
+ * adj1190（用户 2026-11-03 拍板「合一份」）：首页示例的源码**不再写在这个文件里**，
+ * 唯一真源是 `public/scores/<slug>/score.jps`（曲库与首页共用同一份）。
+ * 这里只做 `?raw` 导入 + 原有变量名别名，`BRAND_SAMPLES` 的标签与顺序一个字都没动。
+ *
+ * 为什么保留别名而不是直接用导入名：下面每一段上方都写了大段"这段演示什么语法、
+ * 当年踩过什么坑"的注释；换名字会把这些历史说明和代码断开。别名一层最省事。
+ */
+import xiaoXingXingSrc from '../../public/scores/star/score.jps?raw'
+import odeToJoySrc from '../../public/scores/hls/score.jps?raw'
+import frereJacquesSrc from '../../public/scores/lzlh/score.jps?raw'
+import jingleBellsSrc from '../../public/scores/lexdd/score.jps?raw'
+import farewellSrc from '../../public/scores/duet/score.jps?raw'
+import auldLangSyneSrc from '../../public/scores/yydj/score.jps?raw'
 
 /**
  * 精简时**保留**的配置项（白名单）。
@@ -126,13 +140,7 @@ export function simplifyJps(src: string): string {
  * 拍数：每小节 4 拍（`-` 是增时线，占 1 拍）；歌词 14 字对上 14 个音符（`-` 不配字）。
  * ⚠ 这段与 `index.html` 里块内**预置的源码必须逐字一致**（用户第一眼看到的就是它）。
  */
-const XIAO_XING_XING = [
-  'B: 小星星',
-  'D: C',
-  'P: 4/4',
-  "Q: 1 1 5 5 | 6 6 5 - | 4 4 3 3 | 2 2 1 - ||",
-  'C: 一 闪 一 闪 亮 晶 晶 满 天 都 是 小 星 星',
-].join('\n') + '\n'
+const XIAO_XING_XING = xiaoXingXingSrc
 
 /**
  * 欢乐颂（贝多芬 †1827，**公版**）—— 演示**前倚音 `2[1]`、连音线 `( )`、附点 `3.`**。
@@ -145,13 +153,7 @@ const XIAO_XING_XING = [
  * `1`(1) + `(1 2)`(2) + `3`(1)；末小节 `3.`(1.5) + `2/`(0.5) + `2`(1) + `-`(1) = 4。
  * ⚠ 末小节最初写成 `3. 2 2 -`——那是 **4.5 拍**（附点是 1.5 拍），被闸门当场抓出来。
  */
-const ODE_TO_JOY = [
-  'B: 欢乐颂',
-  'Z: 贝多芬',
-  'D: C',
-  'P: 4/4',
-  'Q: 3 (3 4) 5 | 5 4 3 2[1] | 1 (1 2) 3 | 3. 2/ 2 - ||',
-].join('\n') + '\n'
+const ODE_TO_JOY = odeToJoySrc
 
 /**
  * 两只老虎（法国童谣，**公版**）—— 演示**反复 `|:` `:|]` 与两遍房子 `["1."` / `["2."`**。
@@ -162,13 +164,7 @@ const ODE_TO_JOY = [
  * 用户原话：「`||` 后面的 `]` 是跳房子的结束，**本质上它也是以 `||` 结束乐句的**」。
  * 这条也正是 `adj899` 那次断言放宽的依据（`/\|\|\]?\s*$/` 而不是 `/\|\|\s*$/`）。
  */
-const FRERE_JACQUES = [
-  'B: 两只老虎',
-  'Z: 法国童谣',
-  'D: C',
-  'P: 4/4',
-  'Q: |: 1 2 3 1 | 1 2 3 1 |["1." 3 4 5 - :|]["2." 5 4 3 1 ||]',
-].join('\n') + '\n'
+const FRERE_JACQUES = frereJacquesSrc
 
 /**
  * 铃儿响叮当（J. L. Pierpont）—— 演示**临时伴奏 `{bz … }`**。
@@ -177,13 +173,7 @@ const FRERE_JACQUES = [
  * 所以这里段内 4 小节（16 拍）配上段后 4 小节主旋律（16 拍），两者一一对齐。
  * 伴奏用低八度的主和弦分解（真实制谱的常见做法）。
  */
-const JINGLE_BELLS = [
-  'B: 铃儿响叮当',
-  'Z: J. L. Pierpont',
-  'D: C',
-  'P: 4/4',
-  "Q: {bz 1, 3, 5, 3, | 1, 3, 5, 3, | 1, 3, 5, 3, | 1, 3, 5, 3,} 3 3 3 - | 3 3 3 - | 3 5 1 2 | 3 - - - ||",
-].join('\n') + '\n'
+const JINGLE_BELLS = jingleBellsSrc
 
 /**
  * 送别（李叔同 词 / J. P. 奥德曼 曲）—— 演示**临时多声部 `{dsb … }`**。
@@ -191,13 +181,7 @@ const JINGLE_BELLS = [
  * `{dsb …}` 段内是**上声部**，段后等长的主旋律自动成为**下声部**。
  * 这里上声部按**三度平行**编配（`5→7`、`3→5`、`1'→3'`…），是真实制谱里最常用的和声手法。
  */
-const FAREWELL = [
-  'B: 送别',
-  'Z: 李叔同 词 / J. P. 奥德曼 曲',
-  'D: C',
-  'P: 4/4',
-  "Q: {dsb 7 (5/ 7/) 3'- | 1' 3' 7-} 5 (3/ 5/) 1'- | 6 1' 5- | 5 (1/ 2/) 3 (2/ 1/) | 2- 0 0 ||",
-].join('\n') + '\n'
+const FAREWELL = farewellSrc
 
 /**
  * 友谊地久天长（Auld Lang Syne，苏格兰民歌，**公版**）—— 演示**多声部**（`Q1:`~`Q4:` 四条轨）。
@@ -212,16 +196,7 @@ const FAREWELL = [
  *   那是**长音收束**：原写法"渐强 + 一个短音"是"**接下一句**"的姿态，
  *   而这里是**独立片段**，需要收得住。四声部末小节因此都是 **4 拍**长音。
  */
-const AULD_LANG_SYNE = [
-  'B: 友谊地久天长',
-  'Z: 苏格兰民歌',
-  'D: F',
-  'P: 4/4',
-  'Q1: 5, | 1. 1/ 1 3 | 2. 1/ 2 &hx 3 | 1. 1/ 3 5 | 6--- ||',
-  'Q2: 5, | 5,. 5/ 5, 1 | 7,. 1/ 6, &hx 6, | 1. 1/ 1 1 | 1--- ||',
-  'Q3: 3 | 3. 3/ 3 5 | 4. 3/ 4 &hx 5 | 3. 3/ 5 3 | 4--- ||',
-  'Q4: 1 | 1. 1/ 1 1 | 5,. 5,/ 5, &hx 5, | 1. 1/ 1 1 | 4,--- ||',
-].join('\n') + '\n'
+const AULD_LANG_SYNE = auldLangSyneSrc
 
 /**
  * 顺序即首页示例按钮的顺序。标签用**曲名 + 括号里的语法点** ——

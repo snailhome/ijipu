@@ -11,6 +11,7 @@ node_modules
 dist
 dist-smoke
 dist-preview
+dist-scores
 dist-ssr
 # 嵌入版（进 Obsidian 插件）的构建产物：精简 public + 单文件 HTML
 dist-embed

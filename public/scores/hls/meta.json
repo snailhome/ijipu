@@ -1,0 +1,17 @@
+{
+  "slug": "hls",
+  "title": "欢乐颂",
+  "composer": "贝多芬",
+  "license": "PD",
+  "source": "贝多芬（†1827）；记谱：爱记谱示例",
+  "short": "hls",
+  "tags": ["倚音", "连音线", "附点"],
+  "difficulty": 2,
+  "order": 30,
+  "status": "published",
+  "card": "paper",
+  "watermark": "corner",
+  "publishedAt": "2026-11-03",
+  "updatedAt": "2026-11-03",
+  "note": "演示前倚音 `2[1]`、连音线 `( )`、附点 `3.`。"
+}

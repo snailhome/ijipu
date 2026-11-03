@@ -1,0 +1,572 @@
+/*
+ * public/scores/scores.css — 曲库页面（列表 / 详情 / 版权页）的共用样式
+ *
+ * 这些页面是**构建期生成的静态 HTML**（`scripts/gen-scores.mts`），不走 Vite 入口；
+ * 所以样式放在 `public/` 下、用固定路径 `/scores/scores.css` 引用（不带 hash）。
+ *
+ * 色值**不在这里写死**：页面 `<head>` 里由生成器写入 `--site-*`（来源 `src/brand/siteVars.ts`），
+ * 本文件只消费变量。要改品牌色请改 `src/brand/tokens.ts`。
+ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--site-bg);
+  color: var(--site-text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', sans-serif;
+  font-size: 16px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--site-accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+code,
+kbd,
+pre {
+  font-family: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+}
+
+.wrap {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+/* ---------- 顶栏 ---------- */
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--site-topbar-bg);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--site-border);
+}
+
+.topbar-inner {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  height: 56px;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--site-text);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.brand:hover {
+  text-decoration: none;
+}
+
+.brand img {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+}
+
+.brand b {
+  color: var(--site-accent);
+}
+
+.nav {
+  display: flex;
+  gap: 16px;
+  margin-left: auto;
+  font-size: 14px;
+}
+
+.nav a {
+  color: var(--site-text-2);
+}
+
+.nav a:hover {
+  color: var(--site-accent);
+}
+
+.nav .nav-on {
+  color: var(--site-accent);
+}
+
+/* ---------- 页头 ---------- */
+
+.page-head {
+  padding: 34px 0 10px;
+}
+
+.kicker {
+  margin: 0 0 6px;
+  color: var(--site-accent);
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+h1 {
+  margin: 0 0 8px;
+  font-size: clamp(26px, 4vw, 38px);
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+.sub {
+  margin: 0;
+  color: var(--site-text-2);
+  font-size: 15px;
+}
+
+.meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 9px;
+  border: 1px solid var(--site-border);
+  border-radius: 999px;
+  background: var(--site-inline-bg);
+  color: var(--site-text-2);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+.badge.license {
+  border-color: color-mix(in srgb, var(--site-accent) 55%, var(--site-border));
+  color: var(--site-accent);
+}
+
+.diff {
+  letter-spacing: 1px;
+  color: var(--site-accent);
+}
+
+/* ---------- 详情：预览 + 源码 ---------- */
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.9fr);
+  gap: 24px;
+  align-items: start;
+  margin: 22px 0 36px;
+}
+
+/* 网格项默认 `min-width: auto`：SVG 的固有宽度（约 511px）会把格子撑出手机屏幕。
+   显式给 0，SVG 才会按 `width:100%` 缩。 */
+.layout > * {
+  min-width: 0;
+}
+
+.paper {
+  position: relative;
+  padding: 18px 18px 36px;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 10px 34px var(--site-shadow);
+  overflow: hidden;
+}
+
+.paper svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.site-mark {
+  position: absolute;
+  right: 14px;
+  bottom: 10px;
+  padding: 1px 7px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.78);
+  color: rgba(27, 27, 27, 0.52);
+  font-size: 11px;
+  line-height: 1.7;
+  pointer-events: none;
+}
+
+.source {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid var(--site-border);
+  border-radius: 12px;
+  background: var(--site-panel);
+  overflow: hidden;
+}
+
+.source-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--site-border);
+  color: var(--site-text-2);
+  font-size: 13px;
+}
+
+.source-head .spacer {
+  flex: 1;
+}
+
+.source pre {
+  margin: 0;
+  padding: 14px 16px;
+  max-height: 70vh;
+  overflow: auto;
+  background: var(--site-code-bg);
+  color: var(--site-text);
+  font-size: 13px;
+  line-height: 1.6;
+  tab-size: 2;
+}
+
+.source code {
+  /* 曲库里的长行（`# jps-config`、长歌词）在窄屏上必须能读全：
+     宁可折行，也不要让用户去猜右边被裁掉了什么。 */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 18px 0 0;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 1px solid var(--site-border);
+  border-radius: 8px;
+  background: var(--site-panel);
+  color: var(--site-text);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.btn:hover {
+  border-color: var(--site-accent);
+  text-decoration: none;
+}
+
+.btn-primary {
+  border-color: var(--site-accent);
+  background: var(--site-accent);
+  color: var(--site-on-accent);
+  font-weight: 600;
+}
+
+.btn-primary:hover {
+  color: var(--site-on-accent);
+  filter: brightness(1.06);
+}
+
+.copy-note {
+  min-height: 1.4em;
+  margin: 8px 0 0;
+  color: var(--site-muted);
+  font-size: 13px;
+}
+
+.note {
+  margin: 0 0 28px;
+  padding: 14px 16px;
+  border-left: 3px solid var(--site-accent);
+  border-radius: 0 8px 8px 0;
+  background: var(--site-inline-bg);
+  color: var(--site-text-2);
+  font-size: 14px;
+}
+
+.note p {
+  margin: 0 0 8px;
+}
+
+.note p:last-child {
+  margin-bottom: 0;
+}
+
+/* ---------- 列表 ---------- */
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0 6px;
+}
+
+.search {
+  flex: 1 1 260px;
+  min-width: 200px;
+  padding: 9px 12px;
+  border: 1px solid var(--site-border);
+  border-radius: 8px;
+  background: var(--site-panel);
+  color: var(--site-text);
+  font: inherit;
+  font-size: 14px;
+}
+
+.search::placeholder {
+  color: var(--site-muted);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0 0;
+}
+
+.chip {
+  padding: 4px 11px;
+  border: 1px solid var(--site-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--site-text-2);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.chip:hover {
+  border-color: var(--site-accent);
+  color: var(--site-text);
+}
+
+.chip[aria-pressed='true'] {
+  border-color: var(--site-accent);
+  background: var(--site-inline-bg);
+  color: var(--site-accent);
+}
+
+.count {
+  color: var(--site-muted);
+  font-size: 13px;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 18px;
+  margin: 20px 0 48px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--site-border);
+  border-radius: 12px;
+  background: var(--site-panel);
+  color: var(--site-text);
+  overflow: hidden;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  border-color: var(--site-accent);
+  text-decoration: none;
+}
+
+.cover {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 2.4 / 1;
+  border-bottom: 1px solid var(--site-border);
+  background: #fff;
+  overflow: hidden;
+}
+
+.cover img {
+  width: 100%;
+  height: 100%;
+  padding: 10px;
+  object-fit: contain;
+}
+
+.card-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  padding: 13px 14px 14px;
+}
+
+.card-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.card-sub {
+  margin: 0;
+  color: var(--site-text-2);
+  font-size: 13px;
+}
+
+.card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.tag {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--site-inline-bg);
+  color: var(--site-text-2);
+  font-size: 12px;
+}
+
+.card-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 8px;
+  color: var(--site-muted);
+  font-size: 12px;
+}
+
+.empty {
+  padding: 40px 0 60px;
+  color: var(--site-muted);
+  text-align: center;
+}
+
+/* ---------- 页脚 ---------- */
+
+.footer {
+  margin-top: 20px;
+  padding: 22px 0 40px;
+  border-top: 1px solid var(--site-border);
+  color: var(--site-muted);
+  font-size: 13px;
+}
+
+.footer p {
+  margin: 0 0 6px;
+}
+
+/* ---------- 干净版（?plain=1）与打印 ---------- */
+
+html[data-plain='1'] .topbar,
+html[data-plain='1'] .footer,
+html[data-plain='1'] .site-mark,
+html[data-plain='1'] .no-plain {
+  display: none !important;
+}
+
+html[data-plain='1'] body {
+  background: #fff;
+}
+
+@media print {
+  .topbar,
+  .footer,
+  .site-mark,
+  .actions,
+  .copy-note,
+  .source {
+    display: none !important;
+  }
+
+  body {
+    background: #fff;
+  }
+
+  .paper {
+    box-shadow: none;
+    padding: 0;
+  }
+}
+
+/* ---------- 窄屏 ---------- */
+
+@media (max-width: 880px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .source pre {
+    max-height: 45vh;
+  }
+
+  .nav {
+    gap: 12px;
+    font-size: 13px;
+  }
+
+  .nav .nav-doc {
+    display: none;
+  }
+}
+
+@media (max-width: 520px) {
+  .topbar-inner {
+    height: 50px;
+    padding: 0 14px;
+    gap: 12px;
+  }
+
+  .wrap {
+    padding: 0 14px;
+  }
+
+  .brand span {
+    display: none;
+  }
+
+  .nav {
+    gap: 10px;
+  }
+
+  .cards {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

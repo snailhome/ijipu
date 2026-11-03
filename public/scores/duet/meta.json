@@ -1,0 +1,18 @@
+{
+  "slug": "duet",
+  "title": "送别（四小节 · 临时多声部）",
+  "composer": "李叔同 词 / J. P. 奥德曼 曲",
+  "license": "PD",
+  "source": "同《送别》；这里只取前 4 小节作 dsb 临时多声部演示",
+  "short": "duet",
+  "tags": ["dsb", "多声部", "片段"],
+  "difficulty": 3,
+  "order": 70,
+  "excerpt": "第 1-4 小节",
+  "status": "published",
+  "card": "paper",
+  "watermark": "corner",
+  "publishedAt": "2026-11-03",
+  "updatedAt": "2026-11-03",
+  "note": "演示临时多声部 `{dsb … }`：段内是上声部，段后等长主旋律自动成为下声部。"
+}

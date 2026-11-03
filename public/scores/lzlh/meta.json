@@ -1,0 +1,17 @@
+{
+  "slug": "lzlh",
+  "title": "两只老虎",
+  "composer": "法国童谣",
+  "license": "PD",
+  "source": "法国童谣《Frère Jacques》；记谱：爱记谱示例",
+  "short": "lzlh",
+  "tags": ["反复", "跳房子", "童谣"],
+  "difficulty": 2,
+  "order": 40,
+  "status": "published",
+  "card": "paper",
+  "watermark": "corner",
+  "publishedAt": "2026-11-03",
+  "updatedAt": "2026-11-03",
+  "note": "演示反复 `|: :|` 与两遍房子 `[\"1.\"` / `[\"2.\"`。"
+}

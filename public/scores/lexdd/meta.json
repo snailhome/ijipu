@@ -1,0 +1,17 @@
+{
+  "slug": "lexdd",
+  "title": "铃儿响叮当",
+  "composer": "J. L. Pierpont",
+  "license": "PD",
+  "source": "J. L. Pierpont（†1893）；记谱：爱记谱示例",
+  "short": "lexdd",
+  "tags": ["临时伴奏", "bz", "4/4"],
+  "difficulty": 3,
+  "order": 50,
+  "status": "published",
+  "card": "paper",
+  "watermark": "corner",
+  "publishedAt": "2026-11-03",
+  "updatedAt": "2026-11-03",
+  "note": "演示临时伴奏 `{bz … }`：段内伴奏与段后等长主旋律同一拍位对齐。"
+}
