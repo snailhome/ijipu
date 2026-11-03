@@ -764,5 +764,45 @@ CDP 390×844     ✔ innerWidth=390 / scrollWidth=390 / 超宽元素=[]；详情
 
 ### 还没做（P1/P2）
 
-短链 301 只能在 Cloudflare Pages 上验（`vite preview` 不读 `_redirects`）；二维码、`og.png`、
-zip、`?src=`、URL 取图通道、投稿 Issue 表单都还没做。
+短链 301 只能在 Cloudflare Pages 上验（`vite preview` 不读 `_redirects`）；二维码、URL 取图通道、
+投稿 Issue 表单都还没做。
+
+---
+
+## 十二、P1 落地结果（2026-11-03，adj1191）
+
+### 做了什么
+
+| 项 | 结果 |
+|---|---|
+| `?src=` 打开 | 详情页「在应用里编辑」改成 `/app/?src=<.jps 地址>`；应用侧新增 `fetchJpsFromUrl`（同源 / https、512KB 上限、`credentials:'omit'`），读回来仍走 `importSource` |
+| zip 下载 | 构建期用 `export/zip.ts` 的 `writeZip` 打 `score.jps + README.txt`，生成 `dist/scores/<slug>/score.zip`；详情页加「下载 .zip」 |
+| 分享卡 | `scripts/gen-og.mjs` 用无头 Chrome 生成 8 张 1200×630 `og.png`（本地生成、提交进仓库）；`og:image` 指向它 |
+| 顶栏入口 | 首页顶栏从 5 条扩到 6 条：功能 / **乐谱** / 文档 / 下载桌面端 / GitHub / 打开应用（adj1080 断言同步改为 6 条 + 负对照） |
+| dev 支持 | `vite.config.ts` 加 `scoresDevPlugin()`：`npm run dev` 启动时跑一次 `scores:gen`，并把 `/scores/*` 转到 `dist/scores/`；改 `public/scores/**` 自动重生成 |
+
+### 关键取舍
+
+1. **`?src=` 只带源码，不带图**：URL 取图通道是 P2；当前 8 份谱都没有附属图，够用。
+2. **zip 里暂时只有 `.jps + README.txt`**：P1 没有附属图片；P2 再把 `assets/**` 收进去。
+3. **`og.png` 由本地脚本生成并提交**：Cloudflare 构建镜像有没有 Chrome 没验证，不把构建押在它身上；
+   新增谱要跑一次 `npm run score:og`（它会 build → 生成 → 再 build）。
+4. **顶栏 6 条**是用户明确要求（2026-11-03「乐谱库链接应加到首页上面一排」）；
+   旧的 adj1080「5 条」口径已同步放宽，并保留"插件手册/CLI/音色库不许回顶栏"的负对照。
+
+### 验证
+
+```
+npm run build     ✔ tsc 0 错；8 个条目 + 8 张 og.png + 8 个 score.zip
+npm run smoke     ✔ ALL SMOKE TESTS PASSED（adj1191：?src= 5 条、og 尺寸 2 条、zip/脚本 2 条、顶栏 3 条）
+npm run verify:site ✔ 241 / 0
+dev（5174）       ✔ /scores/ 200、/scores/star/ 200、score.zip 200 application/zip、score.jps 200
+?src= 真界面      ✔ /app/?src=/scores/star/score.jps 打开后编辑器里是《小星星》
+zip 内容          ✔ Python zipfile：['score.jps','README.txt']，README 为 UTF-8
+```
+
+### 现在的状态
+
+- 本地提交 `6d69eef`（P0）+ 本轮 P1 提交（未推送）。
+- **线上 `ijipu.pages.dev` 仍是旧版**：Cloudflare 只在 `git push` 后构建，所以现在线上点「乐谱」还是 404。
+  本地 `npm run dev` 与 `npm run preview` 都已能打开。

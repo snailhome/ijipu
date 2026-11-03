@@ -26,7 +26,7 @@ import { useSyncSidecarExtras } from './store/syncExtras'
 // adj538：桌面壳「外部打开」（双击 .jps）——拉取待打开队列 + 监听后续打开请求
 import { drainExternalFiles, hasShell, onExternalOpen } from './store/externalOpen'
 // adj900：从 URL 文本串导入源码（官网首页「在应用里试听这段」带过来的）
-import { readJpsFromSearch, withoutJpsParam } from './store/urlImport'
+import { fetchJpsFromUrl, readJpsFromSearch, readSrcFromSearch, withoutJpsParam } from './store/urlImport'
 // adj969：「资源目录」授权（网页 / PWA 用文件句柄打开的谱，浏览器不给父目录）
 import { getAssetDirRevision, subscribeAssetDir } from './store/assetDirAuth'
 // adj969：判"这份谱需不需要基准目录"的唯一口径（引擎里，两端共用）
@@ -102,11 +102,41 @@ function App() {
    * 他在应用里改的那几笔全白改 —— 而且会以为"链接参数根本没生效"。
    */
   useEffect(() => {
-    const incoming = readJpsFromSearch(window.location.search)
-    if (incoming === null) return
-    useDocStore.getState().importSource(incoming)
-    const rest = withoutJpsParam(window.location.search)
-    window.history.replaceState(null, '', `${window.location.pathname}${rest}${window.location.hash}`)
+    const search = window.location.search
+    const incoming = readJpsFromSearch(search)
+    const src = readSrcFromSearch(search)
+    if (incoming === null && src === null) return
+    const strip = () => {
+      const rest = withoutJpsParam(search)
+      window.history.replaceState(null, '', `${window.location.pathname}${rest}${window.location.hash}`)
+    }
+    if (incoming !== null) {
+      useDocStore.getState().importSource(incoming)
+      strip()
+      return
+    }
+    if (src === null) return
+    /**
+     * adj1191（P1）：曲库详情页的「在应用里编辑」用 `?src=<站内 .jps 地址>`。
+     * 读回来之后仍然走 `importSource`（与 `?jps=` 同一条路），不另写载入逻辑。
+     * 失败**不抹掉参数**：用户刷新一次就能重试，提示里也写清原因。
+     */
+    let alive = true
+    void fetchJpsFromUrl(src)
+      .then((code) => {
+        if (!alive) return
+        useDocStore.getState().importSource(code)
+        strip()
+      })
+      .catch((e: unknown) => {
+        if (!alive) return
+        useUiStore
+          .getState()
+          .showNotice(`打不开链接里的谱：${e instanceof Error ? e.message : String(e)}`, 'error')
+      })
+    return () => {
+      alive = false
+    }
   }, [])
 
   /**

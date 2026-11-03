@@ -11,6 +11,7 @@
     "dev": "npm run gen:info && vite",
     "build": "npm run gen:info && tsc -b && vite build && npm run scores:gen && node scripts/stamp-sw.mjs && npm run cli:embed",
     "scores:gen": "vite build --config vite.scores.config.ts && node dist-scores/gen-scores.cjs",
+    "score:og": "npm run build && node scripts/gen-og.mjs && npm run build",
     "lint": "oxlint",
     "check:encoding": "node scripts/check-encoding.mjs",
     "preview": "vite preview",

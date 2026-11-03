@@ -87,7 +87,14 @@ import { endCardLayout } from '../src/export/video/cardLayout'
 // adj1101：全局小节号/拍位的唯一口径（界面与命令行共用）
 import { flattenScoreNotes, measureSpotOf, resolveBarBeatRange } from '@ijipu/engine/index.ts'
 // adj900：从 URL 文本串导入源码（官网首页「在应用里试听这段」带过来的）
-import { JPS_PARAM_MAX_LEN, readJpsFromSearch, withoutJpsParam } from '../src/store/urlImport'
+import {
+  JPS_PARAM_MAX_LEN,
+  SRC_URL_MAX_LEN,
+  isAllowedJpsSrc,
+  readJpsFromSearch,
+  readSrcFromSearch,
+  withoutJpsParam,
+} from '../src/store/urlImport'
 // adj1162：资源安装包命名规则的唯一出处（构建/静态闸门/冒烟共用）
 import { resourceInstallerName, validateResourceDescriptor } from './asset-naming.mjs'
 import { inflateSync } from 'node:zlib'
@@ -29025,8 +29032,8 @@ C2: 歌，@那么我@是想要画你的手。@ {tp 1// 2/.} 你看我多么 {tp 
   /**
    * adj1080（用户 2026-10-23）：「首页上面一排链接放太多，导致文本折行；应做些链接的精简」。
    *
-   * 新口径：
-   *  · 顶栏只留 5 条：功能 / 文档（→ `/manual/`）/ 下载桌面端 / GitHub（应用仓库）/ 打开应用（CTA）；
+   * 新口径（adj1191 追加「乐谱」）：
+   *  · 顶栏只留 6 条：功能 / 乐谱（→ `/scores/`）/ 文档（→ `/manual/`）/ 下载桌面端 / GitHub（应用仓库）/ 打开应用（CTA）；
    *  · 五份文档（手册 / 语法 / 插件 / CLI / 音色库）统一从 `/manual/` 顶部的切换条进入；
    *  · 插件仓库入口移到「Obsidian 插件」区（`obsidianRepoUrl`），不再占顶栏；
    *  · 首页底部「开始使用」区的 CLI 入口卡保留（不在顶栏）。
@@ -29039,17 +29046,20 @@ C2: 歌，@那么我@是想要画你的手。@ {tp 1// 2/.} 你看我多么 {tp 
   const navHas = (nav: string, text: string): boolean => new RegExp(`<a\\b[^>]*>${text}</a>`).test(nav)
   const navMinimalOk = (nav: string): boolean =>
     navHas(nav, '功能') &&
+    /<a href="\/scores\/">乐谱<\/a>/.test(nav) &&
     /<a href="\/manual\/">文档<\/a>/.test(nav) &&
     navHas(nav, '下载桌面端') &&
     /<a data-l="repoUrl"[^>]*>GitHub<\/a>/.test(nav) &&
     !/插件手册|命令行手册|音色库推荐|应用 Github|插件 Github/.test(nav)
-  check('adj1080 首页顶栏只剩 5 条：功能 / 文档 / 下载桌面端 / GitHub / 打开应用',
+  check('adj1080/adj1191 首页顶栏 6 条：功能 / 乐谱 / 文档 / 下载桌面端 / GitHub / 打开应用',
     navMinimalOk(navPlain) && /topbar-cta" href="\/app\/">打开应用<\/a>/.test(homeHtml),
     navPlain.replace(/\s+/g, ' ').slice(0, 240))
   check('adj1080 负对照：把插件手册 / 命令行手册 / 音色库推荐任一条塞回顶栏 ⇒ 判据为假',
     !navMinimalOk(navPlain.replace('</a>', '</a><a href="/plugin/">插件手册</a>')) &&
       !navMinimalOk(navPlain.replace('</a>', '</a><a href="/cli/">命令行手册</a>')) &&
       !navMinimalOk(navPlain.replace('</a>', '</a><a href="/soundfonts/">音色库推荐</a>')))
+  check('adj1191 负对照：把「乐谱」从顶栏拿掉 ⇒ 判据为假（证明它真的在量这一条）',
+    !navMinimalOk(navPlain.replace('<a href="/scores/">乐谱</a>', '')))
   check('adj933/adj1080 顶栏只留一个 GitHub（应用仓库）；插件仓库入口在「Obsidian 插件」区',
     /<a data-l="repoUrl"[^>]*>GitHub<\/a>/.test(navHtml) &&
       !/obsidianRepoUrl/.test(navHtml) &&
@@ -29255,6 +29265,33 @@ C2: 歌，@那么我@是想要画你的手。@ {tp 1// 2/.} 你看我多么 {tp 
   )
   check('adj1190 首页/页脚有曲库入口', readSrc('index.html').includes('href="/scores/"'))
   check('adj1190 曲库共用样式 scores.css 存在', existsSync(join(scoresRoot, 'scores.css')))
+
+  /* ---- adj1191（P1）：分享卡 / zip / ?src= ---- */
+  const ogBad: string[] = []
+  let ogCount = 0
+  for (const dir of scoreDirs) {
+    const pngPath = join(scoresRoot, dir, 'og.png')
+    if (!existsSync(pngPath)) continue
+    ogCount++
+    const b = readFileSync(pngPath)
+    const isPng = b.length >= 24 && b[0] === 0x89 && b.toString('ascii', 1, 4) === 'PNG'
+    if (!isPng) {
+      ogBad.push(`${dir}: 不是 PNG`)
+      continue
+    }
+    const w = b.readUInt32BE(16)
+    const h = b.readUInt32BE(20)
+    if (w !== 1200 || h !== 630) ogBad.push(`${dir}: ${w}×${h}`)
+  }
+  check('adj1191 已生成的分享卡都是 1200×630 PNG', ogBad.length === 0, ogBad.join('；'))
+  check('adj1191 八份谱都有分享卡 og.png（本地 `npm run score:og` 生成并提交）', ogCount >= 8, `${ogCount} 张`)
+  const genScoresSrc1191 = readSrc('scripts/gen-scores.mts')
+  check(
+    'adj1191 详情页接了 zip 下载（构建期用 `writeZip` 打 `.jps + README.txt`）',
+    genScoresSrc1191.includes('writeZip') && genScoresSrc1191.includes("name: 'README.txt'"),
+  )
+  check('adj1191 本地分享卡脚本与 npm 入口都在', existsSync(join(process.cwd(), 'scripts/gen-og.mjs')) &&
+    pkg1190.scripts['score:og']?.includes('gen-og.mjs') === true)
 
   // ---- ⑥ 文档页与应用内帮助同源：渲染器抽成了纯模块，且目录锚点与标题 id 逐个一致 ----
   const mdSrc = readSrc('src/help/markdown.ts')
@@ -30509,6 +30546,29 @@ C2: 歌，@那么我@是想要画你的手。@ {tp 1// 2/.} 你看我多么 {tp 
       readJpsFromSearch('?jps=' + 'x'.repeat(JPS_PARAM_MAX_LEN + 1)) === null)
   check('adj900 用完把 `jps` 抹掉，别的参数原样保留',
     withoutJpsParam('?jps=abc') === '' && withoutJpsParam('?jps=abc&&x=1') === '?x=1')
+
+  /* ---- adj1191（P1）：`?src=<站内 .jps 地址>` ---- */
+  check('adj1191 `?src=` 能取回站内地址 / https 地址',
+    readSrcFromSearch('?src=' + encodeURIComponent('/scores/star/score.jps')) === '/scores/star/score.jps' &&
+      readSrcFromSearch('?src=' + encodeURIComponent('https://ijipu.pages.dev/scores/star/score.jps')) ===
+        'https://ijipu.pages.dev/scores/star/score.jps')
+  check('adj1191 空串 / 超长 / 协议相对地址都不认',
+    readSrcFromSearch('?src=') === null &&
+      readSrcFromSearch('?src=' + 'x'.repeat(SRC_URL_MAX_LEN + 1)) === null &&
+      readSrcFromSearch('?src=' + encodeURIComponent('//evil.example/x.jps')) === null)
+  check('adj1191 非 http(s) 协议一律拒绝（`javascript:` / `data:` / `file:`）',
+    readSrcFromSearch('?src=' + encodeURIComponent('javascript:alert(1)')) === null &&
+      readSrcFromSearch('?src=' + encodeURIComponent('data:text/plain,B: 试')) === null &&
+      readSrcFromSearch('?src=' + encodeURIComponent('file:///C:/x.jps')) === null)
+  check('adj1191 同源判断：https 放行、http 只放行同源/localhost、其它协议拒绝',
+    isAllowedJpsSrc('/scores/star/score.jps', 'https://ijipu.pages.dev/app/') &&
+      isAllowedJpsSrc('https://ijipu.pages.dev/scores/star/score.jps', 'http://localhost:5173/app/') &&
+      isAllowedJpsSrc('http://localhost:5173/scores/star/score.jps', 'http://localhost:5173/app/') &&
+      !isAllowedJpsSrc('http://evil.example/x.jps', 'https://ijipu.pages.dev/app/') &&
+      !isAllowedJpsSrc('javascript:alert(1)', 'https://ijipu.pages.dev/app/'))
+  check('adj1191 用完把 `jps` 与 `src` 一起抹掉',
+    withoutJpsParam('?src=%2Fscores%2Fstar%2Fscore.jps') === '' &&
+      withoutJpsParam('?jps=abc&src=%2Fx.jps&x=1') === '?x=1')
 }
 
 /**

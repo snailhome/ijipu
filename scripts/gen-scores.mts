@@ -43,6 +43,7 @@ import {
 } from '@ijipu/engine'
 import { brand } from '../src/brand/tokens'
 import { SITE_THEME_KEY, SITE_VARS } from '../src/brand/siteVars'
+import { writeZip } from '../src/export/zip'
 import { mdToHtml } from '../src/help/markdown'
 
 /* ------------------------------------------------------------------ */
@@ -151,6 +152,8 @@ interface Entry {
   pageUrl: string
   /** 封面 URL */
   coverUrl: string
+  /** 分享卡 PNG（本地 `npm run score:og` 生成；没有就用站点图标兜底） */
+  ogUrl: string
 }
 
 /* ------------------------------------------------------------------ */
@@ -330,6 +333,11 @@ function readEntries(): Entry[] {
       srcUrl: meta.file ?? `/scores/${slug}/score.jps`,
       pageUrl: `/scores/${slug}/`,
       coverUrl,
+      /**
+       * adj1191：分享卡由本地脚本生成并提交（CI 里没有 Chrome）⇒ 这里只**检查存在**。
+       * 没有就退回站点图标，`og:image` 永远是一个合法 PNG，不会 404。
+       */
+      ogUrl: existsSync(join(PUBLIC, 'scores', slug, 'og.png')) ? `/scores/${slug}/og.png` : '',
     })
   }
 
@@ -448,9 +456,11 @@ function headHTML(options: {
   title: string
   description: string
   canonical: string
+  ogImage?: string
   extra?: string
 }): string {
   const { title, description, canonical, extra = '' } = options
+  const ogImage = options.ogImage ?? `${SITE}/icons/pwa-512.png`
   return `<!doctype html>
 <html lang="zh-CN" data-site-mode="dark">
 <head>
@@ -466,7 +476,7 @@ function headHTML(options: {
 <meta property="og:title" content="${esc(title)}" />
 <meta property="og:description" content="${esc(description)}" />
 <meta property="og:url" content="${esc(canonical)}" />
-<meta property="og:image" content="${SITE}/icons/pwa-512.png" />
+<meta property="og:image" content="${esc(ogImage)}" />
 <style>
 :root[data-site-mode="dark"]{${varsOf('dark')}}
 :root[data-site-mode="light"]{${varsOf('light')}}
@@ -505,9 +515,11 @@ function footerHTML(): string {
 function detailHTML(rendered: Rendered): string {
   const { entry, previewSvgs: svgs, lines } = rendered
   const { meta, code, srcUrl } = entry
-  const encoded = encodeURIComponent(code)
-  const canInline = encoded.length <= 7500
-  const appHref = canInline ? `/app/?jps=${encoded}` : '/app/'
+  /**
+   * adj1191（P1）：编辑入口改用 `?src=<.jps 地址>`，不再把整份源码塞进 URL。
+   * 好处：不受 8000 字符限制、长谱也能带过去；代价：应用要多发一次同源请求（几 KB）。
+   */
+  const appHref = `/app/?src=${encodeURIComponent(srcUrl)}`
   const tags = (meta.tags ?? []).map((t) => `<span class="tag">${esc(t)}</span>`).join('')
   const description = `${meta.title} · ${meta.composer}。用 .jps 脚本写的简谱，可看源码、预览，或在爱记谱里编辑。`
   const note = meta.note ? `<div class="note">${mdToHtml(meta.note)}</div>` : ''
@@ -536,8 +548,9 @@ ${topbarHTML('scores')}
         <span class="site-mark">${esc(SITE.replace(/^https?:\/\//, ''))} · ${esc(brand.author)}</span>
       </div>
       <div class="actions no-plain">
-        <a class="btn btn-primary" href="${esc(appHref)}"${canInline ? '' : ' title="源码较长，请下载后在应用里打开"'}>${canInline ? '在应用里编辑' : '下载后在应用里打开'}</a>
+        <a class="btn btn-primary" href="${esc(appHref)}">在应用里编辑</a>
         <a class="btn" href="${esc(srcUrl)}" download>下载 .jps</a>
+        <a class="btn" href="/scores/${esc(meta.slug)}/score.zip" download>下载 .zip</a>
         <button class="btn" type="button" id="copy">复制源码</button>
         <a class="btn" href="/scores/">全部乐谱</a>
       </div>
@@ -588,7 +601,12 @@ ${topbarHTML('scores')}
 </body>
 </html>`
 
-  return headHTML({ title, description, canonical: `${SITE}${entry.pageUrl}` }) + body
+  return headHTML({
+    title,
+    description,
+    canonical: `${SITE}${entry.pageUrl}`,
+    ogImage: entry.ogUrl ? `${SITE}${entry.ogUrl}` : undefined,
+  }) + body
 }
 
 function retiredHTML(entry: Entry): string {
@@ -778,8 +796,22 @@ ${topbarHTML('')}
 </html>`
 }
 
-function sitemapXML(entries: Entry[], today: string): string {
-  const pages = ['/', '/app/', '/manual/', '/syntax/', '/plugin/', '/cli/', '/soundfonts/', '/scores/', '/copyright/']
+/** zip 里的说明文件：让别人拿到 zip 也知道来源与许可（不把 `.jps` 变成"来历不明的文件"） */
+function scoreReadme(entry: Entry): string {
+  const m = entry.meta
+  return [
+    `曲名：${m.title}`,
+    `作曲/作词：${m.composer}`,
+    `来源：${m.source}`,
+    `许可：记谱 / 排版 ${CONTENT_LICENSE}（商用请联系 ${brand.authorEmail}）`,
+    `页面：${SITE}${entry.pageUrl}`,
+    '',
+    '用「爱记谱 iJipu」打开 score.jps 即可编辑、试听、导出。',
+    `应用：${SITE}/app/`,
+  ].join('\n') + '\n'
+}
+
+function sitemapXML(entries: Entry[], today: string): string {  const pages = ['/', '/app/', '/manual/', '/syntax/', '/plugin/', '/cli/', '/soundfonts/', '/scores/', '/copyright/']
   const rows: string[] = []
   for (const p of pages) rows.push(`  <url><loc>${SITE}${p}</loc><lastmod>${today}</lastmod></url>`)
   for (const e of entries) {
@@ -820,6 +852,19 @@ function main(): void {
     const dir = join(DIST, 'scores', meta.slug)
     mkdirSync(dir, { recursive: true })
     writeFileSync(join(dir, 'cover.svg'), r.cover, 'utf8')
+    /**
+     * adj1191（P1）：`.jps + README.txt` 的小 zip（store 不压缩；复用 `export/zip.ts`）。
+     * 为什么不把图片也打进去：P1 的 8 份谱都没有附属图片；等 P2 的 URL 取图通道上线后，
+     * 再把 `assets/**` 一起收进来（那时才需要处理路径与大小）。
+     */
+    const encoder = new TextEncoder()
+    writeFileSync(
+      join(dir, 'score.zip'),
+      writeZip([
+        { name: 'score.jps', data: encoder.encode(r.entry.code) },
+        { name: 'README.txt', data: encoder.encode(scoreReadme(r.entry)) },
+      ]),
+    )
     writePage(join(dir, 'index.html'), meta.status === 'retired' ? retiredHTML(r.entry) : detailHTML(r))
     console.log(
       `[scores] ${meta.slug}: ${r.svgs.length} 页, ${r.lines} 行源码, 封面 ${meta.status === 'retired' ? '(下架)' : 'ok'}`,
@@ -855,6 +900,7 @@ function main(): void {
         short: e.meta.short,
         url: e.pageUrl,
         src: e.srcUrl,
+        zip: `/scores/${e.meta.slug}/score.zip`,
         cover: e.coverUrl,
         publishedAt: e.meta.publishedAt,
         updatedAt: e.meta.updatedAt,

@@ -11727,3 +11727,16 @@ smoke 五条含"来源切换成对"结构断言与负对照） |
 - **验证**：CDP 探针输出 `{"iw":390,"sw":390,"wide":[]}`；截图 780×1688（2x）。
 - **预防**：`--screenshot` 只能当"静态预览"，不能当响应式判据；移动端布局必须用 CDP/DevTools 设备模拟。
 
+### E-2026-557 `npm run dev` 里顶栏「乐谱」点开是 404（adj1191）
+
+- **现象**：`npm run build && npm run preview` 下 `/scores/` 正常；但 `npm run dev` 里点顶栏「乐谱」返回 404。
+- **根因**：曲库页面是**构建期生成**到 `dist/scores/` 的，Vite dev 只服务仓库根与 `public/`；
+  `public/scores/` 里只有 `.jps` / `meta.json` / `scores.css` / `og.png`，没有 `index.html`。
+- **解决**：`vite.config.ts` 加 `scoresDevPlugin()`（仅 `apply: 'serve'`）：
+  启动时跑一次 `npm run scores:gen`，把 `/scores/*` 的请求转到 `dist/scores/`；
+  `public/scores/**` 变化时防抖 300ms 重生成。`/scores` → 301 `/scores/`，目录请求补 `index.html`。
+- **验证**：dev（5174）实测 `/scores/` 200（11862B）、`/scores/star/` 200（15294B）、
+  `score.zip` 200 application/zip、`score.jps` 200；首页顶栏出现「乐谱」。
+- **预防**：**"构建期生成"的页面必须同时给 dev 一条服务路径**（中间件或 dev 插件），
+  否则只有 build+preview 才能看到；用户点一次 404 就会以为功能没做。
+
