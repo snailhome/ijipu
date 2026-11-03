@@ -462,7 +462,7 @@ function headHTML(options: {
   const { title, description, canonical, extra = '' } = options
   const ogImage = options.ogImage ?? `${SITE}/icons/pwa-512.png`
   return `<!doctype html>
-<html lang="zh-CN" data-site-mode="dark">
+<html lang="zh-CN" data-site-mode="dark" data-theme-key="${esc(SITE_THEME_KEY)}">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -486,6 +486,27 @@ html{background:var(--site-bg)}
 try{var m=localStorage.getItem(${JSON.stringify(SITE_THEME_KEY)});document.documentElement.dataset.siteMode=m==='light'?'light':'dark'}catch(e){}
 try{if(/[?&]plain=1(?:&|$)/.test(location.search))document.documentElement.dataset.plain='1'}catch(e){}
 </script>
+<script>
+/* adj1193：深浅主题切换（与首页同一个 localStorage 键，回首页也保持一致） */
+document.addEventListener('DOMContentLoaded', function () {
+  var btn = document.getElementById('theme-toggle');
+  if (!btn) return;
+  var root = document.documentElement;
+  var key = root.getAttribute('data-theme-key') || 'ijipu.site.theme';
+  function sync() {
+    var light = root.dataset.siteMode === 'light';
+    btn.setAttribute('aria-label', light ? '切换深色主题' : '切换浅色主题');
+    btn.title = light ? '切换深色主题' : '切换浅色主题';
+  }
+  sync();
+  btn.addEventListener('click', function () {
+    var next = root.dataset.siteMode === 'light' ? 'dark' : 'light';
+    root.dataset.siteMode = next;
+    try { localStorage.setItem(key, next); } catch (e) {}
+    sync();
+  });
+});
+</script>
 <link rel="stylesheet" href="/scores/scores.css" />
 ${extra}
 </head>`
@@ -501,6 +522,10 @@ function topbarHTML(active: 'scores' | 'copyright' | ''): string {
       <a class="nav-doc" href="/manual/">文档</a>
       <a href="/app/">打开应用</a>
     </nav>
+    <button class="theme-toggle" id="theme-toggle" type="button" title="切换深浅主题" aria-label="切换深浅主题">
+      <span class="ico-sun" aria-hidden="true">🌞</span>
+      <span class="ico-moon" aria-hidden="true">🌙</span>
+    </button>
   </div>
 </header>`
 }

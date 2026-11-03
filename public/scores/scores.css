@@ -115,6 +115,37 @@ pre {
   color: var(--site-accent);
 }
 
+/* adj1193：深浅主题切换（样式与首页 `.theme-toggle` 同源） */
+.theme-toggle {
+  appearance: none;
+  flex: 0 0 auto;
+  background: transparent;
+  border: 1px solid var(--site-border);
+  border-radius: 9px;
+  color: var(--site-text-2);
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  padding: 6px 9px;
+}
+
+.theme-toggle:hover {
+  border-color: var(--site-accent);
+  background: var(--site-panel-hover);
+}
+
+.theme-toggle .ico-moon {
+  display: none;
+}
+
+html[data-site-mode='light'] .theme-toggle .ico-sun {
+  display: none;
+}
+
+html[data-site-mode='light'] .theme-toggle .ico-moon {
+  display: inline;
+}
+
 /* ---------- 页头 ---------- */
 
 .page-head {
