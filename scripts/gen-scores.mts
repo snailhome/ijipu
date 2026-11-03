@@ -27,8 +27,8 @@
  * ⚠ 这个文件里的 HTML 全部用**模板字符串**拼；不要在模板字符串的注释里写反引号
  *   （`E-2026-396` 同族：反引号会提前终止字符串，报错行号还指向几百行外）。
  */
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
+import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import { basename, dirname, join, relative, resolve } from 'node:path'
 import {
   applyRangeToSvg,
   defaultPageConfig,
@@ -55,6 +55,8 @@ import { mdToHtml } from '../src/help/markdown'
 const ROOT = process.cwd()
 const PUBLIC = join(ROOT, 'public')
 const SRC = join(PUBLIC, 'scores')
+/** adj1194：本地乐谱库（工作格式 = 每首一个目录；zip 只在 _inbox/_packages） */
+const LIB = join(ROOT, 'scores-library')
 const DIST = join(ROOT, 'dist')
 const SITE = brand.siteUrl.replace(/\/+$/, '')
 
@@ -99,6 +101,8 @@ const RESERVED_SHORT = new Set([
 
 /** 允许的 meta 键（未知键直接报错，防手滑） */
 const META_KEYS = new Set([
+  'format',
+  'version',
   'slug',
   'title',
   'composer',
@@ -119,6 +123,10 @@ const META_KEYS = new Set([
   'note',
   'publishedAt',
   'updatedAt',
+  'assets',
+  'contentHash',
+  'importedAt',
+  'sourceZip',
 ])
 
 interface ScoreMeta {
@@ -144,6 +152,11 @@ interface ScoreMeta {
   updatedAt: string
 }
 
+interface ScoreSource {
+  dir: string
+  kind: 'public' | 'library'
+}
+
 interface Entry {
   meta: ScoreMeta
   /** 谱面原文 */
@@ -156,6 +169,10 @@ interface Entry {
   coverUrl: string
   /** 分享卡 PNG（本地 `npm run score:og` 生成；没有就用站点图标兜底） */
   ogUrl: string
+  /** 来源目录（`public/scores/<slug>` 或 `scores-library/**\/<slug>`） */
+  sourceDir: string
+  /** 来源：老内容在 public/scores，新的在 scores-library */
+  kind: 'public' | 'library'
 }
 
 /* ------------------------------------------------------------------ */
@@ -185,9 +202,9 @@ function isDate(value: unknown): value is string {
   return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)
 }
 
-function needString(value: unknown, field: string, dir: string): string {
+function needString(value: unknown, field: string, where: string): string {
   if (typeof value !== 'string' || value.trim() === '') {
-    fail(`public/scores/${dir}/meta.json 的 ${field} 必须是非空字符串`)
+    fail(`${where}/meta.json 的 ${field} 必须是非空字符串`)
   }
   return value.trim()
 }
@@ -203,42 +220,74 @@ function varsOf(mode: 'dark' | 'light'): string {
 /* 读取与校验                                                          */
 /* ------------------------------------------------------------------ */
 
+function listPublicSources(): ScoreSource[] {
+  if (!existsSync(SRC)) return []
+  return readdirSync(SRC, { withFileTypes: true })
+    .filter((d) => d.isDirectory() && !d.name.startsWith('_') && !d.name.startsWith('.'))
+    .map((d) => ({ dir: join(SRC, d.name), kind: 'public' as const }))
+    .sort((a, b) => a.dir.localeCompare(b.dir))
+}
+
+/** 递归扫库：`_inbox` / `_packages` / `_trash` 与点目录不参与 */
+function listLibrarySources(): ScoreSource[] {
+  if (!existsSync(LIB)) return []
+  const out: ScoreSource[] = []
+  const walk = (dir: string): void => {
+    for (const d of readdirSync(dir, { withFileTypes: true })) {
+      if (!d.isDirectory()) continue
+      if (d.name.startsWith('_') || d.name.startsWith('.')) continue
+      const p = join(dir, d.name)
+      if (existsSync(join(p, 'meta.json'))) out.push({ dir: p, kind: 'library' })
+      else walk(p)
+    }
+  }
+  walk(LIB)
+  return out.sort((a, b) => a.dir.localeCompare(b.dir))
+}
+
 function readEntries(): Entry[] {
-  if (!existsSync(SRC)) fail('找不到 public/scores/')
-  const dirs = readdirSync(SRC, { withFileTypes: true })
-    .filter((d) => d.isDirectory())
-    .map((d) => d.name)
-    .sort()
+  const sources = [...listPublicSources(), ...listLibrarySources()]
+  if (sources.length === 0) fail('public/scores/ 与 scores-library/ 都没有条目')
 
   const entries: Entry[] = []
   const shortOwner = new Map<string, string>()
+  const slugOwner = new Map<string, string>()
 
-  for (const dir of dirs) {
-    const metaPath = join(SRC, dir, 'meta.json')
-    if (!existsSync(metaPath)) fail(`public/scores/${dir}/ 缺少 meta.json`)
+  for (const src of sources) {
+    const dir = src.dir
+    const where = relative(ROOT, dir).replace(/\\/g, '/')
+    const metaPath = join(dir, 'meta.json')
+    if (!existsSync(metaPath)) fail(`${where}/ 缺少 meta.json`)
 
     let raw: unknown
     try {
       raw = JSON.parse(readFileSync(metaPath, 'utf8'))
     } catch (e) {
-      fail(`public/scores/${dir}/meta.json 不是合法 JSON：${e instanceof Error ? e.message : String(e)}`)
+      fail(`${where}/meta.json 不是合法 JSON：${e instanceof Error ? e.message : String(e)}`)
     }
     if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-      fail(`public/scores/${dir}/meta.json 顶层必须是对象`)
+      fail(`${where}/meta.json 顶层必须是对象`)
     }
     const obj = raw as Record<string, unknown>
 
     const unknown = Object.keys(obj).filter((k) => !META_KEYS.has(k))
-    if (unknown.length > 0) fail(`public/scores/${dir}/meta.json 有未知字段：${unknown.join('、')}`)
+    if (unknown.length > 0) fail(`${where}/meta.json 有未知字段：${unknown.join('、')}`)
+    if (obj.format !== undefined && obj.format !== 'ijipu-score-package') {
+      fail(`${where}/meta.json 的 format 只能是 ijipu-score-package`)
+    }
+    if (obj.version !== undefined && obj.version !== 1) fail(`${where}/meta.json 的 version 只能是 1`)
 
-    const slug = needString(obj.slug, 'slug', dir)
-    if (!/^[a-z0-9-]+$/.test(slug)) fail(`slug「${slug}」只能用小写字母、数字、连字符`)
-    if (slug !== dir) fail(`目录名「${dir}」与 slug「${slug}」不一致`)
+    const slug = needString(obj.slug, 'slug', where)
+    if (!/^[a-z0-9-]+$/.test(slug)) fail(`slug「${slug}」只能用小写字母、数字、连字符（${where}）`)
+    if (slug !== basename(dir)) fail(`目录名「${basename(dir)}」与 slug「${slug}」不一致（${where}）`)
+    const slugPrev = slugOwner.get(slug)
+    if (slugPrev !== undefined) fail(`slug「${slug}」同时出现在 ${slugPrev} 和 ${where}`)
+    slugOwner.set(slug, where)
 
-    const title = needString(obj.title, 'title', dir)
-    const composer = needString(obj.composer, 'composer', dir)
-    const source = needString(obj.source, 'source', dir)
-    const short = needString(obj.short, 'short', dir)
+    const title = needString(obj.title, 'title', where)
+    const composer = needString(obj.composer, 'composer', where)
+    const source = needString(obj.source, 'source', where)
+    const short = needString(obj.short, 'short', where)
     if (!/^[a-z]{3,6}$/.test(short)) fail(`${slug} 的 short「${short}」必须是 3-6 位小写字母`)
     if (RESERVED_SHORT.has(short)) fail(`${slug} 的 short「${short}」是保留字`)
     const owner = shortOwner.get(short)
@@ -251,7 +300,7 @@ function readEntries(): Entry[] {
     const status = obj.status ?? 'published'
     if (status !== 'published' && status !== 'retired') fail(`${slug} 的 status 只能是 published / retired`)
     if (status === 'retired') {
-      needString(obj.retiredReason, 'retiredReason', dir)
+      needString(obj.retiredReason, 'retiredReason', where)
       if (!isDate(obj.retiredAt)) fail(`${slug} 下架时必须写 retiredAt（YYYY-MM-DD）`)
     }
 
@@ -263,6 +312,8 @@ function readEntries(): Entry[] {
       if (!Array.isArray(tags) || tags.some((t) => typeof t !== 'string' || t.trim() === '')) {
         fail(`${slug} 的 tags 必须是非空字符串数组`)
       }
+    } else if (src.kind === 'library') {
+      fail(`${slug}：scores-library 的条目必须有 tags（哪怕是空数组）`)
     }
 
     const difficulty = obj.difficulty
@@ -288,6 +339,7 @@ function readEntries(): Entry[] {
       if (typeof file !== 'string' || !file.startsWith('/') || file.includes('..')) {
         fail(`${slug} 的 file 必须是以 / 开头、相对 public/ 的路径（不许出现 ..）`)
       }
+      if (src.kind === 'library') fail(`${slug}：scores-library 的条目必须自带 score.jps，不能用 file 引用`)
     }
 
     const meta: ScoreMeta = {
@@ -313,15 +365,12 @@ function readEntries(): Entry[] {
       updatedAt: obj.updatedAt,
     }
 
-    const scorePath = meta.file ? resolve(PUBLIC, '.' + meta.file) : join(SRC, dir, 'score.jps')
-    if (!scorePath.startsWith(PUBLIC)) fail(`${slug} 的 file 越出了 public/`)
+    const scorePath = meta.file ? resolve(PUBLIC, '.' + meta.file) : join(dir, 'score.jps')
+    if (meta.file) {
+      if (!scorePath.startsWith(PUBLIC)) fail(`${slug} 的 file 越出了 public/`)
+    }
     if (!existsSync(scorePath)) fail(`${slug} 的谱面文件不存在：${scorePath}`)
 
-    /**
-     * 封面：允许 `meta.cover` 覆盖自动封面。
-     * 相对路径按"本条目目录"解释（`assets/cover.webp` ⇒ `/scores/<slug>/assets/cover.webp`），
-     * 绝对路径原样用；这样以后加作者封面不用改生成器。
-     */
     const coverUrl =
       typeof meta.cover === 'string' && meta.cover.trim() !== ''
         ? meta.cover.startsWith('/')
@@ -335,15 +384,11 @@ function readEntries(): Entry[] {
       srcUrl: meta.file ?? `/scores/${slug}/score.jps`,
       pageUrl: `/scores/${slug}/`,
       coverUrl,
-      /**
-       * adj1191：分享卡由本地脚本生成并提交（CI 里没有 Chrome）⇒ 这里只**检查存在**。
-       * 没有就退回站点图标，`og:image` 永远是一个合法 PNG，不会 404。
-       */
-      ogUrl: existsSync(join(PUBLIC, 'scores', slug, 'og.png')) ? `/scores/${slug}/og.png` : '',
+      ogUrl: existsSync(join(dir, 'og.png')) ? `/scores/${slug}/og.png` : '',
+      sourceDir: dir,
+      kind: src.kind,
     })
   }
-
-  if (entries.length === 0) fail('public/scores/ 里一个条目都没有')
 
   entries.sort((a, b) => {
     const oa = a.meta.order ?? 100
@@ -889,6 +934,18 @@ function main(): void {
     const { meta } = r.entry
     const dir = join(DIST, 'scores', meta.slug)
     mkdirSync(dir, { recursive: true })
+    /**
+     * adj1194：`scores-library/` 不在 `public/` 里，Vite 不会自动复制。
+     * 这里把下载与 `?src=` 需要的文件搬进 `dist`；`public/scores/` 的旧条目仍由 Vite 复制。
+     */
+    if (r.entry.kind === 'library') {
+      copyFileSync(join(r.entry.sourceDir, 'score.jps'), join(dir, 'score.jps'))
+      copyFileSync(join(r.entry.sourceDir, 'meta.json'), join(dir, 'meta.json'))
+      const assetsDir = join(r.entry.sourceDir, 'assets')
+      if (existsSync(assetsDir)) cpSync(assetsDir, join(dir, 'assets'), { recursive: true })
+      const ogPath = join(r.entry.sourceDir, 'og.png')
+      if (existsSync(ogPath)) copyFileSync(ogPath, join(dir, 'og.png'))
+    }
     writeFileSync(join(dir, 'cover.svg'), r.cover, 'utf8')
     /**
      * adj1191（P1）：`.jps + README.txt` 的小 zip（store 不压缩；复用 `export/zip.ts`）。

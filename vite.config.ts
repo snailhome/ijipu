@@ -71,11 +71,16 @@ function scoresDevPlugin(): Plugin {
       generate()
       // 改 `public/scores/**` 后自动重生成（防抖 300ms）；只监听这个目录，不碰应用源码
       const scoresSrc = join(root, 'public/scores')
+      const librarySrc = join(root, 'scores-library')
       server.watcher.add(scoresSrc)
+      server.watcher.add(librarySrc)
       let timer: ReturnType<typeof setTimeout> | null = null
+      const under = (base: string, file: string): boolean => {
+        const rel = relative(base, file)
+        return rel !== '' && !rel.startsWith('..')
+      }
       server.watcher.on('all', (_event, file) => {
-        const rel = relative(scoresSrc, file)
-        if (rel.startsWith('..') || rel === '') return
+        if (!under(scoresSrc, file) && !under(librarySrc, file)) return
         if (timer) clearTimeout(timer)
         timer = setTimeout(generate, 300)
       })

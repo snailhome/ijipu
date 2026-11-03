@@ -29317,6 +29317,12 @@ C2: 歌，@那么我@是想要画你的手。@ {tp 1// 2/.} 你看我多么 {tp 
       genScoresSrc1191.includes('data-theme-key') &&
       readSrc('public/scores/scores.css').includes('.theme-toggle'),
   )
+  check(
+    'adj1194 乐谱库目录（scores-library/README.md）存在，生成器合并它而不是只读 public/scores',
+    existsSync(join(process.cwd(), 'scores-library', 'README.md')) &&
+      genScoresSrc1191.includes('scores-library') &&
+      genScoresSrc1191.includes('listLibrarySources'),
+  )
 
   // ---- ⑥ 文档页与应用内帮助同源：渲染器抽成了纯模块，且目录锚点与标题 id 逐个一致 ----
   const mdSrc = readSrc('src/help/markdown.ts')
