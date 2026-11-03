@@ -157,10 +157,11 @@ scores-library/
 
 **本地 Node 服务 + 浏览器 UI**（`http://127.0.0.1:<port>`），不装 Electron/Tauri，不出安装包。
 
-- 代码放 `tools/score-library/`，与站点同一个 git 仓库，但**不进 Vite 站点构建**；
+- **工具与工作库放私有仓**（默认 `D:\Coding\JianpuScript\iJipu-Library`，本地 git，不建公开远程）；
+- 公开站点仓（`ijipu`）只放**已发布镜像** `scores-library/`，不放工具代码；
 - 前端复用 `@ijipu/engine` 渲染预览（与网站/文档页同源），不另写渲染器；
 - Node 侧只用内置 `node:http` / `node:fs` / `node:child_process`，不引重依赖；
-- zip 读写复用 `src/export/zip.ts` 的 `readZip` / `writeZip`。
+- zip 读写复用站点的 `src/export/zip.ts` 逻辑（跨仓引用不便时抽共享模块；不要各写一套不一致的实现）。
 
 ### 7.2 功能
 
@@ -170,7 +171,7 @@ scores-library/
 | 查看 | 显示 meta、README、资源清单、包大小 |
 | 预览 | 引擎渲染 SVG（含 `assets` 的 data URI）；可切换整页/裁墨迹 |
 | 打开 | 「用 iJipu 打开」调系统默认程序 / 复制路径（不假装内置编辑器） |
-| 导入 | 拖入 zip → 校验 → 解到 `scores-library/<slug>/`；同 slug 询问"覆盖/并存" |
+| 导入 | 拖入 zip → 校验 → 解到 `library/<slug>/`；同 slug 询问"覆盖/并存" |
 | 编辑 | 改 meta 字段；保存写回 `meta.json`（zip 用导出的方式另存） |
 | 导出 | 把库目录打成 `<slug>.zip` 到 `_packages/`（分享/备份） |
 | 下架 | 设 `status: retired`，移到 `_trash/` 或保留；列表隐藏，站点出下架页 |
@@ -181,24 +182,25 @@ scores-library/
 
 ```
 点「更新乐谱库」
-  → 扫描 scores-library/
+  → 扫描私有库 library/
   → 逐条校验（§八）
   → 有错：列出文件与原因，停止，不 push
-  → 无错：npm run build（本地先过一遍）
-  → git add scores-library
-  → git commit -m "chore(library): sync N scores"
-  → git push origin main
+  → 无错：把「已发布」条目复制到公开站点仓的 scores-library/
+  → 在站点仓 npm run build（本地先过一遍）
+  → 站点仓 git add scores-library && commit && push origin main
   → 提示：已推送，Cloudflare 约 1-2 分钟构建；给出线上地址
 ```
 
 - 没有改动时不 commit；push 失败时原样显示 git stderr；
 - 不自建账号、不存 token；用本机 git 凭据；
 - 工具只绑 `127.0.0.1`，加一次性 token 防本机其它页面误调；不做公网访问。
+- 私有库自己也可以单独 commit（历史/回滚），但**不 push 到公开远程**。
 
 ### 7.4 工具不发布
 
-- `tools/score-library/` 只进 git，不进 `vite.config.ts` 的入口、不进安装包、不上 Pages；
-- 它自己的 `npm run library` 启动；没有版本号/Release 负担。
+- 工具在**私有仓**里，天然不公开；不进站点 `vite.config.ts`、不进安装包、不上 Pages；
+- 它自己的 `npm start` 启动；没有版本号/Release 负担。
+- 公开站点仓只多一个 `scores-library/` 镜像目录（已发布内容，本来就要公开）。
 
 ---
 
@@ -233,10 +235,11 @@ scores-library/
 
 ---
 
-## 十一、待拍板
+## 十一、已定（2026-11-03）
 
-1. 库的工作格式：**目录**（推荐，编辑/预览简单）／**zip 为唯一源**（工具频繁解包重打）？
-2. 工具形态：本地 Web（推荐）／Tauri 桌面窗口？
-3. 工具与站点：**同一个 git 仓库**（推荐，一键 push）／单独仓库 + 子模块？
-4. 首页示例：`示例谱` tag（用户口径）／`homeSample` 布尔（更防错）？
-5. 现有 8 份：保持 `public/scores`（推荐先不动）／迁入 `scores-library`？
+1. **库的工作格式**：目录（每首一个文件夹）；zip 只做导入/导出/分享。
+2. **工具形态**：本地 Node + 浏览器 UI；不用 Tauri/Electron。
+3. **仓库**：工具 + 工作库放**私有仓**（`D:\Coding\JianpuScript\iJipu-Library`，本地 git，不建公开远程）；
+   公开站点仓只接收已发布镜像 `scores-library/`。
+4. **首页示例**：`示例谱` tag；S4 做首页改造。
+5. **现有 8 份**：S2/S3 完成后再迁入私有库，站点侧迁到 `scores-library/`。
