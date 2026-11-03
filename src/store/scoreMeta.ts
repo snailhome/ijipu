@@ -40,6 +40,31 @@ export interface ScoreMetaAsset {
   role: 'background' | 'watermark' | 'cover'
 }
 
+/** 应用里水印/背景的**渲染设置**（不只是图片文件）；导入乐谱库后要按这些值画 */
+export interface OverlayMeta {
+  bg?: {
+    enabled: boolean
+    scale: number
+    rotate: number
+    opacity: number
+    offsetX: number
+    offsetY: number
+  }
+  wm?: {
+    enabled: boolean
+    type: 'text' | 'image'
+    text?: string
+    size: number
+    scale: number
+    rotate: number
+    opacity: number
+    repeat: boolean
+    repeatGap: number
+    offsetX: number
+    offsetY: number
+  }
+}
+
 export interface ScoreMetaDoc {
   format?: 'ijipu-score-meta' | 'ijipu-score-package'
   version?: number
@@ -54,6 +79,7 @@ export interface ScoreMetaDoc {
   excerpt?: string
   note?: string
   assets?: ScoreMetaAsset[]
+  overlay?: OverlayMeta
   rights?: ScoreRights
 }
 
@@ -110,6 +136,41 @@ function normalizeRights(raw: unknown): ScoreRights | undefined {
   return Object.keys(r).length > 0 ? r : undefined
 }
 
+function normalizeOverlay(raw: unknown): OverlayMeta | undefined {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return undefined
+  const o = raw as Record<string, unknown>
+  const num = (v: unknown, dflt: number): number => (typeof v === 'number' && Number.isFinite(v) ? v : dflt)
+  const out: OverlayMeta = {}
+  if (typeof o.bg === 'object' && o.bg !== null && !Array.isArray(o.bg)) {
+    const b = o.bg as Record<string, unknown>
+    out.bg = {
+      enabled: b.enabled !== false,
+      scale: num(b.scale, 100),
+      rotate: num(b.rotate, 0),
+      opacity: num(b.opacity, 100),
+      offsetX: num(b.offsetX, 0),
+      offsetY: num(b.offsetY, 0),
+    }
+  }
+  if (typeof o.wm === 'object' && o.wm !== null && !Array.isArray(o.wm)) {
+    const w = o.wm as Record<string, unknown>
+    out.wm = {
+      enabled: w.enabled !== false,
+      type: w.type === 'image' ? 'image' : 'text',
+      ...(typeof w.text === 'string' ? { text: w.text } : {}),
+      size: num(w.size, 22),
+      scale: num(w.scale, 100),
+      rotate: num(w.rotate, -45),
+      opacity: num(w.opacity, 25),
+      repeat: w.repeat === true,
+      repeatGap: num(w.repeatGap, 300),
+      offsetX: num(w.offsetX, 0),
+      offsetY: num(w.offsetY, 0),
+    }
+  }
+  return out.bg !== undefined || out.wm !== undefined ? out : undefined
+}
+
 function parseMeta(text: string): ScoreMetaDoc | null {
   try {
     const raw = JSON.parse(text) as unknown
@@ -133,6 +194,7 @@ function parseMeta(text: string): ScoreMetaDoc | null {
       ...(typeof o.excerpt === 'string' ? { excerpt: o.excerpt } : {}),
       ...(typeof o.note === 'string' ? { note: o.note } : {}),
       ...(Array.isArray(o.assets) ? { assets: o.assets as ScoreMetaAsset[] } : {}),
+      ...(normalizeOverlay(o.overlay) ? { overlay: normalizeOverlay(o.overlay) } : {}),
       ...(normalizeRights(o.rights) ? { rights: normalizeRights(o.rights) } : {}),
     }
   } catch {

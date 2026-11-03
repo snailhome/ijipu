@@ -74,6 +74,7 @@ export function ScoreMetaDialog({ inline = false }: { inline?: boolean }) {
     sourceUrl: '',
   })
   const [assets, setAssets] = useState<ScoreMetaDoc['assets']>(undefined)
+  const [overlay, setOverlay] = useState<ScoreMetaDoc['overlay']>(undefined)
   const [path, setPath] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
@@ -109,6 +110,7 @@ export function ScoreMetaDialog({ inline = false }: { inline?: boolean }) {
             sourceUrl: r.meta.rights?.sourceUrl ?? '',
           })
           setAssets(r.meta.assets)
+          setOverlay(r.meta.overlay)
         }
       } catch (e) {
         if (alive) setErr(M.loadFailed(e instanceof Error ? e.message : String(e)))
@@ -155,6 +157,7 @@ export function ScoreMetaDialog({ inline = false }: { inline?: boolean }) {
       ...(form.excerpt.trim() !== '' ? { excerpt: form.excerpt.trim() } : {}),
       ...(form.note.trim() !== '' ? { note: form.note.trim() } : {}),
       ...(assets !== undefined ? { assets } : {}),
+      ...(overlay !== undefined ? { overlay } : {}),
       rights,
     }
     const bad = validateScoreMeta(meta)

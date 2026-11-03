@@ -123,6 +123,7 @@ const META_KEYS = new Set([
   'publishedAt',
   'updatedAt',
   'assets',
+  'overlay',
   'rights',
   'contentHash',
   'importedAt',
@@ -142,6 +143,30 @@ interface ScoreRights {
   attribution?: string
   sourceUrl?: string
   expires?: string
+}
+
+interface OverlayMeta {
+  bg?: {
+    enabled: boolean
+    scale: number
+    rotate: number
+    opacity: number
+    offsetX: number
+    offsetY: number
+  }
+  wm?: {
+    enabled: boolean
+    type: 'text' | 'image'
+    text?: string
+    size: number
+    scale: number
+    rotate: number
+    opacity: number
+    repeat: boolean
+    repeatGap: number
+    offsetX: number
+    offsetY: number
+  }
 }
 
 interface ScoreMeta {
@@ -164,6 +189,7 @@ interface ScoreMeta {
   file?: string
   note?: string
   assets?: { path: string; role: 'background' | 'watermark' | 'cover' }[]
+  overlay?: OverlayMeta
   rights?: ScoreRights
   publishedAt: string
   updatedAt: string
@@ -566,6 +592,49 @@ function readEntries(): Entry[] {
       }
     }
 
+    let overlay: OverlayMeta | undefined
+    if (obj.overlay !== undefined) {
+      if (typeof obj.overlay !== 'object' || obj.overlay === null || Array.isArray(obj.overlay)) {
+        fail(`${slug} 的 overlay 必须是对象`)
+      }
+      const o = obj.overlay as Record<string, unknown>
+      const numOr = (v: unknown, dflt: number, field: string): number => {
+        if (typeof v !== 'number' || !Number.isFinite(v)) fail(`${slug} 的 overlay.${field} 必须是数字`)
+        return v
+      }
+      const boolOr = (v: unknown, dflt: boolean): boolean => (typeof v === 'boolean' ? v : dflt)
+      const next: OverlayMeta = {}
+      if (typeof o.bg === 'object' && o.bg !== null && !Array.isArray(o.bg)) {
+        const b = o.bg as Record<string, unknown>
+        next.bg = {
+          enabled: boolOr(b.enabled, true),
+          scale: numOr(b.scale, 100, 'bg.scale'),
+          rotate: numOr(b.rotate, 0, 'bg.rotate'),
+          opacity: numOr(b.opacity, 100, 'bg.opacity'),
+          offsetX: numOr(b.offsetX, 0, 'bg.offsetX'),
+          offsetY: numOr(b.offsetY, 0, 'bg.offsetY'),
+        }
+      }
+      if (typeof o.wm === 'object' && o.wm !== null && !Array.isArray(o.wm)) {
+        const w = o.wm as Record<string, unknown>
+        if (w.type !== 'text' && w.type !== 'image') fail(`${slug} 的 overlay.wm.type 只能是 text / image`)
+        next.wm = {
+          enabled: boolOr(w.enabled, true),
+          type: w.type,
+          ...(typeof w.text === 'string' ? { text: w.text } : {}),
+          size: numOr(w.size, 22, 'wm.size'),
+          scale: numOr(w.scale, 100, 'wm.scale'),
+          rotate: numOr(w.rotate, -45, 'wm.rotate'),
+          opacity: numOr(w.opacity, 25, 'wm.opacity'),
+          repeat: w.repeat === true,
+          repeatGap: numOr(w.repeatGap, 300, 'wm.repeatGap'),
+          offsetX: numOr(w.offsetX, 0, 'wm.offsetX'),
+          offsetY: numOr(w.offsetY, 0, 'wm.offsetY'),
+        }
+      }
+      overlay = next.bg !== undefined || next.wm !== undefined ? next : undefined
+    }
+
     const meta: ScoreMeta = {
       slug,
       title,
@@ -586,6 +655,7 @@ function readEntries(): Entry[] {
       file: file as string | undefined,
       note: obj.note as string | undefined,
       assets,
+      overlay,
       rights,
       publishedAt: obj.publishedAt,
       updatedAt: obj.updatedAt,
@@ -605,6 +675,15 @@ function readEntries(): Entry[] {
         : `/scores/${slug}/cover.svg`
 
     const entryAssets = loadEntryAssets(dir, meta)
+    if (meta.overlay?.bg?.enabled === true && !entryAssets.some((a) => a.role === 'background')) {
+      fail(`${slug} 的 overlay.bg 开启了，但 meta.assets 里没有 background 资源`)
+    }
+    if (meta.overlay?.wm?.enabled === true && meta.overlay.wm.type === 'image' && !entryAssets.some((a) => a.role === 'watermark')) {
+      fail(`${slug} 的 overlay.wm 是 image，但 meta.assets 里没有 watermark 资源`)
+    }
+    if (meta.overlay?.wm?.enabled === true && meta.overlay.wm.type === 'text' && (meta.overlay.wm.text ?? '').trim() === '') {
+      fail(`${slug} 的 overlay.wm 是 text，但 wm.text 为空`)
+    }
 
     entries.push({
       meta,
@@ -666,14 +745,42 @@ function renderEntry(entry: Entry): Rendered {
   const cfg = mergeJpsConfig(code, defaultPageConfig)
   const bg = entry.assets.find((a) => a.role === 'background')
   const wm = entry.assets.find((a) => a.role === 'watermark')
+  const ov = meta.overlay
   /**
-   * adj1196（P2c）：资源角色来自 meta.assets（`.jps` 不写 bgImage/wmImage），
-   * 这里显式打开两层总开关并把 data URI 传给引擎；详情/封面/og 用同一份。
+   * adj1196/adj1200（P2c）：资源角色来自 meta.assets，缩放/位置/透明度来自 meta.overlay
+   * （应用导出时原样复制 pageConfig）；只靠图片文件会退回默认 100%/居中。
    */
   const effectiveCfg = {
     ...cfg,
-    ...(bg ? { bgEnabled: true, bgImage: bg.path } : {}),
-    ...(wm ? { wmEnabled: true, wmType: 'image' as const, wmImage: wm.path } : {}),
+    ...(ov?.bg
+      ? {
+          bgEnabled: ov.bg.enabled,
+          bgScale: ov.bg.scale,
+          bgRotate: ov.bg.rotate,
+          bgOpacity: ov.bg.opacity,
+          bgOffsetX: ov.bg.offsetX,
+          bgOffsetY: ov.bg.offsetY,
+        }
+      : {}),
+    ...(ov?.wm
+      ? {
+          wmEnabled: ov.wm.enabled,
+          wmType: ov.wm.type,
+          wmText: ov.wm.text ?? '',
+          wmSize: ov.wm.size,
+          wmScale: ov.wm.scale,
+          wmRotate: ov.wm.rotate,
+          wmOpacity: ov.wm.opacity,
+          wmRepeat: ov.wm.repeat,
+          wmRepeatGap: ov.wm.repeatGap,
+          wmOffsetX: ov.wm.offsetX,
+          wmOffsetY: ov.wm.offsetY,
+        }
+      : {}),
+    ...(bg ? { bgEnabled: ov?.bg ? ov.bg.enabled : true, bgImage: bg.path } : {}),
+    ...(wm && (!ov?.wm || ov.wm.type === 'image')
+      ? { wmEnabled: ov?.wm ? ov.wm.enabled : true, wmType: 'image' as const, wmImage: wm.path }
+      : {}),
   }
   const renderAssets: RenderAssets = {}
   if (bg) renderAssets.bg = { href: `data:${bg.mime};base64,${bg.bytes.toString('base64')}`, w: bg.w, h: bg.h }

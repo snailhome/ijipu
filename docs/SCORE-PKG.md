@@ -53,6 +53,7 @@
 | `watermark` | | `corner` / `tile` / `none` |
 | `cover` | | `assets/cover.webp`；省略 = 自动封面 |
 | `assets` | | `[{ "path": "assets/bg.webp", "role": "background" }]`；role: `background` / `watermark` / `cover` |
+| `overlay` | | 背景/水印的缩放、位置、透明度等渲染设置；见 §2.2 |
 | `status` | | `published`（默认）/ `retired` |
 | `retiredReason` / `retiredAt` | | `retired` 时必填 |
 | `publishedAt` / `updatedAt` | ✓ | `YYYY-MM-DD` |
@@ -98,6 +99,44 @@
 - `license: "CC"` 时**必须**有 `rights.ccLicense`，且 `attribution` / `sourceUrl` 至少一个；
 - `EXCERPT` **不是许可**；片段范围用 `excerpt` 字段，底层仍写 `PD / ORIGINAL / AUTHORIZED / CC`；
 - 顶层 `license` 与 `rights.work` 不一致 ⇒ 构建失败。
+
+### 2.2 `overlay`：背景/水印的渲染设置
+
+`assets` 只回答“用哪张图”；`overlay` 回答“怎么画”。应用导出乐谱包时把当前
+`pageConfig` 里的水印/背景设置原样复制进来，乐谱库工具预览和站点构建都按它画。
+
+```json
+"overlay": {
+  "bg": {
+    "enabled": true,
+    "scale": 50,
+    "rotate": 10,
+    "opacity": 80,
+    "offsetX": 100,
+    "offsetY": 50
+  },
+  "wm": {
+    "enabled": true,
+    "type": "image",
+    "text": "爱记谱・iJipu",
+    "size": 22,
+    "scale": 20,
+    "rotate": -30,
+    "opacity": 40,
+    "repeat": false,
+    "repeatGap": 300,
+    "offsetX": -20,
+    "offsetY": 30
+  }
+}
+```
+
+- `bg`/`wm` 都是可选；不写 = 按旧的“有 asset 就开、其余默认”。
+- `wm.type: "text"` 时不需要 `watermark` 资源，`text` 必须非空；
+- `wm.type: "image"` 时必须有 `watermark` 资源；
+- `bg.enabled` 为 true 时必须有 `background` 资源；
+- `scale` 是页宽百分比（100 = 整页宽）；`offsetX/Y` 是页面单位（pt）；
+- 站点/工具预览都把这份值传给引擎 `RenderAssets` 同一条渲染链，**不能只复制图片文件**。
 未知字段由校验器报错（防手滑）；需要扩展时先升 `version`。
 
 ---
@@ -184,6 +223,7 @@ scores-library/
 2. 每个条目：
    - 读 `meta.json` + `score.jps` + `assets/`；
    - 资源读字节 → data URI；用头解析拿 PNG/JPEG/WebP/GIF/BMP 宽高（P2c 已实现）；
+   - 用 `meta.overlay` 覆盖 `bgScale/bgOffset*/wmScale/wmOffset*/wmOpacity…`（应用导出的设置）；
    - `renderScoreToSvg(layout, { assets })`，详情/封面/og 都带作者的水印/背景；
    - 生成 `dist/scores/<slug>/index.html`、`cover.svg`、`score.zip`；
    - 复制 `score.jps` / `assets/` 到 `dist/scores/<slug>/`（下载与 `?src=` 用）。

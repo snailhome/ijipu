@@ -29346,6 +29346,14 @@ C2: 歌，@那么我@是想要画你的手。@ {tp 1// 2/.} 你看我多么 {tp 
       readSrc('src/store/uiStore.ts').includes("'meta'") &&
       metaPathOf('C:\\a\\foo.jps') === 'C:\\a\\foo.jps.meta.json',
   )
+  check(
+    'adj1200 背景/水印设置随包走（应用导出 overlay，站点读取 overlay）',
+    readSrc('src/dialogs/ScorePackageDialog.tsx').includes('const overlay =') &&
+      readSrc('src/dialogs/ScorePackageDialog.tsx').includes('offsetX: pageConfig.bgOffsetX') &&
+      readSrc('src/dialogs/ScorePackageDialog.tsx').includes('repeatGap: pageConfig.wmRepeatGap') &&
+      readSrc('scripts/gen-scores.mts').includes('const ov = meta.overlay') &&
+      readSrc('scripts/gen-scores.mts').includes('bgOffsetX: ov.bg.offsetX'),
+  )
 
   // ---- ⑥ 文档页与应用内帮助同源：渲染器抽成了纯模块，且目录锚点与标题 id 逐个一致 ----
   const mdSrc = readSrc('src/help/markdown.ts')

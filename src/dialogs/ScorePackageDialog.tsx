@@ -222,6 +222,28 @@ export function ScorePackageDialog() {
     if (form.license === 'CC' && form.attribution.trim() === '' && form.sourceUrl.trim() === '') {
       return setErr('许可选 CC 时必须填写署名或来源链接')
     }
+    const snap = getOverlaySnapshot()
+    if (pageConfig.bgEnabled && pageConfig.bgImage.trim() === '') {
+      return setErr('背景已开启，但还没选择背景图')
+    }
+    if (pageConfig.bgEnabled && pageConfig.bgImage.trim() !== '' && !snap.assets?.bg) {
+      return setErr('背景图开启了但没解析到图片：请先在图层面板里重新选择背景图')
+    }
+    if (
+      pageConfig.wmEnabled &&
+      pageConfig.wmType === 'image' &&
+      pageConfig.wmImage.trim() === ''
+    ) {
+      return setErr('图形水印已开启，但还没选择水印图')
+    }
+    if (
+      pageConfig.wmEnabled &&
+      pageConfig.wmType === 'image' &&
+      pageConfig.wmImage.trim() !== '' &&
+      !snap.assets?.wm
+    ) {
+      return setErr('图形水印开启了但没解析到图片：请先重新选择水印图')
+    }
 
     setBusy(true)
     try {
@@ -238,6 +260,29 @@ export function ScorePackageDialog() {
       }
 
       const date = today()
+      const overlay = {
+        bg: {
+          enabled: pageConfig.bgEnabled,
+          scale: pageConfig.bgScale,
+          rotate: pageConfig.bgRotate,
+          opacity: pageConfig.bgOpacity,
+          offsetX: pageConfig.bgOffsetX,
+          offsetY: pageConfig.bgOffsetY,
+        },
+        wm: {
+          enabled: pageConfig.wmEnabled,
+          type: pageConfig.wmType,
+          text: pageConfig.wmText,
+          size: pageConfig.wmSize,
+          scale: pageConfig.wmScale,
+          rotate: pageConfig.wmRotate,
+          opacity: pageConfig.wmOpacity,
+          repeat: pageConfig.wmRepeat,
+          repeatGap: pageConfig.wmRepeatGap,
+          offsetX: pageConfig.wmOffsetX,
+          offsetY: pageConfig.wmOffsetY,
+        },
+      }
       const rights: ScoreRights = {
         ...(rightsBase ?? {}),
         work: form.license,
@@ -265,6 +310,7 @@ export function ScorePackageDialog() {
         publishedAt: date,
         updatedAt: date,
         ...(assets.length > 0 ? { assets } : {}),
+        overlay,
         rights,
       }
 
