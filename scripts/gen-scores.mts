@@ -42,7 +42,10 @@ import {
   rangeBox,
   renderScoreToSvg,
   splitParseIssues,
+  validateScoreMeta,
+  SCORE_META_LICENSES,
 } from '@ijipu/engine'
+import type { OverlayMeta, ScoreMetaDoc, ScoreMetaLicense, ScoreRights } from '@ijipu/engine'
 import type { RenderAssets } from '@ijipu/engine'
 import { brand } from '../src/brand/tokens'
 import { SITE_THEME_KEY, SITE_VARS } from '../src/brand/siteVars'
@@ -64,9 +67,9 @@ const SITE = brand.siteUrl.replace(/\/+$/, '')
 /** 内容许可（用户 2026-11-03 拍板：只标"记谱/排版"，不加"旋律：公版"那一行） */
 const CONTENT_LICENSE = 'CC BY-NC-SA 4.0'
 
-/** `meta.license` 允许值（作品状态，不是内容许可） */
-type License = 'PD' | 'ORIGINAL' | 'AUTHORIZED' | 'CC'
-const LICENSES: readonly License[] = ['PD', 'ORIGINAL', 'AUTHORIZED', 'CC']
+/** `meta.license` 允许值（作品状态，不是内容许可）—— 模型在引擎，站点只做展示 */
+type License = ScoreMetaLicense
+const LICENSES: readonly License[] = SCORE_META_LICENSES
 
 const LICENSE_LABEL: Record<License, string> = {
   PD: '公版',
@@ -130,67 +133,8 @@ const META_KEYS = new Set([
   'sourceZip',
 ])
 
-interface ScoreRights {
-  work?: License
-  arrangement?: 'NONE' | License
-  notation?: string
-  pdReason?: 'author-death' | 'public-domain-dedication' | 'government' | 'cc0' | 'other'
-  rightsHolder?: string
-  evidence?: string
-  territory?: string
-  commercial?: boolean
-  ccLicense?: string
-  attribution?: string
-  sourceUrl?: string
-  expires?: string
-}
-
-interface OverlayMeta {
-  bg?: {
-    enabled: boolean
-    scale: number
-    rotate: number
-    opacity: number
-    offsetX: number
-    offsetY: number
-  }
-  wm?: {
-    enabled: boolean
-    type: 'text' | 'image'
-    text?: string
-    size: number
-    scale: number
-    rotate: number
-    opacity: number
-    repeat: boolean
-    repeatGap: number
-    offsetX: number
-    offsetY: number
-  }
-}
-
-interface ScoreMeta {
-  slug: string
-  title: string
-  composer: string
-  license: License
-  source: string
-  short: string
-  tags?: string[]
-  difficulty?: number
-  order?: number
-  status?: 'published' | 'retired'
-  retiredReason?: string
-  retiredAt?: string
-  excerpt?: string
-  card?: 'paper' | 'ink' | 'brand' | 'minimal'
-  watermark?: 'corner' | 'tile' | 'none'
-  cover?: string
-  file?: string
-  note?: string
-  assets?: { path: string; role: 'background' | 'watermark' | 'cover' }[]
-  overlay?: OverlayMeta
-  rights?: ScoreRights
+/** 站点内部用同一份引擎模型；构建时必须已有发布时间/更新时间 */
+interface ScoreMeta extends Omit<ScoreMetaDoc, 'publishedAt' | 'updatedAt'> {
   publishedAt: string
   updatedAt: string
 }
@@ -642,7 +586,7 @@ function readEntries(): Entry[] {
       license,
       source,
       short,
-      tags: (tags as string[] | undefined)?.map((t) => t.trim()),
+      tags: (tags as string[] | undefined)?.map((t) => t.trim()) ?? [],
       difficulty: difficulty as number | undefined,
       order: order as number | undefined,
       status,
@@ -660,6 +604,9 @@ function readEntries(): Entry[] {
       publishedAt: obj.publishedAt,
       updatedAt: obj.updatedAt,
     }
+
+    const engineMetaError = validateScoreMeta(meta)
+    if (engineMetaError !== '') fail(`${slug}：${engineMetaError}`)
 
     const scorePath = meta.file ? resolve(PUBLIC, '.' + meta.file) : join(dir, 'score.jps')
     if (meta.file) {

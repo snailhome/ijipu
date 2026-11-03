@@ -3,85 +3,39 @@
  *
  * 与 `.jps.sync.json` 分开：
  *  · `.sync.json` 是对拍/伴奏/卡片等**机器状态**，会被自动写；
- *  · `.meta.json` 是**发布信息**（标题/来源/许可/tags/slug…），供「乐谱信息」菜单
+ *  · `.meta.json` 是**发布信息**（标题/来源/许可/tags/slug/rights…），供「乐谱信息」菜单
  *    与「导出乐谱包」共用，人工维护。
  *
- * 文件名：`foo.jps` → `foo.jps.meta.json`（与谱同目录）。
- * 桌面/工作区有真实路径时写同目录；网页模式没有文件系统 ⇒ 下载一份，由用户放回同目录。
+ * **字段模型与校验统一在引擎 `@ijipu/engine` 的 `scoreMeta`**（应用、曲库站点、本地工具共用）；
+ * 这个文件只负责应用侧的 IO：
+ *  · 文件名 `foo.jps` → `foo.jps.meta.json`（与谱同目录）；
+ *  · 桌面/工作区有真实路径时写同目录；网页模式没有文件系统 ⇒ 下载一份，由用户放回同目录。
  */
+import { parseScoreMeta } from '@ijipu/engine'
+import type { ScoreMetaDoc } from '@ijipu/engine'
 import { joinPath } from '../export/video/syncDoc'
 import { downloadSidecarText, readSidecarText, writeSidecarText } from '../export/video/syncIo'
 import { listWorkspaces } from './workspace'
 import type { WorkspaceBinding } from './docStore'
 
-export type ScoreMetaLicense = 'PD' | 'ORIGINAL' | 'AUTHORIZED' | 'CC'
-export type ScoreArrangementLicense = 'NONE' | 'PD' | 'ORIGINAL' | 'AUTHORIZED' | 'CC'
-export type PdReason = 'author-death' | 'public-domain-dedication' | 'government' | 'cc0' | 'other'
-
-/** 权利分层：旋律（license）→ 编配 → 记谱/排版 */
-export interface ScoreRights {
-  work?: ScoreMetaLicense
-  arrangement?: ScoreArrangementLicense
-  /** 记谱/排版许可（站点固定 CC BY-NC-SA 4.0，也允许作者另注） */
-  notation?: string
-  pdReason?: PdReason
-  rightsHolder?: string
-  evidence?: string
-  territory?: string
-  commercial?: boolean
-  ccLicense?: string
-  attribution?: string
-  sourceUrl?: string
-  expires?: string
-}
-
-export interface ScoreMetaAsset {
-  path: string
-  role: 'background' | 'watermark' | 'cover'
-}
-
-/** 应用里水印/背景的**渲染设置**（不只是图片文件）；导入乐谱库后要按这些值画 */
-export interface OverlayMeta {
-  bg?: {
-    enabled: boolean
-    scale: number
-    rotate: number
-    opacity: number
-    offsetX: number
-    offsetY: number
-  }
-  wm?: {
-    enabled: boolean
-    type: 'text' | 'image'
-    text?: string
-    size: number
-    scale: number
-    rotate: number
-    opacity: number
-    repeat: boolean
-    repeatGap: number
-    offsetX: number
-    offsetY: number
-  }
-}
-
-export interface ScoreMetaDoc {
-  format?: 'ijipu-score-meta' | 'ijipu-score-package'
-  version?: number
-  slug: string
-  short: string
-  title: string
-  composer: string
-  license: ScoreMetaLicense
-  source: string
-  tags: string[]
-  difficulty?: number
-  excerpt?: string
-  note?: string
-  assets?: ScoreMetaAsset[]
-  overlay?: OverlayMeta
-  rights?: ScoreRights
-}
+export type {
+  OverlayMeta,
+  PdReason,
+  ScoreArrangementLicense,
+  ScoreMetaAsset,
+  ScoreMetaDoc,
+  ScoreMetaLicense,
+  ScoreRights,
+} from '@ijipu/engine'
+export {
+  defaultScoreMeta,
+  normalizeScoreMeta,
+  parseScoreMeta,
+  shortifyMeta,
+  slugifyMeta,
+  todayMeta,
+  validateScoreMeta,
+} from '@ijipu/engine'
 
 export interface LoadedScoreMeta {
   path: string | null
@@ -117,91 +71,6 @@ export async function resolveMetaPath(
   }
 }
 
-function normalizeRights(raw: unknown): ScoreRights | undefined {
-  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return undefined
-  const o = raw as Record<string, unknown>
-  const r: ScoreRights = {}
-  if (o.work === 'PD' || o.work === 'ORIGINAL' || o.work === 'AUTHORIZED' || o.work === 'CC') r.work = o.work
-  if (o.arrangement === 'NONE' || o.arrangement === 'PD' || o.arrangement === 'ORIGINAL' || o.arrangement === 'AUTHORIZED' || o.arrangement === 'CC') {
-    r.arrangement = o.arrangement
-  }
-  if (typeof o.notation === 'string') r.notation = o.notation
-  if (o.pdReason === 'author-death' || o.pdReason === 'public-domain-dedication' || o.pdReason === 'government' || o.pdReason === 'cc0' || o.pdReason === 'other') {
-    r.pdReason = o.pdReason
-  }
-  for (const key of ['rightsHolder', 'evidence', 'territory', 'ccLicense', 'attribution', 'sourceUrl', 'expires'] as const) {
-    if (typeof o[key] === 'string') r[key] = o[key]
-  }
-  if (typeof o.commercial === 'boolean') r.commercial = o.commercial
-  return Object.keys(r).length > 0 ? r : undefined
-}
-
-function normalizeOverlay(raw: unknown): OverlayMeta | undefined {
-  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return undefined
-  const o = raw as Record<string, unknown>
-  const num = (v: unknown, dflt: number): number => (typeof v === 'number' && Number.isFinite(v) ? v : dflt)
-  const out: OverlayMeta = {}
-  if (typeof o.bg === 'object' && o.bg !== null && !Array.isArray(o.bg)) {
-    const b = o.bg as Record<string, unknown>
-    out.bg = {
-      enabled: b.enabled !== false,
-      scale: num(b.scale, 100),
-      rotate: num(b.rotate, 0),
-      opacity: num(b.opacity, 100),
-      offsetX: num(b.offsetX, 0),
-      offsetY: num(b.offsetY, 0),
-    }
-  }
-  if (typeof o.wm === 'object' && o.wm !== null && !Array.isArray(o.wm)) {
-    const w = o.wm as Record<string, unknown>
-    out.wm = {
-      enabled: w.enabled !== false,
-      type: w.type === 'image' ? 'image' : 'text',
-      ...(typeof w.text === 'string' ? { text: w.text } : {}),
-      size: num(w.size, 22),
-      scale: num(w.scale, 100),
-      rotate: num(w.rotate, -45),
-      opacity: num(w.opacity, 25),
-      repeat: w.repeat === true,
-      repeatGap: num(w.repeatGap, 300),
-      offsetX: num(w.offsetX, 0),
-      offsetY: num(w.offsetY, 0),
-    }
-  }
-  return out.bg !== undefined || out.wm !== undefined ? out : undefined
-}
-
-function parseMeta(text: string): ScoreMetaDoc | null {
-  try {
-    const raw = JSON.parse(text) as unknown
-    if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null
-    const o = raw as Record<string, unknown>
-    if (typeof o.slug !== 'string' || typeof o.title !== 'string') return null
-    return {
-      format: o.format === 'ijipu-score-package' ? 'ijipu-score-package' : 'ijipu-score-meta',
-      version: 1,
-      slug: o.slug,
-      short: typeof o.short === 'string' ? o.short : '',
-      title: o.title,
-      composer: typeof o.composer === 'string' ? o.composer : '',
-      license:
-        o.license === 'PD' || o.license === 'AUTHORIZED' || o.license === 'ORIGINAL' || o.license === 'CC'
-          ? o.license
-          : 'ORIGINAL',
-      source: typeof o.source === 'string' ? o.source : '',
-      tags: Array.isArray(o.tags) ? o.tags.filter((t): t is string => typeof t === 'string') : [],
-      ...(typeof o.difficulty === 'number' ? { difficulty: o.difficulty } : {}),
-      ...(typeof o.excerpt === 'string' ? { excerpt: o.excerpt } : {}),
-      ...(typeof o.note === 'string' ? { note: o.note } : {}),
-      ...(Array.isArray(o.assets) ? { assets: o.assets as ScoreMetaAsset[] } : {}),
-      ...(normalizeOverlay(o.overlay) ? { overlay: normalizeOverlay(o.overlay) } : {}),
-      ...(normalizeRights(o.rights) ? { rights: normalizeRights(o.rights) } : {}),
-    }
-  } catch {
-    return null
-  }
-}
-
 export async function loadScoreMetaFor(
   nativePath: string | null,
   binding: WorkspaceBinding | null,
@@ -210,7 +79,7 @@ export async function loadScoreMetaFor(
   if (path === null) return { path: null, meta: null }
   const r = await readSidecarText(path)
   if (!r.ok || r.text === null) return { path, meta: null }
-  return { path, meta: parseMeta(r.text) }
+  return { path, meta: parseScoreMeta(r.text) }
 }
 
 export type SaveMetaResult =
@@ -232,75 +101,4 @@ export async function saveScoreMetaFor(
   }
   downloadSidecarText(metaDownloadName(fileName), text)
   return { ok: true, path: null, downloaded: true }
-}
-
-/** 表单校验；返回中文错误（空串 = 通过） */
-export function validateScoreMeta(meta: ScoreMetaDoc): string {
-  if (!/^[a-z0-9-]+$/.test(meta.slug)) return 'slug 只能用小写字母、数字、连字符'
-  if (!/^[a-z]{3,6}$/.test(meta.short)) return 'short 必须是 3-6 位小写字母'
-  if (meta.title.trim() === '') return '标题不能为空'
-  if (meta.composer.trim() === '') return '作曲 / 作词不能为空'
-  if (meta.source.trim() === '') return '来源不能为空（公版写「传统」/ 授权写授权方）'
-  if (!Array.isArray(meta.tags) || meta.tags.some((t) => t.trim() === '')) return 'tags 不能有空项'
-  if (meta.difficulty !== undefined && (!Number.isInteger(meta.difficulty) || meta.difficulty < 1 || meta.difficulty > 5)) {
-    return '难度只能是 1-5 的整数'
-  }
-  if (meta.license === 'CC') {
-    if ((meta.rights?.ccLicense ?? '').trim() === '') return '许可为 CC 时必须填写 CC 协议（如 CC-BY-NC-SA-4.0）'
-    if ((meta.rights?.attribution ?? '').trim() === '' && (meta.rights?.sourceUrl ?? '').trim() === '') {
-      return '许可为 CC 时必须填写署名或来源链接'
-    }
-  }
-  if (meta.rights?.work !== undefined && meta.rights.work !== meta.license) {
-    return 'rights.work 必须与顶层 license 一致'
-  }
-  return ''
-}
-
-/** 标题/文件名 → 可用的 slug/short 默认值（中文会退到时间戳） */
-export function slugifyMeta(name: string): string {
-  const s = name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-  return s !== '' ? s : `score-${Date.now().toString(36)}`
-}
-
-export function shortifyMeta(slug: string): string {
-  const letters = slug.replace(/[^a-z]/g, '')
-  if (letters.length >= 3) return letters.slice(0, 6)
-  return `pkg${Math.random().toString(36).replace(/[^a-z]/g, '').slice(0, 1) || 'x'}`
-}
-
-export function todayMeta(): string {
-  const d = new Date()
-  const pad = (n: number): string => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-}
-
-/** 用描述头/文件名生成默认发布信息 */
-export function defaultScoreMeta(titles: string[], authors: string[], fileName: string): ScoreMetaDoc {
-  const title = (titles[0] ?? '').trim() || fileName.replace(/\.(jps|md|txt)$/i, '') || '未命名'
-  const composer = (authors[0] ?? '').trim() || '佚名'
-  const slug = slugifyMeta(fileName.replace(/\.(jps|md|txt)$/i, '') || title)
-  return {
-    format: 'ijipu-score-meta',
-    version: 1,
-    slug,
-    short: shortifyMeta(slug),
-    title,
-    composer,
-    license: 'ORIGINAL',
-    source: '原创',
-    tags: [],
-    difficulty: undefined,
-    excerpt: '',
-    note: '',
-    rights: {
-      work: 'ORIGINAL',
-      arrangement: 'ORIGINAL',
-      notation: 'CC-BY-NC-SA-4.0',
-      commercial: false,
-    },
-  }
 }

@@ -31,7 +31,12 @@
 
 ---
 
-## 二、`meta.json` 字段
+## 二、`meta.json`
+
+> **字段模型与校验的唯一实现**：`packages/ijipu-engine/src/engine/scoreMeta.ts`
+> （`ScoreMetaDoc` / `normalizeScoreMeta` / `validateScoreMeta`）。
+> 应用「乐谱信息」、导出乐谱包、站点 `gen-scores`、本地乐谱库工具都从这里取类型和规则，
+> 不要再各写一套——2026-11-04 就是因为工具还在用旧字段，应用里新加的 `rights` / `CC` 没同步过去。 字段
 
 | 字段 | 必填 | 规则 |
 |---|---|---|
