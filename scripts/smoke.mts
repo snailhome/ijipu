@@ -29323,6 +29323,13 @@ C2: 歌，@那么我@是想要画你的手。@ {tp 1// 2/.} 你看我多么 {tp 
       genScoresSrc1191.includes('scores-library') &&
       genScoresSrc1191.includes('listLibrarySources'),
   )
+  check(
+    'adj1195 应用可导出乐谱包（ScorePackageDialog + writeZip + package 模态 + 导出面板入口）',
+    readSrc('src/dialogs/ScorePackageDialog.tsx').includes('writeZip') &&
+      readSrc('src/dialogs/ScorePackageDialog.tsx').includes('ijipu-score-package') &&
+      readSrc('src/store/uiStore.ts').includes("'package'") &&
+      readSrc('src/ui/dock/ExportPanel.tsx').includes("openModal('package')"),
+  )
 
   // ---- ⑥ 文档页与应用内帮助同源：渲染器抽成了纯模块，且目录锚点与标题 id 逐个一致 ----
   const mdSrc = readSrc('src/help/markdown.ts')

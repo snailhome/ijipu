@@ -19,7 +19,7 @@ import { useDocStore } from '../../store/docStore'
 // adj965（方案 OVL，EP-10）：水印/背景资源（与预览/打印共用同一份）
 import { withOverlay } from '../../store/overlayAssets'
 import { useUiStore, enabledVoicesOf } from '../../store/uiStore'
-import { exportCopy } from '../../brand/copy'
+import { exportCopy, scorePackageCopy } from '../../brand/copy'
 import { layoutScore, renderScoreToSvg, buildPlaySequence, inferBpm, eventsToMidi, rangeBox, applyRangeToSvg, readViewBoxOf } from '@ijipu/engine'
 import type { ExportRange } from '@ijipu/engine'
 import { renderToAudioBuffer, audioBufferToWav, audioBufferToMp3 } from '../../export/audio'
@@ -82,6 +82,8 @@ export function ExportPanel() {
   const dynamicVideoEnabled = canUseDynamicVideo()
   const previewSoften = useUiStore((s) => s.previewSoften)
   const setExportJob = useUiStore((s) => s.setExportJob)
+  // adj1195：导出乐谱包（zip）走独立对话框；三端轻功能
+  const openModal = useUiStore((s) => s.openModal)
   // adj626：PDF 走打印（与 Ctrl+P / 菜单「打印」同一条路：同一份页面 + 同一个默认文件名）
   const printScore = useDocStore((s) => s.printScore)
   const defaultInstrumentRef = useMemo(() => firstEnabledInstrumentRef(playbackHqEnabled), [playbackHqEnabled])
@@ -313,6 +315,13 @@ export function ExportPanel() {
             <span className="export-btn-ext">{it.ext}</span>
           </button>
         ))}
+      </div>
+      {/* adj1195：乐谱库上传用的 zip（不是普通图片/音频导出，走独立对话框） */}
+      <div className="dock-field">
+        <button type="button" className="btn" onClick={() => openModal('package')} disabled={busy !== null}>
+          {scorePackageCopy.title}
+        </button>
+        <span className="dock-muted">zip：meta / README / jps / 背景水印</span>
       </div>
       {/* adj1065：动态谱视频 = 预览区相机位（同一套预览/声音/生成视频） */}
       {/* adj1078：整块只在桌面壳出现；网站/插件不显示入口与相机位 */}

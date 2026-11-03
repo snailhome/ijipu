@@ -47,7 +47,7 @@ import type { PanMode } from '@ijipu/engine'
 // adj957（用户裁定）：加上 `'cli'` —— 命令行手册改用应用内 `DocDialog` 打开
 // （原先只能靠"系统默认程序打开随包 MD"，Windows 默认没有 .md 关联程序 ⇒ 多半弹「如何打开」）
 // adj963（用户要求）：加上 `'saveAs'` —— 「保存到工作区」专用对话框（插件模式的保存主入口）
-export type ModalKind = 'samples' | 'shortcuts' | 'manual' | 'syntax' | 'cli' | 'donate' | 'voicePicker' | 'saveAs' | 'cardStyle' | 'sync'
+export type ModalKind = 'samples' | 'shortcuts' | 'manual' | 'syntax' | 'cli' | 'donate' | 'voicePicker' | 'saveAs' | 'cardStyle' | 'sync' | 'package'
 
 /** 动态谱相机位比例（与引擎 `DynamicPresetId` 同形；store 不引引擎类型，避免反向依赖） */
 export type DynamicAspect = '9x16' | '1x1' | '16x9'

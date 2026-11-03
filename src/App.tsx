@@ -60,6 +60,10 @@ const SaveAsDialog = lazy(() => import('./dialogs/SaveAsDialog').then((m) => ({ 
 const CardStyleDialog = lazy(() => import('./dialogs/CardStyleDialog').then((m) => ({ default: m.CardStyleDialog })))
 // adj1119：对拍台（应用内独立台面；相机位「对拍…」触发）
 const SyncDialog = lazy(() => import('./dialogs/SyncDialog').then((m) => ({ default: m.SyncDialog })))
+// adj1195：导出乐谱包（zip）——乐谱库上传用；三端轻功能
+const ScorePackageDialog = lazy(() =>
+  import('./dialogs/ScorePackageDialog').then((m) => ({ default: m.ScorePackageDialog })),
+)
 
 function App() {
   const viewType = useDocStore((s) => s.viewType)
@@ -699,6 +703,7 @@ function App() {
       {modal === 'cardStyle' && <Suspense fallback={null}><CardStyleDialog /></Suspense>}
       {/* adj1119：对拍台（独立台面） */}
       {modal === 'sync' && <Suspense fallback={null}><SyncDialog /></Suspense>}
+      {modal === 'package' && <Suspense fallback={null}><ScorePackageDialog /></Suspense>}
       {/* adj928：两栏源码差异框（确认条 → 「查看差异」；左本地 / 右外部，可直接做决定） */}
       {fileDiff && <Suspense fallback={null}><FileDiffDialog /></Suspense>}
     </div>

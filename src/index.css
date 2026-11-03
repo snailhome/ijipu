@@ -3544,6 +3544,75 @@ body {
    `flex: 1; min-height: 0` 才能把高度让给 `.save-as-list`，否则它按内容长高、由整个对话框去滚。
    ⚠ 原来那个 `min-height: 300px` 一并去掉：`fill` 下它会让对话框**下不去**（视口矮时内容被裁，
    因为 `.modal.fill` 是 `overflow:hidden`）——最小高度改由列表自己的 `min-height: 140px` 保证。 */
+/* adj1195：导出乐谱包（zip）对话框。字段两列；窄屏退回一列。 */
+.score-pkg {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+  min-height: 0;
+}
+.score-pkg-intro {
+  margin: 0;
+  color: var(--jp-text-secondary);
+  font-size: 13px;
+}
+.score-pkg-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 12px;
+}
+.score-pkg-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--jp-text-primary);
+  font-size: 13px;
+}
+.score-pkg-field > span {
+  color: var(--jp-text-secondary);
+  font-size: 12px;
+}
+.score-pkg-span2 { grid-column: 1 / -1; }
+.score-pkg-input {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--jp-border);
+  border-radius: 6px;
+  background: var(--jp-bg-app);
+  color: var(--jp-text-primary);
+  font: inherit;
+  font-size: 14px;
+}
+.score-pkg-input:focus { outline: none; border-color: var(--jp-accent); }
+textarea.score-pkg-input { min-height: 64px; resize: vertical; }
+.score-pkg-assets {
+  padding: 7px 10px;
+  border: 1px dashed var(--jp-border);
+  border-radius: 6px;
+  color: var(--jp-text-secondary);
+  font-size: 12px;
+}
+.score-pkg-hint {
+  margin: 0;
+  color: var(--jp-text-secondary);
+  font-size: 12px;
+}
+.score-pkg-err {
+  color: #ff8a95;
+  font-size: 13px;
+}
+.score-pkg-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 2px;
+}
+@media (max-width: 640px) {
+  .score-pkg-grid { grid-template-columns: 1fr; }
+  .score-pkg-span2 { grid-column: auto; }
+}
+
 .save-as {
   display: flex;
   flex-direction: column;

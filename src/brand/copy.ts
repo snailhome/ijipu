@@ -1543,3 +1543,40 @@ export const syncCopy = {
   splitPreviewHint: '上下拖：改预览高度',
   splitWaveHint: '上下拖：改波形高度',
 } as const
+
+/**
+ * adj1195：导出乐谱包（zip）对话框文案。
+ *
+ * 乐谱包是**发布/交流单元**：meta.json + README.md + score.jps + assets/；
+ * 上传到私有乐谱库后由工具同步到站点。这里只负责应用侧导出。
+ */
+export const scorePackageCopy = {
+  title: '导出乐谱包',
+  intro: '打成一个 zip：meta.json + README.md + score.jps + 背景/水印。适合交给乐谱库或发给别人。',
+  fieldTitle: '标题',
+  fieldComposer: '作曲 / 作词',
+  fieldLicense: '许可',
+  fieldSource: '来源',
+  fieldTags: 'tags（逗号分隔）',
+  fieldSlug: 'slug（网址短名）',
+  fieldShort: 'short（3-6 位小写字母）',
+  fieldDifficulty: '难度（1-5，可空）',
+  fieldExcerpt: '片段说明（可空）',
+  fieldNote: '编配说明（可空）',
+  licensePD: '公版',
+  licenseOriginal: '原创',
+  licenseAuthorized: '已授权',
+  assetsOn: (n: number) => `会带上 ${n} 张图（背景/水印）`,
+  assetsNone: '当前没有启用背景/水印图',
+  hint: 'slug/short 发布后不要改；同 slug 再导入会覆盖。',
+  exportBtn: '导出 zip',
+  cancelBtn: '取消',
+  busy: '正在打包…',
+  done: '已导出乐谱包',
+  badSlug: 'slug 只能用小写字母、数字、连字符',
+  badShort: 'short 必须是 3-6 位小写字母',
+  needTitle: '标题不能为空',
+  needComposer: '作曲 / 作词不能为空',
+  needSource: '来源不能为空（公版写「传统」/ 授权写授权方）',
+  fail: (e: string) => `导出失败：${e}`,
+} as const
