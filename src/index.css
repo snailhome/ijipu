@@ -3632,12 +3632,20 @@ textarea.score-pkg-input { min-height: 64px; resize: vertical; }
 }
 .score-pkg-actions {
   display: flex;
+  align-items: center;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
   flex: none;
   padding-top: 10px;
   margin-top: 2px;
   border-top: 1px solid var(--jp-border);
+}
+.score-pkg-status {
+  flex: 1 1 220px;
+  min-width: 0;
+  text-align: left;
+  line-height: 1.45;
 }
 @media (max-width: 640px) {
   .score-pkg-grid { grid-template-columns: 1fr; }

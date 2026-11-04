@@ -130,6 +130,7 @@ export function ScoreMetaDialog({ inline = false }: { inline?: boolean }) {
 
   const save = async (): Promise<void> => {
     setErr(null)
+    setSavedInfo(null)
     const difficulty = form.difficulty === '' ? undefined : Number(form.difficulty)
     const rights: NonNullable<ScoreMetaDoc['rights']> = {
       work: form.license,
@@ -326,10 +327,15 @@ export function ScoreMetaDialog({ inline = false }: { inline?: boolean }) {
         </div>
         <div className="score-pkg-assets">{path !== null ? M.pathHint(path) : M.noPathHint}</div>
         <p className="score-pkg-hint">{C.hint}</p>
-        {err !== null && <div className="score-pkg-err">{err}</div>}
-        {savedInfo !== null && <div className="score-pkg-ok">{savedInfo}</div>}
         </div>
         <div className="score-pkg-actions">
+          <div className="score-pkg-status" role="status" aria-live="polite">
+            {err !== null ? (
+              <span className="score-pkg-err">{err}</span>
+            ) : savedInfo !== null ? (
+              <span className="score-pkg-ok">{savedInfo}</span>
+            ) : null}
+          </div>
           <button type="button" className="btn" onClick={inline ? closeDock : closeModal} disabled={busy}>
             {M.cancelBtn}
           </button>
