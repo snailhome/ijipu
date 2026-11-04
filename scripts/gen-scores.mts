@@ -1096,7 +1096,7 @@ function listHTML(entries: Entry[]): string {
       const { meta } = e
       const videos = videosOf(meta)
       const header = parseJps(e.code).header
-      const titleMeta = [header.meter, tempoLabel(header.tempoNum, header.tempoText)].filter(Boolean).join(' · ')
+      const titleMeta = [header.key ? `1=${header.key}` : '', tempoLabel(header.tempoNum, header.tempoText)].filter(Boolean).join(' · ')
       const search =
         `${meta.title} ${meta.composer} ${(meta.tags ?? []).join(' ')} ${header.key ?? ''} ${header.meter ?? ''} ${header.tempoNum ?? ''}`.toLowerCase()
       const imported = timeOf(meta)
