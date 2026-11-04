@@ -616,6 +616,14 @@ h1 {
   line-height: 1.35;
 }
 
+.card-title-meta {
+  margin-left: 8px;
+  color: var(--site-text-2);
+  font-size: 12px;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
 .card-sub {
   margin: 0;
   color: var(--site-text-2);

@@ -42,6 +42,7 @@ import {
   rangeBox,
   renderScoreToSvg,
   splitParseIssues,
+  tempoLabel,
   validateScoreMeta,
   SCORE_META_LICENSES,
 } from '@ijipu/engine'
@@ -1042,13 +1043,14 @@ function listHTML(entries: Entry[]): string {
     .map((e) => {
       const { meta } = e
       const header = parseJps(e.code).header
+      const titleMeta = [header.meter, tempoLabel(header.tempoNum, header.tempoText)].filter(Boolean).join(' · ')
       const search =
-        `${meta.title} ${meta.composer} ${(meta.tags ?? []).join(' ')} ${header.key ?? ''} ${header.meter ?? ''}`.toLowerCase()
+        `${meta.title} ${meta.composer} ${(meta.tags ?? []).join(' ')} ${header.key ?? ''} ${header.meter ?? ''} ${header.tempoNum ?? ''}`.toLowerCase()
       const imported = timeOf(meta)
       return `<a class="card" href="${esc(e.pageUrl)}" data-tags="${esc((meta.tags ?? []).join(' '))}" data-search="${esc(search)}" data-imported="${esc(imported)}" data-updated="${esc(meta.updatedAt)}" data-title="${esc(meta.title)}" data-composer="${esc(meta.composer)}" data-difficulty="${esc(String(meta.difficulty ?? ''))}">
   <div class="cover"><img src="${esc(e.coverUrl)}" alt="${esc(meta.title)} 的谱面缩略" loading="lazy" width="320" height="200" /></div>
   <div class="card-body">
-    <h2 class="card-title">${esc(meta.title)}</h2>
+    <h2 class="card-title">${esc(meta.title)}${titleMeta ? `<span class="card-title-meta">${esc(titleMeta)}</span>` : ''}</h2>
     <p class="card-sub">${esc(meta.composer)}</p>
     <div class="card-tags">${(meta.tags ?? []).slice(0, 3).map((t) => `<span class="tag">${esc(t)}</span>`).join('')}</div>
     <div class="card-foot">${licenseBadge(meta)}${meta.excerpt ? '<span class="tag">片段</span>' : ''}<span>更新 ${esc(meta.updatedAt)}</span></div>
