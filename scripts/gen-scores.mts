@@ -880,7 +880,7 @@ function topbarHTML(active: 'scores' | 'copyright' | ''): string {
   <div class="topbar-inner">
     <a class="brand" href="/"><img src="/icons/Jianpu.png" alt="" width="26" height="26" /><span>爱记谱 <b>iJipu</b></span></a>
     <nav class="nav">
-      <a${on('scores')} href="/scores/">乐谱</a>
+      <a${on('scores')} href="/scores/">乐谱库</a>
       <a class="nav-doc" href="/manual/">文档</a>
       <a href="/app/">打开应用</a>
     </nav>

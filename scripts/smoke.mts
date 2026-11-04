@@ -29048,20 +29048,20 @@ C2: 歌，@那么我@是想要画你的手。@ {tp 1// 2/.} 你看我多么 {tp 
   const navHas = (nav: string, text: string): boolean => new RegExp(`<a\\b[^>]*>${text}</a>`).test(nav)
   const navMinimalOk = (nav: string): boolean =>
     navHas(nav, '功能') &&
-    /<a href="\/scores\/">乐谱<\/a>/.test(nav) &&
+    /<a href="\/scores\/">乐谱库<\/a>/.test(nav) &&
     /<a href="\/manual\/">文档<\/a>/.test(nav) &&
     navHas(nav, '下载桌面端') &&
     /<a data-l="repoUrl"[^>]*>GitHub<\/a>/.test(nav) &&
     !/插件手册|命令行手册|音色库推荐|应用 Github|插件 Github/.test(nav)
-  check('adj1080/adj1191 首页顶栏 6 条：功能 / 乐谱 / 文档 / 下载桌面端 / GitHub / 打开应用',
+  check('adj1080/adj1191 首页顶栏 6 条：功能 / 乐谱库 / 文档 / 下载桌面端 / GitHub / 打开应用',
     navMinimalOk(navPlain) && /topbar-cta" href="\/app\/">打开应用<\/a>/.test(homeHtml),
     navPlain.replace(/\s+/g, ' ').slice(0, 240))
   check('adj1080 负对照：把插件手册 / 命令行手册 / 音色库推荐任一条塞回顶栏 ⇒ 判据为假',
     !navMinimalOk(navPlain.replace('</a>', '</a><a href="/plugin/">插件手册</a>')) &&
       !navMinimalOk(navPlain.replace('</a>', '</a><a href="/cli/">命令行手册</a>')) &&
       !navMinimalOk(navPlain.replace('</a>', '</a><a href="/soundfonts/">音色库推荐</a>')))
-  check('adj1191 负对照：把「乐谱」从顶栏拿掉 ⇒ 判据为假（证明它真的在量这一条）',
-    !navMinimalOk(navPlain.replace('<a href="/scores/">乐谱</a>', '')))
+  check('adj1191 负对照：把「乐谱库」从顶栏拿掉 ⇒ 判据为假（证明它真的在量这一条）',
+    !navMinimalOk(navPlain.replace('<a href="/scores/">乐谱库</a>', '')))
   check('adj933/adj1080 顶栏只留一个 GitHub（应用仓库）；插件仓库入口在「Obsidian 插件」区',
     /<a data-l="repoUrl"[^>]*>GitHub<\/a>/.test(navHtml) &&
       !/obsidianRepoUrl/.test(navHtml) &&
