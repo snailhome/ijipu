@@ -255,8 +255,8 @@ h1 {
   background: var(--paper-bg, #fff);
   box-shadow: 0 10px 34px var(--site-shadow);
   overflow: hidden;
-  /* 谱面颜色由站点深/浅主题显式给出；opt out 手机浏览器的强制深色/颜色反转 */
-  color-scheme: light;
+  /* 谱面颜色由站点深/浅主题显式给出；only light opt out 手机浏览器的强制深色/颜色反转 */
+  color-scheme: only light;
   forced-color-adjust: none;
   --paper-bg: #fff;
   --paper-ink: #1b1b1b;

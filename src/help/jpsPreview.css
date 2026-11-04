@@ -195,8 +195,9 @@ html[data-mode='light'] .jps-block-code .hl-decoration { color: #c73d8f; }
   padding: 14px;
   /* `z=`：数字 ⇒ 钉住像素宽（自然宽 × z/100，由 JS 写进 `--jps-w`）；`*` / 未写 ⇒ 铺满 */
   width: min(100%, var(--jps-w, 100%));
-  /* 预览纸色跟站点深/浅主题走；opt out 手机浏览器的强制深色/颜色反转 */
-  color-scheme: light;
+  /* 预览纸色跟站点深/浅主题走；only light 明确告诉手机浏览器这块是手工配色的，
+     不要套用强制深色/颜色反转 */
+  color-scheme: only light;
   forced-color-adjust: none;
   --jps-paper-bg: #fff;
   --jps-paper-ink: #1b1b1b;

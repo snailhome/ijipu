@@ -843,6 +843,12 @@ function headHTML(options: {
 :root[data-site-mode="dark"]{${varsOf('dark')}}
 :root[data-site-mode="light"]{${varsOf('light')}}
 html{background:var(--site-bg)}
+/* adj1218：旧 scores.css 缓存 / 手机 WebView 下的深色预览兜底 */
+html[data-site-mode="dark"] .paper{background:#0b1020!important;--paper-bg:#0b1020;--paper-ink:#e8ecf8}
+html[data-site-mode="dark"] .paper svg rect[data-page-bg]{fill:#0b1020!important}
+html[data-site-mode="dark"] .paper svg text:not([data-overlay]){fill:#e8ecf8!important}
+html[data-site-mode="dark"] .paper svg line:not([data-overlay]),
+html[data-site-mode="dark"] .paper svg path:not([data-overlay]){stroke:#e8ecf8!important}
 </style>
 <script>
 try{var m=localStorage.getItem(${JSON.stringify(SITE_THEME_KEY)});document.documentElement.dataset.siteMode=m==='light'?'light':'dark'}catch(e){}

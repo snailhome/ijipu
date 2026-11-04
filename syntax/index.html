@@ -80,6 +80,15 @@
         border-color: rgba(70, 83, 122, 0.25); border-top-color: #0891a6;
       }
     </style>
+    <!-- adj1218：深色示例预览的关键兜底（旧 CSS 缓存 / 手机 WebView 也能深底浅字） -->
+    <style>
+      html[data-site-mode='dark'] .jps-block-preview { background: #0b1020 !important; color-scheme: only light; forced-color-adjust: none; }
+      html[data-site-mode='dark'] .jps-block-preview svg { background: #0b1020 !important; forced-color-adjust: none; }
+      html[data-site-mode='dark'] .jps-block-preview svg rect[data-page-bg] { fill: #0b1020 !important; }
+      html[data-site-mode='dark'] .jps-block-preview svg text { fill: #e8ecf8 !important; }
+      html[data-site-mode='dark'] .jps-block-preview svg line,
+      html[data-site-mode='dark'] .jps-block-preview svg path { stroke: #e8ecf8 !important; }
+    </style>
   </head>
   <body>
     <!--

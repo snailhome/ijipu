@@ -117,6 +117,32 @@
         border-color: rgba(70, 83, 122, 0.25); border-top-color: #0891a6;
       }
     </style>
+    <!--
+      adj1218：深色示例预览的关键兜底。
+      手机 WebView / 旧缓存可能只拿到新 HTML、没拿到新 CSS；这几条内联规则保证
+      预览至少是“深底浅字”，不会白底浅字看不见。正常样式仍以 landing/jpsPreview CSS 为准。
+    -->
+    <style>
+      html[data-site-mode='dark'] .jps-block-preview {
+        background: #0b1020 !important;
+        color-scheme: only light;
+        forced-color-adjust: none;
+      }
+      html[data-site-mode='dark'] .jps-block-preview svg {
+        background: #0b1020 !important;
+        forced-color-adjust: none;
+      }
+      html[data-site-mode='dark'] .jps-block-preview svg rect[data-page-bg] {
+        fill: #0b1020 !important;
+      }
+      html[data-site-mode='dark'] .jps-block-preview svg text {
+        fill: #e8ecf8 !important;
+      }
+      html[data-site-mode='dark'] .jps-block-preview svg line,
+      html[data-site-mode='dark'] .jps-block-preview svg path {
+        stroke: #e8ecf8 !important;
+      }
+    </style>
   </head>
   <body>
     <!--
