@@ -977,7 +977,7 @@ ${topbarHTML('scores')}
       <a class="btn" href="/scores/${esc(meta.slug)}/score.zip" download>下载 .zip</a>
       ${videos.map((v) => `<a class="btn" href="${esc(v.url)}" target="_blank" rel="noreferrer">${esc(videoLabelOf(v.platform))}</a>`).join('')}
       <button class="btn" type="button" id="copy">复制源码</button>
-      <button class="btn" type="button" id="copy-short">复制短链</button>
+      <button class="btn" type="button" id="copy-short" title="${esc(meta.short)}" data-short="${esc(meta.short)}">复制短链</button>
     </div>
     <p class="copy-note" id="copy-note" aria-live="polite"></p>
   </div>
