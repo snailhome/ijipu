@@ -67,6 +67,52 @@ a:hover { text-decoration: underline; }
 }
 .doc-switch a:hover { color: var(--site-text); background: var(--site-panel-hover); text-decoration: none; }
 .doc-switch a.active { color: var(--site-text); background: var(--site-panel); border-color: var(--site-border); }
+
+/* adj1220：手机顶栏的文档切换菜单（桌面用上面那排 .doc-switch） */
+.doc-menu { display: none; position: relative; }
+.doc-menu summary {
+  list-style: none;
+  padding: 5px 9px;
+  border: 1px solid var(--site-border);
+  border-radius: 8px;
+  color: var(--site-text);
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.doc-menu summary::-webkit-details-marker { display: none; }
+.doc-menu summary::after { content: ' ▾'; color: var(--site-text-2); }
+.doc-menu[open] summary { border-color: var(--site-accent); color: var(--site-accent); }
+.doc-menu-list {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 40;
+  min-width: 156px;
+  padding: 6px;
+  border: 1px solid var(--site-border);
+  border-radius: 10px;
+  background: var(--site-panel);
+  box-shadow: 0 12px 32px var(--site-shadow);
+}
+.doc-menu-list a {
+  display: block;
+  padding: 8px 10px;
+  border-radius: 7px;
+  color: var(--site-text-2);
+  font-size: 13px;
+  white-space: nowrap;
+}
+.doc-menu-list a:hover { color: var(--site-text); background: var(--site-panel-hover); text-decoration: none; }
+body[data-doc='manual'] .doc-menu-list a[href='/manual/'],
+body[data-doc='syntax'] .doc-menu-list a[href='/syntax/'],
+body[data-doc='plugin'] .doc-menu-list a[href='/plugin/'],
+body[data-doc='cli'] .doc-menu-list a[href='/cli/'],
+body[data-doc='soundfonts'] .doc-menu-list a[href='/soundfonts/'] {
+  color: var(--site-accent);
+  background: var(--site-panel-hover);
+}
 /**
  * adj905x：**"当前是哪一份文档"的高亮，之前一直是死的** —— `.doc-switch a.active` 这条规则
  * 从来没人给它加过 `active`（前三份页面靠"看得出自己在哪一页"，加第三份之后就更容易混了）。
@@ -75,7 +121,8 @@ a:hover { text-decoration: underline; }
 body[data-doc='manual'] .doc-switch a[href='/manual/'],
 body[data-doc='syntax'] .doc-switch a[href='/syntax/'],
 body[data-doc='plugin'] .doc-switch a[href='/plugin/'],
-body[data-doc='cli'] .doc-switch a[href='/cli/'] {
+body[data-doc='cli'] .doc-switch a[href='/cli/'],
+body[data-doc='soundfonts'] .doc-switch a[href='/soundfonts/'] {
   color: var(--site-text);
   background: var(--site-panel);
   border-color: var(--site-border);
@@ -344,6 +391,10 @@ html[data-site-mode='light'] .doc-body pre { box-shadow: 0 4px 16px var(--site-s
   .doc-body code { overflow-wrap: anywhere; }
   .toc-toggle { display: block; }
   .doc-switch { display: none; }
+  .doc-menu { display: block; }
+  .doc-topbar-inner { gap: 8px; padding: 0 12px; }
+  .doc-menu summary { padding: 5px 7px; font-size: 13px; }
+  .doc-open { padding: 5px 9px; font-size: 13px; }
   /* 小屏一行塞不下这么多：首页链接收起来（logo 也能回首页），主题按钮靠右留在手上 */
   .doc-home { display: none; }
   .theme-toggle { margin-left: auto; }
@@ -376,4 +427,18 @@ html[data-site-mode='light'] .doc-body pre { box-shadow: 0 4px 16px var(--site-s
     box-shadow: 0 14px 34px var(--site-shadow);
   }
   .doc-toc.open { display: block; }
+}
+
+/* adj1220：窄屏顶栏不再压缩文字换行；极窄屏收起品牌里的英文后缀 */
+.doc-brand,
+.toc-toggle,
+.doc-menu,
+.theme-toggle,
+.doc-home,
+.doc-open {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+@media (max-width: 480px) {
+  .doc-brand b { display: none; }
 }
