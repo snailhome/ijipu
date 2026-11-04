@@ -75,7 +75,7 @@ export function videoPlatformOf(url: string): VideoPlatform {
   try {
     const host = new URL(url).hostname.toLowerCase()
     if (host === 'douyin.com' || host.endsWith('.douyin.com') || host.endsWith('.iesdouyin.com')) return 'douyin'
-    if (host === 'xiaohongshu.com' || host.endsWith('.xiaohongshu.com') || host.endsWith('.xhslink.com')) {
+    if (host === 'xiaohongshu.com' || host.endsWith('.xiaohongshu.com') || host === 'xhslink.com' || host.endsWith('.xhslink.com')) {
       return 'xiaohongshu'
     }
     if (host === 'weixin.qq.com' || host.endsWith('.weixin.qq.com') || host.endsWith('.weixin110.com')) {
