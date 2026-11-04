@@ -5,9 +5,11 @@
   "short": "scorem",
   "title": "望月",
   "composer": "于一一 作词",
-  "license": "ORIGINAL",
-  "source": "原创",
-  "tags": [],
+  "license": "CC",
+  "source": "无",
+  "tags": [
+    "国风"
+  ],
   "publishedAt": "2026-11-04",
   "updatedAt": "2026-11-04",
   "assets": [
@@ -40,11 +42,14 @@
     }
   },
   "rights": {
-    "work": "ORIGINAL",
+    "work": "CC",
     "notation": "CC-BY-NC-SA-4.0",
     "arrangement": "CC",
     "ccLicense": "CC-BY-NC-SA-4.0",
     "attribution": "无"
   },
-  "status": "published"
+  "status": "published",
+  "difficulty": 3,
+  "note": "",
+  "excerpt": ""
 }
