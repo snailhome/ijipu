@@ -137,6 +137,16 @@ export function ScorePackageDialog() {
     return out
   }, [pageConfig])
 
+  const assetSummary = useMemo(() => {
+    const parts: string[] = []
+    if (assetPlan.length > 0) parts.push(C.assetsOn(assetPlan.length))
+    const text = pageConfig.wmText.trim()
+    if (pageConfig.wmEnabled && pageConfig.wmType === 'text' && text !== '') {
+      parts.push(C.assetsText(text))
+    }
+    return parts.length > 0 ? parts.join('；') : C.assetsNone
+  }, [assetPlan, pageConfig.wmEnabled, pageConfig.wmType, pageConfig.wmText])
+
   const set = <K extends keyof FormState,>(key: K, value: FormState[K]): void => {
     setForm((prev) => ({ ...prev, [key]: value }))
   }
@@ -268,7 +278,7 @@ export function ScorePackageDialog() {
             </label>
           </div>
           <div className="score-pkg-assets">
-            {assetPlan.length > 0 ? C.assetsOn(assetPlan.length) : C.assetsNone}
+            {assetSummary}
           </div>
           <p className="score-pkg-hint">{C.hint}</p>
           {err !== null && <div className="score-pkg-err">{err}</div>}
