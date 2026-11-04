@@ -1,0 +1,47 @@
+{
+  "format": "ijipu-score-package",
+  "version": 1,
+  "slug": "score-mw1f3qlh",
+  "short": "scorab",
+  "title": "安和桥",
+  "composer": "宋冬野 词曲",
+  "license": "CC",
+  "source": "无",
+  "tags": [
+    "民谣"
+  ],
+  "publishedAt": "2026-11-04",
+  "updatedAt": "2026-11-04",
+  "overlay": {
+    "bg": {
+      "enabled": false,
+      "scale": 100,
+      "rotate": 0,
+      "opacity": 100,
+      "offsetX": 0,
+      "offsetY": 0
+    },
+    "wm": {
+      "enabled": true,
+      "type": "text",
+      "text": "爱记谱・iJipu",
+      "size": 22,
+      "scale": 100,
+      "rotate": -45,
+      "opacity": 15,
+      "repeat": true,
+      "repeatGap": 300,
+      "offsetX": 0,
+      "offsetY": 0
+    }
+  },
+  "rights": {
+    "work": "CC",
+    "notation": "CC-BY-NC-SA-4.0",
+    "arrangement": "CC",
+    "ccLicense": "CC-BY-NC-SA-4.0",
+    "attribution": "无"
+  },
+  "note": "",
+  "excerpt": ""
+}
