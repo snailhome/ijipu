@@ -782,8 +782,12 @@ export function DynamicFrameOverlay() {
   const left = rect.left + (rect.width - w) / 2
   const top = rect.top + 6
   const boxH = Math.max(h, 120)
-  const controlsW = Math.min(rect.width - 24, Math.max(w, 560))
-  const controlsLeft = rect.left + (rect.width - controlsW) / 2
+  /**
+   * adj1227（用户要求）：控制条别再只给 560px 下限、和窄相机框对齐；
+   * 直接铺满预览区宽度（左右各留 8px），让一行能放下更多控件、减少行数。
+   */
+  const controlsW = Math.max(240, rect.width - 16)
+  const controlsLeft = rect.left + 8
   const controlsTop = top + boxH + 10
   const controlsMaxH = Math.max(120, rect.height - (controlsTop - rect.top) - 8)
   return (
