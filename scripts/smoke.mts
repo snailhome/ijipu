@@ -41,7 +41,6 @@ import { externalChangeCopy, persistPermissionCopy, workspaceCopy } from '../src
 import { mdToHtml, extractToc, parseJpsInfo, inlineMd } from '../src/help/markdown'
 // adj883：首页示例精简（去掉 `# jps-config:{…}` 与装饰线，但必须保住正文）
 import { BRAND_SAMPLES, simplifyJps } from '../src/landing/samples'
-import { metaPathOf } from '../src/store/scoreMeta'
 /**
  * adj930：官网首屏启动层的**色值 / 元素 id / 揭示时机的唯一口径**。
  * 五个官网页的 `<head>` 里各手写了一段同样的内联块（必须内联，外链样式表来不及防闪烁）
@@ -14939,7 +14938,7 @@ function runAdj963NewAndSaveTests() {
 
   // ---- ⑥ 菜单：窄屏常驻三项；嵌入版仍按 adj724b 只藏「工作区」----
   check('adj963 窄屏菜单常驻「新建/保存/另存为」，而「工作区」在嵌入版仍隐藏',
-    /isNarrow\s*\?\s*\[entryNew, entrySave, entrySaveAs, entryMeta, entryWorkspace/.test(topSrc) &&
+    /isNarrow\s*\?\s*\[entryNew, entrySave, entrySaveAs, entryWorkspace/.test(topSrc) &&
       /entryWorkspace: MenuEntry = \{[\s\S]{0,240}?hidden: isHostEmbedded\(\)/.test(topSrc) &&
       // **负对照**：嵌入版把「保存」也藏掉 ⇒ 判据判红（插件里就又没保存入口了）
       !/entrySave: MenuEntry = \{[^}]*hidden: isHostEmbedded\(\)/.test(topSrc),
@@ -15348,7 +15347,7 @@ async function runAdj540WorkspaceTests() {
       /\{ key: 'workspace', label: dockCopy\.tabWorkspace, icon: 'workspace', kbd: KBD\.workspace \}/.test(dockSrc) &&
       /workspace: '工作区'/.test(String(readFileSync('src/ui/toolIcons.ts', 'utf8'))) &&
       // adj587：三个同高页签由同一条分支给出（工作区 / 全局 / 导入）；adj603：再加「谱面」
-      /if \(key === 'workspace' \|\| key === 'settings' \|\| key === 'score' \|\| key === 'import' \|\| key === 'meta'\)/.test(dockSrc) &&
+      /if \(key === 'workspace' \|\| key === 'settings' \|\| key === 'score' \|\| key === 'import'\)/.test(dockSrc) &&
       /export const workspaceCopy/.test(copySrc) &&
       /tabWorkspace: '工作区'/.test(copySrc) &&
       !/modal === 'workspace'/.test(appSrc),
@@ -15426,7 +15425,7 @@ async function runAdj540WorkspaceTests() {
     // adj963（**用户要求**）：改回**窄屏常驻** —— 因为嵌入版又隐藏了「工作区」项（adj724b
     // "文件操作交给 Obsidian"），两者叠加 ⇒ 窄的插件面板里**一个文件操作入口都没有**。
     // adj615：末尾有平台无关的「打印」；adj723z：中间有「最近…」（打开历史二级菜单）
-    /const fileEntries: \(MenuEntry \| 'sep'\)\[\] = isNarrow\s*\?\s*\[entryNew, entrySave, entrySaveAs, entryMeta, entryWorkspace, entrySamples, entryPaste, entryRecent, entryTryout, entryExport, entryPrint\]/.test(
+    /const fileEntries: \(MenuEntry \| 'sep'\)\[\] = isNarrow\s*\?\s*\[entryNew, entrySave, entrySaveAs, entryWorkspace, entrySamples, entryPaste, entryRecent, entryTryout, entryExport, entryPrint\]/.test(
       topSrc,
     ) &&
       // **负对照**：把「新建」从窄屏那组里去掉（＝退回 adj540 的写法）⇒ 同一判据判红
@@ -16100,7 +16099,7 @@ async function runAdj540WorkspaceTests() {
       ),
     '')
   check('adj562/adj587/adj603/adj641 「导入」与「全局 / 谱面」**不进 AUTO_FIT**（改用与工作区同一个建议高度）；查找替换进',
-    /if \(key === 'workspace' \|\| key === 'settings' \|\| key === 'score' \|\| key === 'import' \|\| key === 'meta'\)/.test(dockSrc) &&
+    /if \(key === 'workspace' \|\| key === 'settings' \|\| key === 'score' \|\| key === 'import'\)/.test(dockSrc) &&
       // adj641：AUTO_FIT 现在还会含 'find'（查找替换按内容自然高定高）⇒
       // 改成「这几项必须在、那三项必须不在」的语义判断，不再比对整条字面量（否则每加一个面板就误伤）。
       (['problems', 'tryout', 'export', 'about', 'find'] as const).every((k) =>
@@ -19228,7 +19227,7 @@ console.log('[116] settings 6 rows, About in dock, divider touch hit-area (adj49
   // ——外壳高度改为实测传入以适配手机 14px 抓手；断言改为不绑定具体参数表，只钉"用 rowPitch × SETTINGS_ROWS"）
   check('adj587/adj603（用户要求）工作区 / 导入 / 全局 / 谱面**同一个建议高度**（窄屏 = 5 项列表算式；宽屏 = maxH()）',
     // 一条分支同时管四个页签（adj603：设置拆成「全局」+「谱面」后，两个都走这条）
-    /if \(key === 'workspace' \|\| key === 'settings' \|\| key === 'score' \|\| key === 'import' \|\| key === 'meta'\)\s*\n?\s*return narrow \? workspaceDefaultH\(workspaceRowH, workspaceHeadH, chromeH\) : maxH\(\)/.test(
+    /if \(key === 'workspace' \|\| key === 'settings' \|\| key === 'score' \|\| key === 'import'\)\s*\n?\s*return narrow \? workspaceDefaultH\(workspaceRowH, workspaceHeadH, chromeH\) : maxH\(\)/.test(
       dockSrc,
     ) &&
       // 旧的"各算各的"三套算式与常量都已删除（设置 6 行 / 导入固定 300 / 设置字段行距实测）
@@ -29340,11 +29339,11 @@ C2: 歌，@那么我@是想要画你的手。@ {tp 1// 2/.} 你看我多么 {tp 
       BRAND_SAMPLES.length > 0,
   )
   check(
-    'adj1198 文件菜单有「乐谱信息」+ meta 边车命名 foo.jps.meta.json',
-    readSrc('src/ui/TopBar.tsx').includes("toggleDock('meta')") &&
-      readSrc('src/ui/ToolDock.tsx').includes("key: 'meta'") &&
-      readSrc('src/store/uiStore.ts').includes("'meta'") &&
-      metaPathOf('C:\\a\\foo.jps') === 'C:\\a\\foo.jps.meta.json',
+    'adj1205 乐谱信息维护只在工具；应用底栏/菜单已移除',
+    !readSrc('src/ui/TopBar.tsx').includes("toggleDock('meta')") &&
+      !readSrc('src/ui/ToolDock.tsx').includes("key: 'meta'") &&
+      !readSrc('src/store/uiStore.ts').includes("| 'meta'") &&
+      !existsSync('src/dialogs/ScoreMetaDialog.tsx'),
   )
   check(
     'adj1200 背景/水印设置随包走（应用导出 overlay，站点读取 overlay）',

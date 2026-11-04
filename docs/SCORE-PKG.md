@@ -35,33 +35,34 @@
 
 > **字段模型与校验的唯一实现**：`packages/ijipu-engine/src/engine/scoreMeta.ts`
 > （`ScoreMetaDoc` / `normalizeScoreMeta` / `validateScoreMeta`）。
-> 应用「乐谱信息」、导出乐谱包、站点 `gen-scores`、本地乐谱库工具都从这里取类型和规则，
-> 不要再各写一套——2026-11-04 就是因为工具还在用旧字段，应用里新加的 `rights` / `CC` 没同步过去。 字段
+> 应用只导出**运输字段**（slug/short/title/composer/assets/overlay）；
+> 许可、来源、rights、tags 等**发布信息由乐谱库工具维护**，导入时补默认值。
 
-| 字段 | 必填 | 规则 |
-|---|---|---|
-| `format` | ✓ | 固定 `"ijipu-score-package"` |
-| `version` | ✓ | 固定 `1`（整数） |
-| `slug` | ✓ | `[a-z0-9-]+`，发布后不改；= zip 名 |
-| `short` | ✓ | `[a-z]{3,6}`，全局唯一，发布后不改 |
-| `title` | ✓ | 非空 |
-| `composer` | ✓ | 非空；公版写「传统」/作者 |
-| `license` | ✓ | `PD` / `ORIGINAL` / `AUTHORIZED` / `CC` |
-| `rights` | | 权利分层；见 §2.1 |
-| `source` | ✓ | 来源/卒年/授权方；审计用，页脚会显示 |
-| `tags` | ✓ | 字符串数组；`示例谱` 是**保留 tag**（见 §五） |
-| `difficulty` | | 1-5 整数 |
-| `order` | | 数字，越小越靠前；首页示例也用它排序 |
-| `excerpt` | | 片段说明（如「第 1-4 小节」） |
-| `note` | | 编配说明（Markdown） |
-| `card` | | `paper` / `ink` / `brand` / `minimal` |
-| `watermark` | | `corner` / `tile` / `none` |
-| `cover` | | `assets/cover.webp`；省略 = 自动封面 |
-| `assets` | | `[{ "path": "assets/bg.webp", "role": "background" }]`；role: `background` / `watermark` / `cover` |
-| `overlay` | | 背景/水印的缩放、位置、透明度等渲染设置；见 §2.2 |
-| `status` | | `published`（默认）/ `retired` |
-| `retiredReason` / `retiredAt` | | `retired` 时必填 |
-| `publishedAt` / `updatedAt` | ✓ | `YYYY-MM-DD` |
+| 字段 | 包内 | 库内 | 规则 |
+|---|---|---|---|
+| `format` | ✓ | | 固定 `"ijipu-score-package"` |
+| `version` | ✓ | | 固定 `1`（整数） |
+| `slug` | ✓ | ✓ | `[a-z0-9-]+`，发布后不改；= zip 名 |
+| `short` | ✓ | ✓ | `[a-z]{3,6}`，全局唯一，发布后不改 |
+| `title` | ✓ | ✓ | 非空 |
+| `composer` | ✓ | ✓ | 非空；公版写「传统」/作者 |
+| `license` | | ✓ | 工具默认 `CC`；`PD` / `ORIGINAL` / `AUTHORIZED` / `CC` |
+| `rights` | | ✓ | 权利分层；工具默认见 §2.3 |
+| `source` | | ✓ | 工具默认 `无`；审计用，页脚会显示 |
+| `tags` | | ✓ | 工具默认 `[]`；`示例谱` 是**保留 tag**（见 §五） |
+| `difficulty` | | | 1-5 整数 |
+| `order` | | | 数字，越小越靠前；首页示例也用它排序 |
+| `excerpt` | | | 片段说明（如「第 1-4 小节」） |
+| `note` | | | 编配说明（Markdown） |
+| `card` | | | `paper` / `ink` / `brand` / `minimal` |
+| `watermark` | | | `corner` / `tile` / `none` |
+| `cover` | | | `assets/cover.webp`；省略 = 自动封面 |
+| `assets` | ✓ | ✓ | `[{ "path": "assets/bg.webp", "role": "background" }]`；role: `background` / `watermark` / `cover` |
+| `overlay` | ✓ | ✓ | 背景/水印的缩放、位置、透明度等渲染设置；见 §2.2 |
+| `status` | | | `published`（默认）/ `retired` |
+| `retiredReason` / `retiredAt` | | | `retired` 时必填 |
+| `publishedAt` / `updatedAt` | | ✓ | 导入时由工具写 `YYYY-MM-DD` |
+| `exportedAt` / `exportedBy` | ✓ | | 应用导出时间 / 版本，工具保留 |
 
 可选扩展字段（工具可写、构建忽略）：`contentHash`（SHA-256）、`importedAt`、`sourceZip`。
 
@@ -145,6 +146,24 @@
 未知字段由校验器报错（防手滑）；需要扩展时先升 `version`。
 
 ---
+
+### 2.3 工具导入时的默认值
+
+应用不维护发布信息；乐谱库工具导入**缺字段**的包时补：
+
+```
+license: CC
+source: 无
+tags: []
+rights.work: CC
+rights.arrangement: CC
+rights.notation: CC-BY-NC-SA-4.0
+rights.ccLicense: CC-BY-NC-SA-4.0
+rights.attribution: 无
+publishedAt / updatedAt: 导入当天
+```
+
+只补缺失字段；旧包已有 `ORIGINAL` / `原创` 等值保留，不强行覆盖。
 
 ## 三、`score.jps` 与资源
 

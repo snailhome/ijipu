@@ -90,6 +90,9 @@ export interface ScoreMetaDoc {
   retiredAt?: string
   publishedAt?: string
   updatedAt?: string
+  /** 乐谱包运输信息（应用导出时写；发布信息不含） */
+  exportedAt?: string
+  exportedBy?: string
   contentHash?: string
   importedAt?: string
   sourceZip?: string
@@ -193,7 +196,7 @@ export function normalizeScoreMeta(raw: unknown): ScoreMetaDoc | null {
   }
   if (typeof o.difficulty === 'number') doc.difficulty = o.difficulty
   if (typeof o.order === 'number') doc.order = o.order
-  for (const key of ['excerpt', 'note', 'cover', 'file', 'retiredReason', 'retiredAt', 'publishedAt', 'updatedAt', 'contentHash', 'importedAt', 'sourceZip'] as const) {
+  for (const key of ['excerpt', 'note', 'cover', 'file', 'retiredReason', 'retiredAt', 'publishedAt', 'updatedAt', 'exportedAt', 'exportedBy', 'contentHash', 'importedAt', 'sourceZip'] as const) {
     if (typeof o[key] === 'string') doc[key] = o[key]
   }
   if (o.card === 'paper' || o.card === 'ink' || o.card === 'brand' || o.card === 'minimal') doc.card = o.card

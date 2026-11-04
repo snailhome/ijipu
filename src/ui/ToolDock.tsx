@@ -69,8 +69,6 @@ const WorkspacePanel = lazy(() => import('./dock/WorkspacePanel').then((m) => ({
 // adj562：「粘贴源码导入」迁入底栏（页签排在工作区之后）——原弹窗入口下线，与 adj492「关于」同套路
 const ImportPanel = lazy(() => import('../dialogs/PasteImportDialog').then((m) => ({ default: () => <m.PasteImportDialog inline /> })))
 // adj641（用户要求）：查找替换（编辑区 Ctrl+F 的落点；查找与替换整合在一个页签里）
-// adj1198：乐谱信息（.jps.meta.json）迁入底栏页签
-const MetaPanel = lazy(() => import('../dialogs/ScoreMetaDialog').then((m) => ({ default: () => <m.ScoreMetaDialog inline /> })))
 const FindPanel = lazy(() => import('./dock/FindPanel').then((m) => ({ default: m.FindPanel })))
 
 /** 面板（顺序即标签栏顺序）；adj540：工作区**排第一**（手机端文件操作主入口，用户要求）；
@@ -84,7 +82,6 @@ const PANELS: readonly { key: DockPanelKey; render: ComponentType }[] = [
   { key: 'problems', render: ProblemPanel },
   { key: 'tryout', render: TryoutPanel },
   { key: 'export', render: ExportPanel },
-  { key: 'meta', render: MetaPanel },
   { key: 'settings', render: SettingsPanel },
   { key: 'score', render: ScoreSettingsPanel },
   { key: 'about', render: AboutPanel },
@@ -230,7 +227,7 @@ const defaultH = (
    *  · 设置面板同理（它本来就不在 `AUTO_FIT` 里，见 `AUTO_FIT` 常量的说明）。
    */
   // adj603：'score'（谱面设置）与 'settings'（全局设置）同一套高度口径
-  if (key === 'workspace' || key === 'settings' || key === 'score' || key === 'import' || key === 'meta')
+  if (key === 'workspace' || key === 'settings' || key === 'score' || key === 'import')
     return narrow ? workspaceDefaultH(workspaceRowH, workspaceHeadH, chromeH) : maxH()
   // adj494：关于/试听/导出走 AUTO_FIT（实测内容高）；这里的值是**首次测量前的兜底**
   return chromeH
@@ -283,7 +280,6 @@ const TABS: { key: DockPanelKey; label: string; icon: ToolIconName; kbd?: string
   { key: 'problems', label: dockCopy.tabProblems, icon: 'problems', kbd: KBD.problems },
   { key: 'tryout', label: dockCopy.tabTryout, icon: 'play', kbd: KBD.tryout },
   { key: 'export', label: dockCopy.tabExport, icon: 'export', kbd: KBD.export },
-  { key: 'meta', label: dockCopy.tabMeta, icon: 'scoreSettings' },
   // adj603：原「设置」页签改名为「全局」（本机偏好），紧跟其后新增「谱面」（谱面设置）
   { key: 'settings', label: dockCopy.tabSettings, icon: 'settings' },
   { key: 'score', label: dockCopy.tabScore, icon: 'scoreSettings' },

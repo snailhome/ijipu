@@ -533,7 +533,6 @@ export const dockCopy = {
   tabProblems: '告警',
   tabTryout: '试听',
   tabExport: '导出',
-  tabMeta: '乐谱信息',
   /**
    * adj603（用户要求）：原「设置」页签**拆成两个**——「全局」（视图/主题/音色库，本机偏好）
    * 与「谱面」（布局/字体，随谱保存）。
@@ -1553,7 +1552,7 @@ export const syncCopy = {
  */
 export const scorePackageCopy = {
   title: '导出乐谱包',
-  intro: '打成一个 zip：meta.json + README.md + score.jps + 背景/水印。适合交给乐谱库或发给别人。',
+  intro: '打成一个 zip：slug/short + 标题/作者 + score.jps + 背景/水印设置。许可、来源、rights 等发布信息由乐谱库工具维护。',
   fieldTitle: '标题',
   fieldComposer: '作曲 / 作词',
   fieldLicense: '许可',
@@ -1569,7 +1568,7 @@ export const scorePackageCopy = {
   licenseAuthorized: '已授权',
   assetsOn: (n: number) => `会带上 ${n} 张图（背景/水印）`,
   assetsNone: '当前没有启用背景/水印图',
-  hint: 'slug/short 发布后不要改；同 slug 再导入会覆盖。',
+  hint: 'slug/short 发布后不要改；同 slug 再导入会覆盖。发布信息导入工具后再填。',
   exportBtn: '导出 zip',
   cancelBtn: '取消',
   busy: '正在打包…',
@@ -1580,42 +1579,4 @@ export const scorePackageCopy = {
   needComposer: '作曲 / 作词不能为空',
   needSource: '来源不能为空（公版写「传统」/ 授权写授权方）',
   fail: (e: string) => `导出失败：${e}`,
-} as const
-
-/** adj1198：文件菜单「乐谱信息」+ `.jps.meta.json` 维护 */
-export const scoreMetaCopy = {
-  menuLabel: '乐谱信息(&I)…',
-  title: '乐谱信息',
-  intro:
-    '这些是发布信息（不同于谱面里的 B/Z）：存到同目录的 `.jps.meta.json`，导出乐谱包/上传乐谱库会读它。',
-  pathHint: (path: string) => `保存到：${path}`,
-  noPathHint: '网页模式没有文件系统：保存会下载 `.jps.meta.json`，请放回 `.jps` 同目录。',
-  saveBtn: '保存信息',
-  cancelBtn: '取消',
-  saving: '保存中…',
-  saved: '已保存 .jps.meta.json',
-  downloaded: '已下载 .jps.meta.json；放回 .jps 同目录后，导出乐谱包会读它',
-  loadFailed: (e: string) => `读取 .jps.meta.json 失败：${e}`,
-  saveFailed: (e: string) => `保存失败：${e}`,
-  saveTo: (p: string) => `已保存到：${p}`,
-  saveWorkspace: '已写入 .jps 同目录',
-  rightsTitle: '权利分层',
-  arrangement: '编配权利',
-  arrangementNone: '未填',
-  rightsHolder: '权利人 / 授权方',
-  evidence: '依据 / 备注',
-  territory: '地域',
-  commercial: '允许商用',
-  pdReason: '公版原因',
-  pdNone: '未填',
-  pdAuthorDeath: '作者去世满保护期',
-  pdDedication: '公共领域奉献',
-  pdGovernment: '政府作品',
-  pdCc0: 'CC0 放弃',
-  pdOther: '其它',
-  ccLicense: 'CC 协议',
-  attribution: '署名',
-  sourceUrl: '来源链接',
-  ccHint: '许可选 CC 时，协议与署名/来源至少填一项',
-  rightsHint: '旋律看「许可」；编配/记谱在这里单独说明，别把「公版旋律 + 我的编配」写成整首公版。',
 } as const

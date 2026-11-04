@@ -4821,23 +4821,6 @@ textarea.score-pkg-input { min-height: 64px; resize: vertical; }
   flex: 1 1 auto;
   min-height: 0;
 }
-/* adj1198：乐谱信息页签填满 dock 高度；表单滚动、底部保存按钮固定 */
-.tool-dock-pane.pane-meta {
-  display: flex;
-  flex-direction: column;
-  flex: 1 1 auto;
-  min-height: 0;
-}
-.tool-dock-pane.pane-meta .modal-inline {
-  display: flex;
-  flex-direction: column;
-  flex: 1 1 auto;
-  min-height: 0;
-}
-.tool-dock-pane.pane-meta .score-pkg {
-  flex: 1 1 auto;
-  min-height: 0;
-}
 .pane-import .import-body {
   display: flex;
   flex-direction: column;

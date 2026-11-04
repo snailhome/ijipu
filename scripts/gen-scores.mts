@@ -128,6 +128,8 @@ const META_KEYS = new Set([
   'assets',
   'overlay',
   'rights',
+  'exportedAt',
+  'exportedBy',
   'contentHash',
   'importedAt',
   'sourceZip',

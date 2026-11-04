@@ -15,7 +15,7 @@ import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } f
 import { useDocStore, type ViewType } from '../store/docStore'
 import { useUiStore, PREVIEW_ZOOM_RANGE, PREVIEW_ZOOM_STEP, PREVIEW_ZOOM_LIMITS } from '../store/uiStore'
 import { clampEditorFontSize, EDITOR_FONT_OPTIONS, EDITOR_FONT_SIZE_RANGE } from '@ijipu/engine'
-import { pasteImportCopy, numCopy, workspaceCopy, scoreMetaCopy } from '../brand/copy'
+import { pasteImportCopy, numCopy, workspaceCopy } from '../brand/copy'
 // adj614：深浅模式的循环表（顶栏「深浅模式」按钮与 `Ctrl+T` 共用一份，见 `nextThemeMode`）
 import { nextThemeMode } from '../brand/themes'
 // adj617（用户要求）：快捷键提示的唯一出处——菜单 kbd 角标与顶栏/底栏/浮动栏的 title 都引它
@@ -1227,7 +1227,6 @@ export function TopBar() {
   const entrySave: MenuEntry = { label: '保存(&S)', kbd: KBD.save, hotkey: 's', onPick: runSaveSmart }
   const entrySaveAs: MenuEntry = { label: '另存为(&A)…', hotkey: 'a', onPick: runSaveAsSmart }
   // adj1198：发布信息维护（.jps.meta.json），与导出乐谱包分开
-  const entryMeta: MenuEntry = { label: scoreMetaCopy.menuLabel, onPick: () => toggleDock('meta') }
   const entryWorkspace: MenuEntry = {
     label: workspaceCopy.menuLabel,
     kbd: KBD.workspace,
@@ -1297,7 +1296,7 @@ export function TopBar() {
    * 因为嵌入版的保存已由专用对话框接管，见 `docStore.requestSave`）。
    */
   const fileEntries: (MenuEntry | 'sep')[] = isNarrow
-    ? [entryNew, entrySave, entrySaveAs, entryMeta, entryWorkspace, entrySamples, entryPaste, entryRecent, entryTryout, entryExport, entryPrint]
+    ? [entryNew, entrySave, entrySaveAs, entryWorkspace, entrySamples, entryPaste, entryRecent, entryTryout, entryExport, entryPrint]
     : [
         entryNew,
         entryOpen,
@@ -1307,7 +1306,6 @@ export function TopBar() {
         entryRecent,
         entrySave,
         entrySaveAs,
-        entryMeta,
         entryWorkspace,
         entryTryout,
         entryExport,
