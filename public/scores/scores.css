@@ -650,6 +650,9 @@ h1 {
   border-bottom: 1px solid var(--site-border);
   background: #fff;
   overflow: hidden;
+  /* 封面是固定配色的谱面图，不让手机系统深色/强制颜色改写它 */
+  color-scheme: only light;
+  forced-color-adjust: none;
 }
 
 .cover img {
@@ -657,6 +660,7 @@ h1 {
   height: 100%;
   padding: 10px;
   object-fit: contain;
+  forced-color-adjust: none;
 }
 
 /* 曲库封面同样是白纸图：深色主题下用应用同款反相处理，避免一格格白块 */
