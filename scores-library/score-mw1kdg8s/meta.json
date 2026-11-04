@@ -1,0 +1,51 @@
+{
+  "format": "ijipu-score-package",
+  "version": 1,
+  "slug": "score-mw1kdg8s",
+  "short": "scorah",
+  "title": "空  山  静",
+  "composer": "唐富 词曲",
+  "exportedAt": "2026-11-04",
+  "exportedBy": "iJipu 0.77.1",
+  "overlay": {
+    "bg": {
+      "enabled": false,
+      "scale": 100,
+      "rotate": 0,
+      "opacity": 100,
+      "offsetX": 0,
+      "offsetY": 0
+    },
+    "wm": {
+      "enabled": true,
+      "type": "text",
+      "text": "爱记谱・iJipu",
+      "size": 22,
+      "scale": 100,
+      "rotate": -45,
+      "opacity": 15,
+      "repeat": true,
+      "repeatGap": 300,
+      "offsetX": 0,
+      "offsetY": 0
+    }
+  },
+  "license": "CC",
+  "source": "无",
+  "tags": [
+    "国风"
+  ],
+  "publishedAt": "2026-11-04",
+  "updatedAt": "2026-11-04",
+  "importedAt": "2026-11-04",
+  "status": "published",
+  "rights": {
+    "work": "CC",
+    "arrangement": "CC",
+    "notation": "CC-BY-NC-SA-4.0",
+    "ccLicense": "CC-BY-NC-SA-4.0",
+    "attribution": "无"
+  },
+  "note": "",
+  "excerpt": ""
+}
