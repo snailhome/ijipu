@@ -263,8 +263,10 @@ h1 {
 }
 
 :root[data-site-mode='dark'] .paper {
-  --paper-bg: #0b1020;
-  --paper-ink: #e8ecf8;
+  /* 和桌面应用同一套做法：SVG 保持原始墨色，由 filter 反相成暗纸浅字。
+     容器先铺反相后的纸色，避免反相边缘露出一圈亮边。 */
+  --paper-bg: #191a1a;
+  --paper-ink: #1b1b1b;
 }
 
 :root[data-site-mode='light'] .paper {
@@ -281,6 +283,10 @@ h1 {
 .paper svg,
 .paper svg * {
   forced-color-adjust: none;
+}
+
+:root[data-site-mode='dark'] .paper svg {
+  filter: invert(1) contrast(0.88) brightness(1.03) saturate(1);
 }
 
 /* 谱面内部严格用主题墨色，保证深色主题下浅字配深底、浅色主题下深字配白底。
@@ -305,10 +311,7 @@ h1 {
   fill: var(--paper-ink);
 }
 
-/* 页面底色跟着主题走（白纸/深色纸） */
-:root[data-site-mode='dark'] .paper svg rect[data-page-bg] {
-  fill: #0b1020;
-}
+/* 页面底色：原始白纸由上面的反相滤镜变成深色纸，不再单独改 rect 颜色 */
 
 .site-mark {
   position: absolute;
@@ -646,6 +649,11 @@ h1 {
   height: 100%;
   padding: 10px;
   object-fit: contain;
+}
+
+/* 曲库封面同样是白纸图：深色主题下用应用同款反相处理，避免一格格白块 */
+:root[data-site-mode='dark'] .cover img {
+  filter: invert(1) contrast(0.88) brightness(1.03) saturate(1);
 }
 
 .card-body {

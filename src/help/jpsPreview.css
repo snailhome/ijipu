@@ -206,8 +206,8 @@ html[data-mode='light'] .jps-block-code .hl-decoration { color: #c73d8f; }
 }
 html[data-site-mode='dark'] .jps-block-preview,
 html[data-mode='dark'] .jps-block-preview {
-  --jps-paper-bg: #0b1020;
-  --jps-paper-ink: #e8ecf8;
+  --jps-paper-bg: #191a1a;
+  --jps-paper-ink: #1b1b1b;
 }
 html[data-site-mode='light'] .jps-block-preview,
 html[data-mode='light'] .jps-block-preview {
@@ -219,9 +219,13 @@ html[data-mode='light'] .jps-block-preview {
   display: block;
   width: 100%;
   height: auto;
-  background: var(--jps-paper-bg);
+  background: #fff;
   border-radius: 6px;
   forced-color-adjust: none;
+}
+html[data-site-mode='dark'] .jps-block-preview svg,
+html[data-mode='dark'] .jps-block-preview svg {
+  filter: invert(1) contrast(0.88) brightness(1.03) saturate(1);
 }
 .jps-block-preview svg * {
   forced-color-adjust: none;
@@ -242,7 +246,7 @@ html[data-mode='light'] .jps-block-preview {
   fill: var(--jps-paper-ink);
 }
 .jps-block-preview svg rect[data-page-bg] {
-  fill: var(--jps-paper-bg);
+  fill: #fff;
 }
 
 .jps-block-msg {

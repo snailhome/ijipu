@@ -118,29 +118,34 @@
       }
     </style>
     <!--
-      adj1218：深色示例预览的关键兜底。
+      adj1218：深色示例预览的关键兜底（与应用同一套反相处理）。
       手机 WebView / 旧缓存可能只拿到新 HTML、没拿到新 CSS；这几条内联规则保证
-      预览至少是“深底浅字”，不会白底浅字看不见。正常样式仍以 landing/jpsPreview CSS 为准。
+      预览至少是“深底浅字”，不会白底浅字看不见。
     -->
     <style>
       html[data-site-mode='dark'] .jps-block-preview {
-        background: #0b1020 !important;
+        background: #191a1a !important;
         color-scheme: only light;
         forced-color-adjust: none;
       }
       html[data-site-mode='dark'] .jps-block-preview svg {
-        background: #0b1020 !important;
+        background: #fff !important;
+        filter: invert(1) contrast(0.88) brightness(1.03) saturate(1) !important;
         forced-color-adjust: none;
       }
       html[data-site-mode='dark'] .jps-block-preview svg rect[data-page-bg] {
-        fill: #0b1020 !important;
+        fill: #fff !important;
       }
       html[data-site-mode='dark'] .jps-block-preview svg text {
-        fill: #e8ecf8 !important;
+        fill: #1b1b1b !important;
       }
       html[data-site-mode='dark'] .jps-block-preview svg line,
       html[data-site-mode='dark'] .jps-block-preview svg path {
-        stroke: #e8ecf8 !important;
+        stroke: #1b1b1b !important;
+      }
+      html[data-site-mode='dark'] .jps-block-preview svg path[fill]:not([fill='none']),
+      html[data-site-mode='dark'] .jps-block-preview svg rect:not([data-page-bg]) {
+        fill: #1b1b1b !important;
       }
     </style>
   </head>
