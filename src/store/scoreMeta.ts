@@ -15,7 +15,7 @@ import { parseScoreMeta } from '@ijipu/engine'
 import type { ScoreMetaDoc } from '@ijipu/engine'
 import { joinPath } from '../export/video/syncDoc'
 import { downloadSidecarText, readSidecarText, writeSidecarText } from '../export/video/syncIo'
-import { listWorkspaces } from './workspace'
+import { listWorkspaces, readWorkspaceTextById, writeWorkspaceTextById } from './workspace'
 import type { WorkspaceBinding } from './docStore'
 
 export type {
@@ -76,16 +76,31 @@ export async function loadScoreMetaFor(
   binding: WorkspaceBinding | null,
 ): Promise<LoadedScoreMeta> {
   const path = await resolveMetaPath(nativePath, binding)
-  if (path === null) return { path: null, meta: null }
+  if (path === null) {
+    // 网页工作区（FSA）没有磁盘路径，但目录句柄能读同目录边车
+    if (binding !== null) {
+      const text = await readWorkspaceTextById(binding.wsId, metaRelSegsOf(binding))
+      return { path: null, meta: text === null ? null : parseScoreMeta(text) }
+    }
+    return { path: null, meta: null }
+  }
   const r = await readSidecarText(path)
   if (!r.ok || r.text === null) return { path, meta: null }
   return { path, meta: parseScoreMeta(r.text) }
 }
 
 export type SaveMetaResult =
-  | { ok: true; path: string; downloaded?: false }
+  | { ok: true; path: string; workspace?: false; downloaded?: false }
+  | { ok: true; path: null; workspace: true; downloaded?: false }
   | { ok: true; path: null; downloaded: true }
   | { ok: false; error: string }
+
+/** `binding` 的目录 + 同目录边车文件名（`foo.jps` → `foo.jps.meta.json`） */
+function metaRelSegsOf(binding: WorkspaceBinding): string[] {
+  const segs = [...binding.segs]
+  const last = segs.pop() ?? '未命名.jps'
+  return [...segs, metaDownloadName(last)]
+}
 
 export async function saveScoreMetaFor(
   nativePath: string | null,
@@ -98,6 +113,15 @@ export async function saveScoreMetaFor(
   if (path !== null) {
     const r = await writeSidecarText(path, text)
     return r.ok ? { ok: true, path } : { ok: false, error: r.error }
+  }
+  if (binding !== null) {
+    // 网页工作区：目录句柄能写，写的就是 `.jps` 同目录，不再退回"下载到 Downloads"
+    try {
+      await writeWorkspaceTextById(binding.wsId, metaRelSegsOf(binding), text)
+      return { ok: true, path: null, workspace: true }
+    } catch (e) {
+      return { ok: false, error: `写入工作区失败：${e instanceof Error ? e.message : String(e)}` }
+    }
   }
   downloadSidecarText(metaDownloadName(fileName), text)
   return { ok: true, path: null, downloaded: true }

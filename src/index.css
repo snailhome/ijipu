@@ -3624,6 +3624,12 @@ textarea.score-pkg-input { min-height: 64px; resize: vertical; }
   color: #ff8a95;
   font-size: 13px;
 }
+.score-pkg-ok {
+  color: #6ee7b7;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
 .score-pkg-actions {
   display: flex;
   justify-content: flex-end;

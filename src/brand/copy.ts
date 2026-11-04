@@ -1597,6 +1597,8 @@ export const scoreMetaCopy = {
   downloaded: '已下载 .jps.meta.json；放回 .jps 同目录后，导出乐谱包会读它',
   loadFailed: (e: string) => `读取 .jps.meta.json 失败：${e}`,
   saveFailed: (e: string) => `保存失败：${e}`,
+  saveTo: (p: string) => `已保存到：${p}`,
+  saveWorkspace: '已写入 .jps 同目录',
   rightsTitle: '权利分层',
   arrangement: '编配权利',
   arrangementNone: '未填',

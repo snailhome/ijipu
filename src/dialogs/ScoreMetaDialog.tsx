@@ -76,6 +76,7 @@ export function ScoreMetaDialog({ inline = false }: { inline?: boolean }) {
   const [assets, setAssets] = useState<ScoreMetaDoc['assets']>(undefined)
   const [overlay, setOverlay] = useState<ScoreMetaDoc['overlay']>(undefined)
   const [path, setPath] = useState<string | null>(null)
+  const [savedInfo, setSavedInfo] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
@@ -173,7 +174,11 @@ export function ScoreMetaDialog({ inline = false }: { inline?: boolean }) {
         return
       }
       setPath(r.path)
-      showNotice(r.downloaded ? M.downloaded : M.saved)
+      if (r.downloaded) setSavedInfo(M.downloaded)
+      else if (r.workspace) setSavedInfo(M.saveWorkspace)
+      else if (r.path !== null) setSavedInfo(M.saveTo(r.path))
+      else setSavedInfo(M.saved)
+      showNotice(M.saved)
       if (!inline) closeModal()
     } catch (e) {
       setErr(M.saveFailed(e instanceof Error ? e.message : String(e)))
@@ -322,6 +327,7 @@ export function ScoreMetaDialog({ inline = false }: { inline?: boolean }) {
         <div className="score-pkg-assets">{path !== null ? M.pathHint(path) : M.noPathHint}</div>
         <p className="score-pkg-hint">{C.hint}</p>
         {err !== null && <div className="score-pkg-err">{err}</div>}
+        {savedInfo !== null && <div className="score-pkg-ok">{savedInfo}</div>}
         </div>
         <div className="score-pkg-actions">
           <button type="button" className="btn" onClick={inline ? closeDock : closeModal} disabled={busy}>

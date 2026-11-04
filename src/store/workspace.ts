@@ -1141,6 +1141,34 @@ export async function listWorkspaces(): Promise<WorkspaceRecord[]> {
 }
 
 /**
+ * 按工作区 id + 相对路径读一个小文本（目前给 `.jps.meta.json` 用）。
+ * 读不到（文件不存在/权限失效/记录没了）返回 null，由调用方决定兜底。
+ */
+export async function readWorkspaceTextById(
+  wsId: string,
+  segs: readonly string[],
+): Promise<string | null> {
+  const rec = (await listWorkspaces()).find((r) => r.id === wsId)
+  if (!rec) return null
+  try {
+    return await readTextRaw(rec, segs)
+  } catch {
+    return null
+  }
+}
+
+/** 按工作区 id + 相对路径写一个小文本；失败会抛错（由调用方提示） */
+export async function writeWorkspaceTextById(
+  wsId: string,
+  segs: readonly string[],
+  text: string,
+): Promise<void> {
+  const rec = (await listWorkspaces()).find((r) => r.id === wsId)
+  if (!rec) throw new Error('工作区记录不存在')
+  await writeTextRaw(rec, segs, text)
+}
+
+/**
  * 把某个"最近工作区"切换成当前工作区（用户点列表项 ⇒ 手势成立，可顺带申请权限）。
  * 句柄可能已失效（文件被删/权限被撤）⇒ 调用方用返回结果判断，失败给出提示。
  */
