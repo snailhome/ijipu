@@ -856,7 +856,13 @@ html[data-site-mode="light"] .paper{background:#fff!important}
 html[data-site-mode="light"] .paper svg{filter:none!important}
 </style>
 <script>
-try{var m=localStorage.getItem(${JSON.stringify(SITE_THEME_KEY)});document.documentElement.dataset.siteMode=m==='light'?'light':'dark'}catch(e){}
+try{
+  var m=localStorage.getItem(${JSON.stringify(SITE_THEME_KEY)});
+  if(m!=='light'&&m!=='dark'){
+    try{m=matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'}catch(e){m='dark'}
+  }
+  document.documentElement.dataset.siteMode=m;
+}catch(e){}
 try{if(/[?&]plain=1(?:&|$)/.test(location.search))document.documentElement.dataset.plain='1'}catch(e){}
 </script>
 <script>
