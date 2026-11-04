@@ -1255,6 +1255,25 @@ ${cards}
     });
   });
   apply(true);
+
+  /**
+   * adj1223：卡片封面反相由 JS 按当前主题写死，避免手机旧 CSS 缓存把
+   * 浅色主题也套上 invert。JS 的 inline !important 比旧缓存更优先。
+   */
+  var coverImgs = Array.prototype.slice.call(document.querySelectorAll('.cover img'));
+  function syncCoverTheme() {
+    var dark = document.documentElement.dataset.siteMode === 'dark';
+    coverImgs.forEach(function (img) {
+      img.style.setProperty('filter', dark ? 'invert(1) contrast(0.88) brightness(1.03) saturate(1)' : 'none', 'important');
+      var cover = img.closest('.cover');
+      if (cover) cover.style.setProperty('background', dark ? '#191a1a' : '#fff', 'important');
+    });
+  }
+  syncCoverTheme();
+  new MutationObserver(syncCoverTheme).observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['data-site-mode'],
+  });
 })();
 </script>
 </body>
