@@ -852,6 +852,8 @@ html[data-site-mode="dark"] .paper svg line:not([data-overlay]),
 html[data-site-mode="dark"] .paper svg path:not([data-overlay]){stroke:#1b1b1b!important}
 html[data-site-mode="dark"] .paper svg path[fill]:not([fill="none"]):not([data-overlay]),
 html[data-site-mode="dark"] .paper svg rect:not([data-page-bg]):not([data-overlay]){fill:#1b1b1b!important}
+html[data-site-mode="light"] .paper{background:#fff!important}
+html[data-site-mode="light"] .paper svg{filter:none!important}
 </style>
 <script>
 try{var m=localStorage.getItem(${JSON.stringify(SITE_THEME_KEY)});document.documentElement.dataset.siteMode=m==='light'?'light':'dark'}catch(e){}

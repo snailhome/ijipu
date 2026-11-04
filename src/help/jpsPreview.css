@@ -227,6 +227,15 @@ html[data-site-mode='dark'] .jps-block-preview svg,
 html[data-mode='dark'] .jps-block-preview svg {
   filter: invert(1) contrast(0.88) brightness(1.03) saturate(1);
 }
+/* 浅色主题明确不反相（防止旧缓存/内联规则在浅色下残留 filter） */
+html[data-site-mode='light'] .jps-block-preview,
+html[data-mode='light'] .jps-block-preview {
+  background: #fff !important;
+}
+html[data-site-mode='light'] .jps-block-preview svg,
+html[data-mode='light'] .jps-block-preview svg {
+  filter: none !important;
+}
 .jps-block-preview svg * {
   forced-color-adjust: none;
 }

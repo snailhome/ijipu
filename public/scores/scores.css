@@ -289,6 +289,14 @@ h1 {
   filter: invert(1) contrast(0.88) brightness(1.03) saturate(1);
 }
 
+/* 浅色主题明确不反相（防止旧缓存/内联规则在浅色下残留 filter） */
+:root[data-site-mode='light'] .paper {
+  background: #fff !important;
+}
+:root[data-site-mode='light'] .paper svg {
+  filter: none !important;
+}
+
 /* 谱面内部严格用主题墨色，保证深色主题下浅字配深底、浅色主题下深字配白底。
    排除 data-overlay（水印/背景层），它们有自己的颜色与透明度。 */
 .paper svg text:not([data-overlay]) {
@@ -654,6 +662,10 @@ h1 {
 /* 曲库封面同样是白纸图：深色主题下用应用同款反相处理，避免一格格白块 */
 :root[data-site-mode='dark'] .cover img {
   filter: invert(1) contrast(0.88) brightness(1.03) saturate(1);
+}
+
+:root[data-site-mode='light'] .cover img {
+  filter: none !important;
 }
 
 .card-body {
