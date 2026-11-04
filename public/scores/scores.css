@@ -453,6 +453,43 @@ h1 {
   border-color: var(--site-accent);
 }
 
+.pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin: 4px 0 48px;
+  color: var(--site-text-2);
+  font-size: 13px;
+}
+
+.page-size-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.page-size {
+  padding: 5px 8px;
+  border: 1px solid var(--site-border);
+  border-radius: 8px;
+  background: var(--site-panel);
+  color: var(--site-text);
+  font: inherit;
+  font-size: 13px;
+}
+
+.page-info {
+  min-width: 76px;
+  text-align: center;
+}
+
+.pager .chip:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
 .search {
   flex: 1 1 260px;
   min-width: 200px;

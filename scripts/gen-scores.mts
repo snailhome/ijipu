@@ -1091,6 +1091,20 @@ ${topbarHTML('scores')}
   <div class="cards" id="cards">
 ${cards}
   </div>
+  <div class="pager" id="pager">
+    <label class="page-size-label">每页
+      <select class="page-size" id="page-size" aria-label="每页显示卡片数">
+        <option value="10">10</option>
+        <option value="20" selected>20</option>
+        <option value="50">50</option>
+        <option value="100">100</option>
+      </select>
+      张
+    </label>
+    <span class="page-info" id="page-info">第 1 / 1 页</span>
+    <button class="chip" id="page-prev" type="button">上一页</button>
+    <button class="chip" id="page-next" type="button">下一页</button>
+  </div>
   ${published.length === 0 ? '<p class="empty">还没有收录乐谱。</p>' : ''}
   <noscript><p class="empty">筛选需要 JavaScript；上面的乐谱卡片仍然可以直接打开。</p></noscript>
 
@@ -1105,8 +1119,14 @@ ${cards}
   var sort = document.getElementById('sort');
   var sortDir = document.getElementById('sort-dir');
   var cardsBox = document.getElementById('cards');
+  var pageInfo = document.getElementById('page-info');
+  var pagePrev = document.getElementById('page-prev');
+  var pageNext = document.getElementById('page-next');
+  var pageSizeSel = document.getElementById('page-size');
   var active = {};
   var desc = true;
+  var page = 1;
+  var pageSize = 20;
   function compareCards(a, b, key) {
     if (key === 'title' || key === 'composer') {
       return (a.getAttribute('data-' + key) || '').localeCompare(b.getAttribute('data-' + key) || '', 'zh-Hans-CN');
@@ -1126,37 +1146,55 @@ ${cards}
     });
     cards.forEach(function (card) { cardsBox.appendChild(card); });
   }
-  function apply() {
+  function apply(reset) {
+    if (reset) page = 1;
     sortCards();
     var s = q && q.value ? q.value.trim().toLowerCase() : '';
-    var n = 0;
+    var matched = [];
     cards.forEach(function (card) {
       var okS = !s || (card.getAttribute('data-search') || '').indexOf(s) >= 0;
       var list = (card.getAttribute('data-tags') || '').split(' ');
       var okT = Object.keys(active).every(function (t) { return list.indexOf(t) >= 0; });
-      var show = okS && okT;
-      card.hidden = !show;
-      if (show) n++;
+      if (okS && okT) matched.push(card);
+      card.hidden = true;
     });
-    if (count) count.textContent = '共 ' + n + ' 首';
+    var totalPages = Math.max(1, Math.ceil(matched.length / pageSize));
+    if (page > totalPages) page = totalPages;
+    if (page < 1) page = 1;
+    var start = (page - 1) * pageSize;
+    matched.slice(start, start + pageSize).forEach(function (card) { card.hidden = false; });
+    if (count) count.textContent = '共 ' + matched.length + ' 首';
+    if (pageInfo) pageInfo.textContent = '第 ' + page + ' / ' + totalPages + ' 页';
+    if (pagePrev) pagePrev.disabled = page <= 1;
+    if (pageNext) pageNext.disabled = page >= totalPages;
   }
-  if (q) q.addEventListener('input', apply);
-  if (sort) sort.addEventListener('change', apply);
+  if (q) q.addEventListener('input', function () { apply(true); });
+  if (sort) sort.addEventListener('change', function () { apply(true); });
+  if (pageSizeSel) pageSizeSel.addEventListener('change', function () {
+    pageSize = Number(pageSizeSel.value) || 20;
+    apply(true);
+  });
+  if (pagePrev) pagePrev.addEventListener('click', function () {
+    if (page > 1) { page--; apply(false); }
+  });
+  if (pageNext) pageNext.addEventListener('click', function () {
+    page++; apply(false);
+  });
   if (sortDir) sortDir.addEventListener('click', function () {
     desc = !desc;
     sortDir.textContent = desc ? '↓ 倒序' : '↑ 正序';
     sortDir.setAttribute('aria-pressed', desc ? 'true' : 'false');
-    apply();
+    apply(true);
   });
   chips.forEach(function (chip) {
     chip.addEventListener('click', function () {
       var t = chip.getAttribute('data-chip');
       if (active[t]) delete active[t]; else active[t] = 1;
       chip.setAttribute('aria-pressed', active[t] ? 'true' : 'false');
-      apply();
+      apply(true);
     });
   });
-  apply();
+  apply(true);
 })();
 </script>
 </body>
