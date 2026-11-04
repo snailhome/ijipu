@@ -195,14 +195,53 @@ html[data-mode='light'] .jps-block-code .hl-decoration { color: #c73d8f; }
   padding: 14px;
   /* `z=`：数字 ⇒ 钉住像素宽（自然宽 × z/100，由 JS 写进 `--jps-w`）；`*` / 未写 ⇒ 铺满 */
   width: min(100%, var(--jps-w, 100%));
+  /* 预览纸色跟站点深/浅主题走；opt out 手机浏览器的强制深色/颜色反转 */
+  color-scheme: light;
+  forced-color-adjust: none;
+  --jps-paper-bg: #fff;
+  --jps-paper-ink: #1b1b1b;
+  background: var(--jps-paper-bg);
+  border-radius: 6px;
+}
+html[data-site-mode='dark'] .jps-block-preview,
+html[data-mode='dark'] .jps-block-preview {
+  --jps-paper-bg: #0b1020;
+  --jps-paper-ink: #e8ecf8;
+}
+html[data-site-mode='light'] .jps-block-preview,
+html[data-mode='light'] .jps-block-preview {
+  --jps-paper-bg: #fff;
+  --jps-paper-ink: #1c2540;
 }
 .jps-block-preview[hidden] { display: none; }
 .jps-block-preview svg {
   display: block;
   width: 100%;
   height: auto;
-  background: #fff;
+  background: var(--jps-paper-bg);
   border-radius: 6px;
+  forced-color-adjust: none;
+}
+.jps-block-preview svg * {
+  forced-color-adjust: none;
+}
+.jps-block-preview svg text:not([data-overlay]) {
+  fill: var(--jps-paper-ink);
+}
+.jps-block-preview svg line:not([data-overlay]) {
+  stroke: var(--jps-paper-ink);
+}
+.jps-block-preview svg path:not([data-overlay]) {
+  stroke: var(--jps-paper-ink);
+}
+.jps-block-preview svg path[fill]:not([fill='none']):not([data-overlay]) {
+  fill: var(--jps-paper-ink);
+}
+.jps-block-preview svg rect:not([data-page-bg]):not([data-overlay]) {
+  fill: var(--jps-paper-ink);
+}
+.jps-block-preview svg rect[data-page-bg] {
+  fill: var(--jps-paper-bg);
 }
 
 .jps-block-msg {
