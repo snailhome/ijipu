@@ -60,6 +60,8 @@ export interface DynamicExportOptions {
    * 预览与出片必须用同一份，否则成片音色与框里看到的不一致。
    */
   instrumentOverride?: string
+  /** 乐谱库短链代码（3-6 位小写字母）；片尾落款用，空 = 不画短链 */
+  shortCode?: string
   /**
    * adj1119：**对拍得到的实际拍速**（`60000 / beatMs`）。传了就按它重建播放序列
    * （相机/球/音轨同一个速度）；不传 = 用谱面 `J:`（今天的路径）。
@@ -118,6 +120,8 @@ export async function exportDynamicVideo(opts: DynamicExportOptions): Promise<Dy
     ...(opts.rowLeadBeats === undefined ? {} : { rowLeadBeats: opts.rowLeadBeats }),
     // adj1164：相机位音色覆盖透传（音频与色块配色同源）
     ...(opts.instrumentOverride === undefined ? {} : { instrumentOverride: opts.instrumentOverride }),
+    // 片尾短链：只透传，空串/非法值由渲染端忽略
+    ...(opts.shortCode === undefined ? {} : { shortCode: opts.shortCode }),
   })
 
   let audio: AudioBuffer | null = null

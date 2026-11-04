@@ -65,8 +65,13 @@ async function withResolvedCardImage(style: CardStyle): Promise<CardStyle> {
   }
 }
 
-const ASPECTS: { id: DynamicAspect; label: string; ratio: number }[] = [
-  { id: '9x16', label: '9:16', ratio: 9 / 16 },
+/** 文件名本身就是 3-6 位小写字母时，直接当短链默认值（如 `star.jps`） */
+function guessShortOf(name: string | null | undefined): string {
+  const base = (name ?? '').replace(/\.[^.]+$/, '').toLowerCase()
+  return /^[a-z]{3,6}$/.test(base) ? base : ''
+}
+
+const ASPECTS: { id: DynamicAspect; label: string; ratio: number }[] = [  { id: '9x16', label: '9:16', ratio: 9 / 16 },
   { id: '1x1', label: '1:1', ratio: 1 },
   { id: '16x9', label: '16:9', ratio: 16 / 9 },
 ]
@@ -201,6 +206,33 @@ export function DynamicFrameOverlay() {
    * 所以关掉之后预览也从第一拍开始；与「带声音」一样是**本次会话**的选项（L3，关掉相机位即回默认）。
    */
   const [withCards, setWithCards] = useState(true)
+  const fileName = useDocStore((s) => s.fileName)
+  /**
+   * adj1226：片尾短链代码。应用里没有保存站点 short（short 由乐谱库工具分配），
+   * 所以这里按文件记住：导出过乐谱包会写入；没写过就默认文件名（若恰好是 3-6 位小写字母）。
+   */
+  const shortStorageKey = `ijipu.videoShort.${fileName || 'untitled'}`
+  const [shortCode, setShortCode] = useState(() => {
+    try {
+      return localStorage.getItem(shortStorageKey) ?? guessShortOf(fileName)
+    } catch {
+      return guessShortOf(fileName)
+    }
+  })
+  useEffect(() => {
+    try {
+      setShortCode(localStorage.getItem(shortStorageKey) ?? guessShortOf(fileName))
+    } catch {
+      setShortCode(guessShortOf(fileName))
+    }
+  }, [shortStorageKey, fileName])
+  useEffect(() => {
+    try {
+      localStorage.setItem(shortStorageKey, shortCode)
+    } catch {
+      /* 存不下只影响下次默认值 */
+    }
+  }, [shortStorageKey, shortCode])
   /**
    * adj1185（用户实报「导出后还是没有提示」）：除了右上角 toast，在**相机位控制条里**也留一条
    * 导出结果（路径 + 打开文件/文件夹）。相机位浮层 z-index 60，toast 若被别的浮层盖住，
@@ -413,6 +445,7 @@ export function DynamicFrameOverlay() {
         ...(withCards ? {} : { endCardMs: 0 }),
         maxMs: mode === '3min' ? EXPORT_MAX_MS : undefined,
         cardStyle: await withResolvedCardImage(effectiveCardStyle),
+        shortCode,
         // adj1089：平移方式（订阅了 ⇒ 切下拉会重建会话；见上面的依赖数组）
         panMode,
         // adj1094：行末提前平移量（拍）
@@ -439,7 +472,7 @@ export function DynamicFrameOverlay() {
     return () => {
       cancelled = true
     }
-  }, [on, aspect, code, pageConfig, range, mode, effectiveCardStyle, panMode, rowLeadBeats, withCards, syncBpm, headWaitMs, instrumentOverride, paint])
+  }, [on, aspect, code, pageConfig, range, mode, effectiveCardStyle, shortCode, panMode, rowLeadBeats, withCards, syncBpm, headWaitMs, instrumentOverride, paint])
 
   useEffect(() => () => cancelAnimationFrame(rafRef.current), [])
 
@@ -634,6 +667,7 @@ export function DynamicFrameOverlay() {
         mode,
         range,
         cardStyle: await withResolvedCardImage(effectiveCardStyle),
+        shortCode,
         // adj1113：不带片头片尾 ⇒ 只出动态谱（片头 0 / 片尾 0 / 封面取第一拍）
         cards: withCards,
         // adj1089：出片与预览同一份平移方式（设置 → 本机 的 L1 偏好）
@@ -867,6 +901,23 @@ export function DynamicFrameOverlay() {
           <span className="dyn-frame-meta">
             {withCards ? effectiveCardStyle.description : dynamicVideoCopy.cardsOffHint}
           </span>
+          <label className="dock-field dyn-frame-short" title={dynamicVideoCopy.shortHint}>
+            <span className="dyn-frame-label">{dynamicVideoCopy.shortLabel}</span>
+            <input
+              className="dyn-frame-short-input"
+              value={shortCode}
+              maxLength={6}
+              disabled={encoding || preparingAudio || !withCards}
+              placeholder="star"
+              aria-label={dynamicVideoCopy.shortHint}
+              onChange={(e) => {
+                const raw = e.target.value.trim()
+                const hit = raw.match(/\/s\/([a-z]{3,6})\/?$/i)
+                const next = (hit ? hit[1] : raw).toLowerCase().replace(/[^a-z]/g, '').slice(0, 6)
+                setShortCode(next)
+              }}
+            />
+          </label>
         </div>
 
         {/* adj1150（用户 2026-10-25）：对拍文件存在时，相机位直接给「输出声音」——

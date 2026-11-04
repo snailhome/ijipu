@@ -186,6 +186,8 @@ export async function createDynamicSession(
      * 传进来时由 `buildPlaySequence` 覆盖所有声部与曲内 `@` 切换。
      */
     instrumentOverride?: string
+    /** 乐谱库短链代码（3-6 位小写字母）；空 = 片尾不画短链 */
+    shortCode?: string
   },
 ): Promise<DynamicSession> {
   const preset = DYNAMIC_PRESETS[presetId]
@@ -956,10 +958,14 @@ export async function createDynamicSession(
     const titleSize = layout.titleSize
     const sloganSize = layout.sloganSize
     const urlSize = layout.urlSize
+    const shortSize = layout.shortSize
     const titleY = layout.titleY
     const sloganY = layout.sloganY
     const urlY = layout.urlY
+    const shortY = layout.shortY
     const maxW = layout.maxW
+    const shortCode = (opts?.shortCode ?? '').trim().toLowerCase()
+    const shortUrl = /^[a-z]{3,6}$/.test(shortCode) ? `${brand.siteUrl}/s/${shortCode}` : ''
     // adj1069：强调线放在标题与标语之间，距离按 titleSize（三种比例同值），不再固定在标题上方
     const accentY = layout.accentY
     const lineRatio = layout.lineRatio
@@ -1013,6 +1019,11 @@ export async function createDynamicSession(
      * ⇒ 抄片尾那行「ijipu.pages.dev」可能打不开。这一行是给观众照抄的落款，就得能直接抄。
      */
     ctx.fillText(brand.siteUrl, W / 2, urlY)
+    if (shortUrl) {
+      ctx.font = `${shortSize}px ${font}`
+      ctx.globalAlpha = alpha * urlE * 0.9
+      ctx.fillText(shortUrl, W / 2, shortY)
+    }
     ctx.restore()
     paintCardSeal(ctx, W, H, t)
     ctx.restore()

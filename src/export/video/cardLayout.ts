@@ -19,6 +19,8 @@ export interface EndCardLayout {
   sloganSize: number
   /** 网址字号 */
   urlSize: number
+  /** 短链字号（比网址小一档） */
+  shortSize: number
   /** 品牌名基线 y */
   titleY: number
   /** 强调线 y（线的高点） */
@@ -27,6 +29,8 @@ export interface EndCardLayout {
   sloganY: number
   /** 网址基线 y */
   urlY: number
+  /** 短链基线 y */
+  shortY: number
   /** 强调线高度（px）——渲染端用它画线，保证"线中心 = 中点"的口径只有一处 */
   lineH: number
   /** 文本最大宽度 */
@@ -62,9 +66,11 @@ export function endCardLayout(W: number, H: number): EndCardLayout {
   const accentY = (titleInkBottom + sloganInkTop) / 2 - lineH / 2
   // 网址仍是"落款"，位置不动（旧版 0.8/0.72/0.76），免得片尾下沿空一片
   const urlY = H * (wide ? 0.8 : tall ? 0.72 : 0.76)
+  const shortSize = Math.round(urlSize * 0.82)
+  const shortY = urlY + urlSize * 1.8
   const maxW = W * (wide ? 0.8 : 0.86)
   const lineRatio = wide ? 0.14 : tall ? 0.18 : 0.16
-  return { titleSize, sloganSize, urlSize, titleY, accentY, sloganY, urlY, maxW, lineRatio, lineH }
+  return { titleSize, sloganSize, urlSize, shortSize, titleY, accentY, sloganY, urlY, shortY, maxW, lineRatio, lineH }
 }
 
 /**

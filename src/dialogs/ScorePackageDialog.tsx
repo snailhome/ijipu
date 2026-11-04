@@ -237,6 +237,12 @@ export function ScorePackageDialog() {
       )
 
       const zip = writeZip(files)
+      // adj1226：记住这首歌的短链，动态谱视频片尾直接拿来用
+      try {
+        localStorage.setItem(`ijipu.videoShort.${fileName || 'untitled'}`, form.short)
+      } catch {
+        /* 存不下只影响视频片尾默认值 */
+      }
       const out = zip.buffer.slice(zip.byteOffset, zip.byteOffset + zip.byteLength) as ArrayBuffer
       const blob = new Blob([out], { type: 'application/zip' })
       const url = URL.createObjectURL(blob)

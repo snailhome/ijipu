@@ -2292,7 +2292,8 @@ check('adj351 多声部第二组延续同声部：Q1=大钢琴 Q2=打击风琴 Q
   const okOf = (L: ReturnType<typeof endCardLayout>, w: number, h: number): string => {
     const unit = Math.min(w, h)
     const lineH = Math.max(2, unit * 0.004)
-    if (!(L.titleY < L.accentY && L.accentY < L.sloganY && L.sloganY < L.urlY)) return '三行顺序不对'
+    if (!(L.titleY < L.accentY && L.accentY < L.sloganY && L.sloganY < L.urlY && L.urlY < L.shortY)) return '三行顺序不对'
+    if (L.shortY + L.shortSize * 0.3 > h * 0.9) return '短链出画/压印章'
     if (L.sloganY - L.titleY < L.titleSize * 1.2)
       return `标题—标语 ${(L.sloganY - L.titleY).toFixed(0)} < 1.2×标题字号 ${(L.titleSize * 1.2).toFixed(0)}`
     // adj1099：标题墨迹 ↔ 标语墨迹的空白至少一个标题字高（用户要求"再大一些"）
@@ -2399,12 +2400,12 @@ check('adj351 多声部第二组延续同声部：Q1=大钢琴 Q2=打击风琴 Q
   )
   check(
     'adj1113/adj1119/adj1148 `withCards`、对拍拍速（`syncBpm`）与前奏等待（`headWaitMs`）都进了"重建会话"的依赖（点了立刻重画，不继续播旧会话）',
-    /\}, \[on, aspect, code, pageConfig, range, mode, effectiveCardStyle, panMode, rowLeadBeats, withCards, syncBpm, headWaitMs, instrumentOverride, paint\]\)/.test(overlay),
+    /\}, \[on, aspect, code, pageConfig, range, mode, effectiveCardStyle, shortCode, panMode, rowLeadBeats, withCards, syncBpm, headWaitMs, instrumentOverride, paint\]\)/.test(overlay),
   )
   check(
     'adj1113 导出透传 `cards: withCards`；不带片头片尾时卡片下拉/自定义按钮禁用（不是悄悄忽略）',
     /cards: withCards,/.test(overlay) &&
-      (overlay.match(/disabled=\{encoding \|\| preparingAudio \|\| !withCards\}/g) ?? []).length === 2,
+      (overlay.match(/disabled=\{encoding \|\| preparingAudio \|\| !withCards\}/g) ?? []).length === 3,
   )
 
   const ex = String(readFileSync('src/export/video/exportDynamic.ts', 'utf8'))
@@ -34181,7 +34182,7 @@ function runDynamicCameraTests(): void {
     )
     check(
       'adj1089/adj1094/adj1113/adj1119/adj1148/adj1164 换了平移方式/提前量/片头片尾/对拍拍速/前奏等待/音色都会**重建相机会话**（否则点了没反应：还在放旧会话）；adj1150 起混音/音量**不重建会话**（只作废音轨）',
-      /\[on, aspect, code, pageConfig, range, mode, effectiveCardStyle, panMode, rowLeadBeats, withCards, syncBpm, headWaitMs, instrumentOverride, paint\]/.test(
+      /\[on, aspect, code, pageConfig, range, mode, effectiveCardStyle, shortCode, panMode, rowLeadBeats, withCards, syncBpm, headWaitMs, instrumentOverride, paint\]/.test(
         overlaySrcAdj,
       ),
     )

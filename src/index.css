@@ -5947,6 +5947,22 @@ span.ws-check {
   opacity: 0.48;
 }
 
+.dyn-frame-short {
+  margin: 0;
+}
+.dyn-frame-short-input {
+  width: 76px;
+  padding: 3px 6px;
+  font-size: 12px;
+  border: 1px solid var(--jp-border);
+  border-radius: 6px;
+  background: var(--jp-bg-panel);
+  color: var(--jp-text-primary);
+}
+.dyn-frame-short-input:disabled {
+  opacity: 0.48;
+}
+
 /* adj1074：自定义卡片风格对话框 */
 .card-style-form {
   display: flex;
