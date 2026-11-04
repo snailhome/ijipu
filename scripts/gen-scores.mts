@@ -907,6 +907,7 @@ function detailHTML(rendered: Rendered): string {
    * 好处：不受 8000 字符限制、长谱也能带过去；代价：应用要多发一次同源请求（几 KB）。
    */
   const appHref = `/app/?src=${encodeURIComponent(srcUrl)}`
+  const shortUrl = `${SITE}/s/${meta.short}`
   const tags = (meta.tags ?? []).map((t) => `<span class="tag">${esc(t)}</span>`).join('')
   const description = `${meta.title} · ${meta.composer}。用 .jps 脚本写的简谱，可看源码、预览，或在爱记谱里编辑。`
   const note = meta.note ? `<div class="note">${mdToHtml(meta.note)}</div>` : ''
@@ -959,6 +960,7 @@ ${topbarHTML('scores')}
       <a class="btn" href="/scores/${esc(meta.slug)}/score.zip" download>下载 .zip</a>
       ${videos.map((v) => `<a class="btn" href="${esc(v.url)}" target="_blank" rel="noreferrer">${esc(videoLabelOf(v.platform))}</a>`).join('')}
       <button class="btn" type="button" id="copy">复制源码</button>
+      <button class="btn" type="button" id="copy-short">复制短链</button>
     </div>
     <p class="copy-note" id="copy-note" aria-live="polite"></p>
   </div>
@@ -974,28 +976,40 @@ ${topbarHTML('scores')}
 <script>
 (function () {
   var btn = document.getElementById('copy');
+  var shortBtn = document.getElementById('copy-short');
   var note = document.getElementById('copy-note');
   var src = document.getElementById('src');
   if (!btn || !src) return;
-  var text = src.textContent || '';
+  var sourceText = src.textContent || '';
+  var shortUrl = ${JSON.stringify(shortUrl)};
   function done(msg) { if (note) note.textContent = msg; }
-  function fallback() {
-    var ta = document.createElement('textarea');
-    ta.value = text;
-    ta.setAttribute('readonly', '');
-    ta.style.position = 'fixed';
-    ta.style.opacity = '0';
-    document.body.appendChild(ta);
-    ta.select();
-    try { document.execCommand('copy'); done('已复制源码'); }
-    catch (e) { done('复制失败：请长按源码手动复制'); }
-    document.body.removeChild(ta);
+  function copyText(text, okMsg, failMsg) {
+    function fallback() {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); done(okMsg); }
+      catch (e) { done(failMsg); }
+      document.body.removeChild(ta);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { done(okMsg); }, fallback);
+    } else {
+      fallback();
+    }
   }
   btn.addEventListener('click', function () {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).then(function () { done('已复制源码'); }, fallback);
-    } else { fallback(); }
+    copyText(sourceText, '已复制源码', '复制失败：请长按源码手动复制');
   });
+  if (shortBtn) {
+    shortBtn.addEventListener('click', function () {
+      copyText(shortUrl, '已复制短链', '复制失败：请手动复制地址');
+    });
+  }
 })();
 </script>
 </body>
