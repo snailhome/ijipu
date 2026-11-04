@@ -54,5 +54,15 @@
   "note": "",
   "excerpt": "",
   "difficulty": 4,
-  "videoUrl": "https://v.douyin.com/h1LntKRMF0I/"
+  "videoUrl": "https://v.douyin.com/h1LntKRMF0I/",
+  "videos": [
+    {
+      "platform": "douyin",
+      "url": "https://v.douyin.com/h1LntKRMF0I/"
+    },
+    {
+      "platform": "douyin",
+      "url": "https://v.douyin.com/TH08bsROMx0/"
+    }
+  ]
 }
