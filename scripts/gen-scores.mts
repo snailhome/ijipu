@@ -1059,6 +1059,22 @@ function listHTML(entries: Entry[]): string {
 
   const chips = tags.map((t) => `<button class="chip" type="button" data-chip="${esc(t)}" aria-pressed="false">${esc(t)}</button>`).join('')
 
+  const initialPages = Math.max(1, Math.ceil(published.length / 20))
+  const pagerHTML = (position: string): string => `<div class="pager pager-${position}">
+    <label class="page-size-label">每页
+      <select class="page-size" data-page-size aria-label="每页显示卡片数">
+        <option value="10">10</option>
+        <option value="20" selected>20</option>
+        <option value="50">50</option>
+        <option value="100">100</option>
+      </select>
+      张
+    </label>
+    <span class="page-info" data-page-info>第 1 / ${initialPages} 页</span>
+    <button class="chip" data-page-prev type="button">上一页</button>
+    <button class="chip" data-page-next type="button">下一页</button>
+  </div>`
+
   const title = '乐谱 · 爱记谱 iJipu'
   const description = '用 .jps 脚本写的简谱：点开可看源码、预览谱面，或进应用继续编辑。全部为公版 / 原创 / 授权内容。'
 
@@ -1087,24 +1103,12 @@ ${topbarHTML('scores')}
     <button class="chip sort-dir" id="sort-dir" type="button" aria-pressed="true">↓ 倒序</button>
   </div>
   <div class="chips" id="chips">${chips}</div>
+  ${pagerHTML('top')}
 
   <div class="cards" id="cards">
 ${cards}
   </div>
-  <div class="pager" id="pager">
-    <label class="page-size-label">每页
-      <select class="page-size" id="page-size" aria-label="每页显示卡片数">
-        <option value="10">10</option>
-        <option value="20" selected>20</option>
-        <option value="50">50</option>
-        <option value="100">100</option>
-      </select>
-      张
-    </label>
-    <span class="page-info" id="page-info">第 1 / 1 页</span>
-    <button class="chip" id="page-prev" type="button">上一页</button>
-    <button class="chip" id="page-next" type="button">下一页</button>
-  </div>
+  ${pagerHTML('bottom')}
   ${published.length === 0 ? '<p class="empty">还没有收录乐谱。</p>' : ''}
   <noscript><p class="empty">筛选需要 JavaScript；上面的乐谱卡片仍然可以直接打开。</p></noscript>
 
@@ -1119,10 +1123,10 @@ ${cards}
   var sort = document.getElementById('sort');
   var sortDir = document.getElementById('sort-dir');
   var cardsBox = document.getElementById('cards');
-  var pageInfo = document.getElementById('page-info');
-  var pagePrev = document.getElementById('page-prev');
-  var pageNext = document.getElementById('page-next');
-  var pageSizeSel = document.getElementById('page-size');
+  var pageInfos = Array.prototype.slice.call(document.querySelectorAll('[data-page-info]'));
+  var pageSizes = Array.prototype.slice.call(document.querySelectorAll('[data-page-size]'));
+  var pagePrevs = Array.prototype.slice.call(document.querySelectorAll('[data-page-prev]'));
+  var pageNexts = Array.prototype.slice.call(document.querySelectorAll('[data-page-next]'));
   var active = {};
   var desc = true;
   var page = 1;
@@ -1164,21 +1168,28 @@ ${cards}
     var start = (page - 1) * pageSize;
     matched.slice(start, start + pageSize).forEach(function (card) { card.hidden = false; });
     if (count) count.textContent = '共 ' + matched.length + ' 首';
-    if (pageInfo) pageInfo.textContent = '第 ' + page + ' / ' + totalPages + ' 页';
-    if (pagePrev) pagePrev.disabled = page <= 1;
-    if (pageNext) pageNext.disabled = page >= totalPages;
+    pageInfos.forEach(function (el) { el.textContent = '第 ' + page + ' / ' + totalPages + ' 页'; });
+    pagePrevs.forEach(function (btn) { btn.disabled = page <= 1; });
+    pageNexts.forEach(function (btn) { btn.disabled = page >= totalPages; });
   }
   if (q) q.addEventListener('input', function () { apply(true); });
   if (sort) sort.addEventListener('change', function () { apply(true); });
-  if (pageSizeSel) pageSizeSel.addEventListener('change', function () {
-    pageSize = Number(pageSizeSel.value) || 20;
-    apply(true);
+  pageSizes.forEach(function (sel) {
+    sel.addEventListener('change', function () {
+      pageSize = Number(sel.value) || 20;
+      pageSizes.forEach(function (other) { other.value = String(pageSize); });
+      apply(true);
+    });
   });
-  if (pagePrev) pagePrev.addEventListener('click', function () {
-    if (page > 1) { page--; apply(false); }
+  pagePrevs.forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      if (page > 1) { page--; apply(false); }
+    });
   });
-  if (pageNext) pageNext.addEventListener('click', function () {
-    page++; apply(false);
+  pageNexts.forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      page++; apply(false);
+    });
   });
   if (sortDir) sortDir.addEventListener('click', function () {
     desc = !desc;

@@ -160,6 +160,14 @@ html[data-site-mode='light'] .theme-toggle .ico-moon {
   text-transform: uppercase;
 }
 
+.kicker-count {
+  margin-left: 8px;
+  color: var(--site-muted);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
 /* 「乐谱 · 全部乐谱」里的返回链接：与 kicker 同色，靠下划线表明可点 */
 .kicker a {
   color: inherit;
@@ -462,6 +470,10 @@ h1 {
   margin: 4px 0 48px;
   color: var(--site-text-2);
   font-size: 13px;
+}
+
+.pager-top {
+  margin: 8px 0 12px;
 }
 
 .page-size-label {
