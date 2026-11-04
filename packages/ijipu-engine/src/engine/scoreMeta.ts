@@ -73,6 +73,8 @@ export interface ScoreMetaDoc {
   composer: string
   license: ScoreMetaLicense
   source: string
+  /** 抖音 / 小红书 / 微信视频号等视频链接（可选） */
+  videoUrl?: string
   tags: string[]
   difficulty?: number
   order?: number
@@ -196,7 +198,7 @@ export function normalizeScoreMeta(raw: unknown): ScoreMetaDoc | null {
   }
   if (typeof o.difficulty === 'number') doc.difficulty = o.difficulty
   if (typeof o.order === 'number') doc.order = o.order
-  for (const key of ['excerpt', 'note', 'cover', 'file', 'retiredReason', 'retiredAt', 'publishedAt', 'updatedAt', 'exportedAt', 'exportedBy', 'contentHash', 'importedAt', 'sourceZip'] as const) {
+  for (const key of ['excerpt', 'note', 'cover', 'file', 'videoUrl', 'retiredReason', 'retiredAt', 'publishedAt', 'updatedAt', 'exportedAt', 'exportedBy', 'contentHash', 'importedAt', 'sourceZip'] as const) {
     if (typeof o[key] === 'string') doc[key] = o[key]
   }
   if (o.card === 'paper' || o.card === 'ink' || o.card === 'brand' || o.card === 'minimal') doc.card = o.card
@@ -226,6 +228,9 @@ export function validateScoreMeta(meta: ScoreMetaDoc): string {
   if (meta.title.trim() === '') return '标题不能为空'
   if (meta.composer.trim() === '') return '作曲 / 作词不能为空'
   if (meta.source.trim() === '') return '来源不能为空（公版写「传统」/ 授权写授权方）'
+  if (meta.videoUrl !== undefined && meta.videoUrl.trim() !== '' && !/^https?:\/\//i.test(meta.videoUrl)) {
+    return '视频链接必须是 http(s) 地址'
+  }
   if (!Array.isArray(meta.tags) || meta.tags.some((t) => t.trim() === '')) return 'tags 不能有空项'
   if (meta.difficulty !== undefined && (!Number.isInteger(meta.difficulty) || meta.difficulty < 1 || meta.difficulty > 5)) {
     return '难度只能是 1-5 的整数'

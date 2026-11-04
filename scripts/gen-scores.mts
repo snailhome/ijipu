@@ -124,6 +124,7 @@ const META_KEYS = new Set([
   'cover',
   'file',
   'note',
+  'videoUrl',
   'publishedAt',
   'updatedAt',
   'assets',
@@ -601,6 +602,7 @@ function readEntries(): Entry[] {
       cover: obj.cover as string | undefined,
       file: file as string | undefined,
       note: obj.note as string | undefined,
+      videoUrl: typeof obj.videoUrl === 'string' ? obj.videoUrl : undefined,
       assets,
       overlay,
       rights,
@@ -951,6 +953,7 @@ ${topbarHTML('scores')}
       <a class="btn btn-primary" href="${esc(appHref)}">在应用里编辑</a>
       <a class="btn" href="${esc(srcUrl)}" download>下载 .jps</a>
       <a class="btn" href="/scores/${esc(meta.slug)}/score.zip" download>下载 .zip</a>
+      ${meta.videoUrl ? `<a class="btn" href="${esc(meta.videoUrl)}" target="_blank" rel="noreferrer">看视频</a>` : ''}
       <button class="btn" type="button" id="copy">复制源码</button>
     </div>
     <p class="copy-note" id="copy-note" aria-live="polite"></p>
@@ -1053,7 +1056,7 @@ function listHTML(entries: Entry[]): string {
     <h2 class="card-title">${esc(meta.title)}${titleMeta ? `<span class="card-title-meta">${esc(titleMeta)}</span>` : ''}</h2>
     <p class="card-sub">${esc(meta.composer)}</p>
     <div class="card-tags">${(meta.tags ?? []).slice(0, 3).map((t) => `<span class="tag">${esc(t)}</span>`).join('')}</div>
-    <div class="card-foot">${licenseBadge(meta)}${meta.excerpt ? '<span class="tag">片段</span>' : ''}<span>更新 ${esc(meta.updatedAt)}</span></div>
+    <div class="card-foot">${licenseBadge(meta)}${meta.excerpt ? '<span class="tag">片段</span>' : ''}${meta.videoUrl ? '<span class="tag">视频</span>' : ''}<span>更新 ${esc(meta.updatedAt)}</span></div>
   </div>
 </a>`
     })
