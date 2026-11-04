@@ -603,6 +603,7 @@ function readEntries(): Entry[] {
       assets,
       overlay,
       rights,
+      importedAt: obj.importedAt as string | undefined,
       publishedAt: obj.publishedAt,
       updatedAt: obj.updatedAt,
     }
@@ -1029,7 +1030,10 @@ ${topbarHTML('scores')}
 }
 
 function listHTML(entries: Entry[]): string {
-  const published = entries.filter((e) => e.meta.status !== 'retired')
+  const timeOf = (meta: ScoreMeta): string => meta.importedAt ?? meta.publishedAt ?? meta.updatedAt ?? ''
+  const published = entries
+    .filter((e) => e.meta.status !== 'retired')
+    .sort((a, b) => timeOf(b.meta).localeCompare(timeOf(a.meta)) || a.meta.title.localeCompare(b.meta.title, 'zh-Hans-CN'))
   const tags: string[] = []
   for (const e of published) for (const t of e.meta.tags ?? []) if (!tags.includes(t)) tags.push(t)
   tags.sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'))
@@ -1040,7 +1044,8 @@ function listHTML(entries: Entry[]): string {
       const header = parseJps(e.code).header
       const search =
         `${meta.title} ${meta.composer} ${(meta.tags ?? []).join(' ')} ${header.key ?? ''} ${header.meter ?? ''}`.toLowerCase()
-      return `<a class="card" href="${esc(e.pageUrl)}" data-tags="${esc((meta.tags ?? []).join(' '))}" data-search="${esc(search)}">
+      const imported = timeOf(meta)
+      return `<a class="card" href="${esc(e.pageUrl)}" data-tags="${esc((meta.tags ?? []).join(' '))}" data-search="${esc(search)}" data-imported="${esc(imported)}" data-updated="${esc(meta.updatedAt)}" data-title="${esc(meta.title)}" data-composer="${esc(meta.composer)}" data-difficulty="${esc(String(meta.difficulty ?? ''))}">
   <div class="cover"><img src="${esc(e.coverUrl)}" alt="${esc(meta.title)} 的谱面缩略" loading="lazy" width="320" height="200" /></div>
   <div class="card-body">
     <h2 class="card-title">${esc(meta.title)}</h2>
@@ -1070,6 +1075,16 @@ ${topbarHTML('scores')}
   <div class="toolbar">
     <input class="search" id="q" type="search" placeholder="搜索曲名、作者、调号、标签……" aria-label="搜索乐谱" autocomplete="off" />
     <span class="count" id="count">共 ${published.length} 首</span>
+    <label class="sort-label">排序
+      <select class="sort-select" id="sort" aria-label="排序字段">
+        <option value="imported" selected>导入时间</option>
+        <option value="updated">更新时间</option>
+        <option value="title">标题</option>
+        <option value="composer">作曲 / 作词</option>
+        <option value="difficulty">难度</option>
+      </select>
+    </label>
+    <button class="chip sort-dir" id="sort-dir" type="button" aria-pressed="true">↓ 倒序</button>
   </div>
   <div class="chips" id="chips">${chips}</div>
 
@@ -1087,8 +1102,32 @@ ${cards}
   var cards = Array.prototype.slice.call(document.querySelectorAll('.card'));
   var chips = Array.prototype.slice.call(document.querySelectorAll('[data-chip]'));
   var count = document.getElementById('count');
+  var sort = document.getElementById('sort');
+  var sortDir = document.getElementById('sort-dir');
+  var cardsBox = document.getElementById('cards');
   var active = {};
+  var desc = true;
+  function compareCards(a, b, key) {
+    if (key === 'title' || key === 'composer') {
+      return (a.getAttribute('data-' + key) || '').localeCompare(b.getAttribute('data-' + key) || '', 'zh-Hans-CN');
+    }
+    if (key === 'difficulty') {
+      return (Number(a.getAttribute('data-difficulty')) || 0) - (Number(b.getAttribute('data-difficulty')) || 0);
+    }
+    return (a.getAttribute('data-' + key) || '').localeCompare(b.getAttribute('data-' + key) || '');
+  }
+  function sortCards() {
+    if (!sort || !cardsBox) return;
+    var key = sort.value;
+    cards.sort(function (a, b) {
+      var by = compareCards(a, b, key);
+      if (by === 0) by = (a.getAttribute('data-title') || '').localeCompare(b.getAttribute('data-title') || '', 'zh-Hans-CN');
+      return desc ? -by : by;
+    });
+    cards.forEach(function (card) { cardsBox.appendChild(card); });
+  }
   function apply() {
+    sortCards();
     var s = q && q.value ? q.value.trim().toLowerCase() : '';
     var n = 0;
     cards.forEach(function (card) {
@@ -1102,6 +1141,13 @@ ${cards}
     if (count) count.textContent = '共 ' + n + ' 首';
   }
   if (q) q.addEventListener('input', apply);
+  if (sort) sort.addEventListener('change', apply);
+  if (sortDir) sortDir.addEventListener('click', function () {
+    desc = !desc;
+    sortDir.textContent = desc ? '↓ 倒序' : '↑ 正序';
+    sortDir.setAttribute('aria-pressed', desc ? 'true' : 'false');
+    apply();
+  });
   chips.forEach(function (chip) {
     chip.addEventListener('click', function () {
       var t = chip.getAttribute('data-chip');
