@@ -205,14 +205,13 @@
         交互能力用后者（现场渲染）。**静态截图 `demo-score.webp` 随之不再需要** ——
         小星星现在直接由引擎现场渲染，比一张固定的图更有说服力。
 
-        ⚠ 默认停在「脚本」标签是刻意的：预览要先下载引擎 chunk（约 68KB gzip），
-          而首页的定位是"够轻的介绍页"（几 KB JS）⇒ 只有真的想试的人才付这份钱。
+        ⚠ 默认停在「预览」标签（用户 2026-11 要求先看效果；引擎 chunk 会按需加载）。
           行为见 `src/landing/playground.ts`（那里有详细的取舍说明）。
       -->
       <section class="playground" id="playground">
         <h2>一行文本，一段旋律</h2>
         <p class="pg-lead">
-          下列每段均为完整的 <code>.jps</code> 脚本。点选示例，再切换「脚本 / 预览」标签查看效果；
+          下列每段均为完整的 <code>.jps</code> 脚本。点选示例，再切换「预览 / 源码」标签查看效果；
           预览使用<strong>与应用相同的引擎</strong>，渲染结果一致。
           示例从「小星星」开始，依次覆盖反复、跳房子、临时伴奏与多声部。
         </p>
@@ -233,8 +232,8 @@
         -->
         <div class="jps-block" id="pg-block" data-jps-mode="s" data-jps-zoom="*">
           <div class="jps-block-tabs" role="tablist">
-            <button type="button" role="tab" class="active" data-jps-tab="code">脚本</button>
-            <button type="button" role="tab" data-jps-tab="preview">预览</button>
+            <button type="button" role="tab" class="active" data-jps-tab="preview">预览</button>
+            <button type="button" role="tab" data-jps-tab="code">源码</button>
           </div>
           <pre class="jps-block-code"><code>B: 小星星
 D: C

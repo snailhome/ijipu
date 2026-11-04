@@ -153,8 +153,8 @@ function jpsBlockHtml(src: string, p: JpsBlockParams): string {
   const block =
     `<div class="jps-block" data-jps-mode="${p.mode}" data-jps-zoom="${p.zoom}">` +
     `<div class="jps-block-tabs" role="tablist">` +
-    `<button type="button" role="tab" class="active" data-jps-tab="code">脚本</button>` +
-    `<button type="button" role="tab" data-jps-tab="preview">预览</button>` +
+    `<button type="button" role="tab" class="active" data-jps-tab="preview">预览</button>` +
+    `<button type="button" role="tab" data-jps-tab="code">源码</button>` +
     `</div>` +
     `<pre class="jps-block-code"><code>${esc(src)}</code></pre>` +
     `<div class="jps-block-preview" hidden></div>` +

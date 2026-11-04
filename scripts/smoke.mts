@@ -29582,12 +29582,16 @@ C2: 歌，@那么我@是想要画你的手。@ {tp 1// 2/.} 你看我多么 {tp 
       parseJpsInfo('jps z=abc')?.zoom === 100 && parseJpsInfo('jps m=x')?.mode === 's' &&
       parseJpsInfo('jps z=150m=p')?.zoom === 100 && parseJpsInfo('jps z=150m=p')?.mode === 's')
 
-  // ---- 渲染产物：真的产出了「脚本 / 预览」结构（无 JS 时就是普通代码块） ----
+  // ---- 渲染产物：真的产出了「预览 / 源码」结构（无 JS 时就是普通代码块） ----
   const jpsHtml = mdToHtml('```jps z=150 v=w\nQ: 1 2 |\n```\n')
-  check('adj882 mdToHtml：```jps 产出 .jps-block（两个标签 + 源码留在 pre>code 里）',
+  check('adj882/adj1216 mdToHtml：```jps 产出 .jps-block（预览在源码前，源码留在 pre>code 里）',
     jpsHtml.includes('class="jps-block"') && jpsHtml.includes('data-jps-mode="w"') &&
-      jpsHtml.includes('data-jps-zoom="150"') && jpsHtml.includes('data-jps-tab="code"') &&
-      jpsHtml.includes('data-jps-tab="preview"') && jpsHtml.includes('<pre class="jps-block-code"><code>'))
+      jpsHtml.includes('data-jps-zoom="150"') && jpsHtml.includes('data-jps-tab="preview"') &&
+      jpsHtml.includes('class="active" data-jps-tab="preview"') &&
+      jpsHtml.includes('data-jps-tab="code"') && jpsHtml.includes('>预览</button>') &&
+      jpsHtml.includes('>源码</button>') && !jpsHtml.includes('>脚本</button>') &&
+      jpsHtml.indexOf('data-jps-tab="preview"') < jpsHtml.indexOf('data-jps-tab="code"') &&
+      jpsHtml.includes('<pre class="jps-block-code"><code>'))
   check('adj882 非 jps 的围栏仍然是普通 <pre>（没被带跑）',
     mdToHtml('```js\nlet a = 1\n```\n').includes('<pre>') && !mdToHtml('```js\nlet a = 1\n```\n').includes('jps-block'))
   check('adj882 负对照：`jpsx` 这种前缀相似的不算 jps 块（判据在量语言名本身）',

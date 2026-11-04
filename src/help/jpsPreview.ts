@@ -151,7 +151,36 @@ function refreshBlock(block: HTMLElement, force = false): void {
     })
 }
 
-/** 切「脚本 / 预览」两个标签（切到预览才真的渲染——引擎按需加载） */
+/** 源码区用与曲库详情相同的 highlightModel 分词 + hl-* 色 */
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] ?? c)
+}
+
+function paintSource(block: HTMLElement): void {
+  const codeEl = block.querySelector<HTMLElement>('.jps-block-code code')
+  if (!codeEl) return
+  const src = codeEl.textContent ?? ''
+  if (codeEl.dataset.jpsPainted === src) return
+  void loadEngine()
+    .then((e) => {
+      if ((codeEl.textContent ?? '') !== src) return
+      const hl = e.highlightModel(src)
+      codeEl.innerHTML = hl.lines
+        .map((line) => {
+          const inner = line.tokens
+            .map((t) => (t.cls === 'plain' ? escapeHtml(t.text) : `<span class="hl-${t.cls}">${escapeHtml(t.text)}</span>`))
+            .join('')
+          return `<span class="src-line">${inner}</span>`
+        })
+        .join('\n')
+      codeEl.dataset.jpsPainted = src
+    })
+    .catch(() => {
+      /* 引擎不可用：保留纯文本源码 */
+    })
+}
+
+/** 切「源码 / 预览」两个标签（切到预览才真的渲染——引擎按需加载） */
 function showTab(block: HTMLElement, tab: 'code' | 'preview'): void {
   const dom = domOf(block)
   if (!dom) return
@@ -163,7 +192,8 @@ function showTab(block: HTMLElement, tab: 'code' | 'preview'): void {
   dom.code.hidden = tab !== 'code'
   dom.host.hidden = tab !== 'preview'
   dom.msg.hidden = tab !== 'preview'
-  if (tab === 'preview') refreshBlock(block)
+  if (tab === 'code') paintSource(block)
+  else refreshBlock(block)
 }
 
 /** 给一个块挂交互；已挂过的打标记跳过（幂等，可重复调用） */
@@ -175,8 +205,8 @@ function mountBlock(block: HTMLElement): void {
   for (const b of dom.tabs) {
     b.addEventListener('click', () => showTab(block, b.dataset.jpsTab === 'preview' ? 'preview' : 'code'))
   }
-  // 初始：显示「脚本」（预览要按需下引擎，不该在页面加载时就发生）
-  showTab(block, 'code')
+  // 初始：显示「预览」（用户要求先看效果；源码切过去时再上色）
+  showTab(block, 'preview')
 }
 
 /**

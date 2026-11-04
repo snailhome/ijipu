@@ -127,8 +127,12 @@
   border: none;
   border-radius: 0;
   box-shadow: none;
-  background: transparent;
-  padding: 12px 16px;
+  background: var(--jb-code);
+  color: var(--jb-text);
+  padding: 14px 16px;
+  font-family: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.6;
   /**
    * adj899（用户反馈「示例的脚本块没有允许自动换行，应开启自动换行，不然脚本看不全」）：
    * 原来没写 `white-space`，于是继承 `pre` 的默认 `pre` ⇒ **长曲行不折行、右侧被截掉**。
@@ -140,6 +144,52 @@
   overflow-wrap: anywhere;
   overflow-x: visible;
 }
+
+/* 源码行号与高亮：与曲库详情页 .source pre/.src-line 同一套观感 */
+.jps-block-code code {
+  display: block;
+  counter-reset: srcline;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  color: inherit;
+}
+.jps-block-code .src-line {
+  display: block;
+  min-height: 1.6em;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.jps-block-code .src-line::before {
+  display: inline-block;
+  width: 2.2em;
+  margin-right: 0.9em;
+  color: var(--jb-muted);
+  text-align: right;
+  counter-increment: srcline;
+  content: counter(srcline);
+  user-select: none;
+}
+.jps-block-code .hl-line-header { color: #00f0ff; }
+.jps-block-code .hl-note { color: #ffb86c; }
+.jps-block-code .hl-barline { color: #6272a4; }
+.jps-block-code .hl-lyric { color: #7dd6a8; }
+.jps-block-code .hl-comment { color: #6a7bb8; }
+.jps-block-code .hl-pagebreak { color: #ff79c6; }
+.jps-block-code .hl-decoration { color: #ff79c6; }
+html[data-site-mode='light'] .jps-block-code .hl-line-header,
+html[data-mode='light'] .jps-block-code .hl-line-header { color: #0891a6; }
+html[data-site-mode='light'] .jps-block-code .hl-note,
+html[data-mode='light'] .jps-block-code .hl-note { color: #b35900; }
+html[data-site-mode='light'] .jps-block-code .hl-barline,
+html[data-mode='light'] .jps-block-code .hl-barline { color: #5a6a9e; }
+html[data-site-mode='light'] .jps-block-code .hl-lyric,
+html[data-mode='light'] .jps-block-code .hl-lyric { color: #2f8f5f; }
+html[data-site-mode='light'] .jps-block-code .hl-comment,
+html[data-mode='light'] .jps-block-code .hl-comment { color: #6a7bb8; }
+html[data-site-mode='light'] .jps-block-code .hl-pagebreak,
+html[data-mode='light'] .jps-block-code .hl-pagebreak,
+html[data-site-mode='light'] .jps-block-code .hl-decoration,
+html[data-mode='light'] .jps-block-code .hl-decoration { color: #c73d8f; }
 
 .jps-block-preview {
   padding: 14px;

@@ -252,15 +252,62 @@ h1 {
   position: relative;
   padding: 18px 18px 36px;
   border-radius: 12px;
-  background: #fff;
+  background: var(--paper-bg, #fff);
   box-shadow: 0 10px 34px var(--site-shadow);
   overflow: hidden;
+  /* 谱面颜色由站点深/浅主题显式给出；opt out 手机浏览器的强制深色/颜色反转 */
+  color-scheme: light;
+  forced-color-adjust: none;
+  --paper-bg: #fff;
+  --paper-ink: #1b1b1b;
+}
+
+:root[data-site-mode='dark'] .paper {
+  --paper-bg: #0b1020;
+  --paper-ink: #e8ecf8;
+}
+
+:root[data-site-mode='light'] .paper {
+  --paper-bg: #fff;
+  --paper-ink: #1c2540;
 }
 
 .paper svg {
   display: block;
   width: 100%;
   height: auto;
+}
+
+.paper svg,
+.paper svg * {
+  forced-color-adjust: none;
+}
+
+/* 谱面内部严格用主题墨色，保证深色主题下浅字配深底、浅色主题下深字配白底。
+   排除 data-overlay（水印/背景层），它们有自己的颜色与透明度。 */
+.paper svg text:not([data-overlay]) {
+  fill: var(--paper-ink);
+}
+
+.paper svg line:not([data-overlay]) {
+  stroke: var(--paper-ink);
+}
+
+.paper svg path:not([data-overlay]) {
+  stroke: var(--paper-ink);
+}
+
+.paper svg path[fill]:not([fill='none']):not([data-overlay]) {
+  fill: var(--paper-ink);
+}
+
+.paper svg rect:not([data-page-bg]):not([data-overlay]) {
+  fill: var(--paper-ink);
+}
+
+/* 页面底色跟着主题走（白纸/深色纸） */
+:root[data-site-mode='dark'] .paper svg rect[data-page-bg] {
+  fill: #0b1020;
 }
 
 .site-mark {
