@@ -14240,10 +14240,10 @@ function runAdj965OverlayTests() {
 
   // ---- ② 文本水印：居中 / 绕自身中心 45° / opacity 0.25 / 字号 / 转义 ----
   const p0 = plainLay.pages[0]
-  const wm = renderScoreToSvg(mkLayout({ wmText: '草稿<&"' }))[0] ?? ''
+  const wm = renderScoreToSvg(mkLayout({ wmText: '草稿<&"', wmRepeat: false, wmOpacity: 25 }))[0] ?? ''
   const rot = num(/transform="rotate\(([-\d.]+) ([-\d.]+) ([-\d.]+)\)"/, wm)
   check(
-    'adj965/1189 文本水印：绕**页面中心**旋转（默认 -45°）、`opacity="0.25"`、字号 22',
+    'adj965/1189 文本水印：绕**页面中心**旋转（默认 -45°）、显式 `opacity="0.25"`、字号 22',
     wm.includes('data-overlay="wm"') &&
       wm.includes('opacity="0.25"') &&
       wm.includes('font-size="22"') &&
@@ -14260,16 +14260,18 @@ function runAdj965OverlayTests() {
       defaultPageConfig.wmEnabled === false,
     JSON.stringify({ text: defaultPageConfig.wmText, size: defaultPageConfig.wmSize }),
   )
-  // adj965b（用户 2026-10-15 裁定）：默认旋转由 +45 改为 **-45**，且默认是"单个居中"（不重复）
-  // adj965f（用户 2026-10-15 追加裁定）：平铺间隔默认由 100 改为 **300**（100 太密）
+  // adj965b（用户 2026-10-15 裁定）：默认旋转由 +45 改为 **-45**
+  // adj965f：平铺间隔默认 100 → **300**
+  // adj1207（用户 2026-11-04）：重复铺满默认 **开启**、透明度默认 **15**
   check(
-    'adj965b/f 水印旋转默认 **-45°**（用户裁定改写）；重复铺满默认**关闭**、平铺间隔默认 **300%**',
+    'adj965b/f/adj1207 水印旋转默认 **-45°**；重复铺满默认**开启**、间隔 **300%**、透明度 **15**',
     defaultPageConfig.wmRotate === -45 &&
-      defaultPageConfig.wmRepeat === false &&
+      defaultPageConfig.wmRepeat === true &&
       defaultPageConfig.wmRepeatGap === 300 &&
+      defaultPageConfig.wmOpacity === 15 &&
       wm.includes('rotate(-45 ') &&
       !writeJpsConfig('', { ...defaultPageConfig }, { mode: 'diff' }).includes('wmRepeat'),
-    `wmRotate=${defaultPageConfig.wmRotate} wmRepeat=${String(defaultPageConfig.wmRepeat)} wmRepeatGap=${defaultPageConfig.wmRepeatGap}`,
+    `wmRotate=${defaultPageConfig.wmRotate} wmRepeat=${String(defaultPageConfig.wmRepeat)} wmRepeatGap=${defaultPageConfig.wmRepeatGap} wmOpacity=${defaultPageConfig.wmOpacity}`,
   )
   // adj965b：重复水印（平铺满页面）——判据**双向**：不勾选必须只有一枚、勾选必须多枚
   const countWmText = (s: string): number => (s.match(/<text text-anchor="middle"/g) ?? []).length
@@ -14435,7 +14437,7 @@ function runAdj965OverlayTests() {
    */
   const wmImgSvg =
     renderScoreToSvg(
-      mkLayout({ wmType: 'image', wmImage: '印章.png', wmScale: 10, wmRotate: 0, wmOffsetX: 120, wmOffsetY: -80 }),
+      mkLayout({ wmType: 'image', wmImage: '印章.png', wmScale: 10, wmRotate: 0, wmRepeat: false, wmOffsetX: 120, wmOffsetY: -80 }),
       { assets: { wm: ASSET } },
     )[0] ?? ''
   const wi = num(/<image [^>]*x="([-\d.]+)" y="([-\d.]+)" width="([\d.]+)" height="([\d.]+)"/, wmImgSvg)
@@ -14452,7 +14454,7 @@ function runAdj965OverlayTests() {
   )
   /** 负对照：偏移为 0 时**必须**居中——否则上面那条可能是"恒偏移"而不是"真按偏移走" */
   const wmImgCenter =
-    renderScoreToSvg(mkLayout({ wmType: 'image', wmImage: '印章.png', wmScale: 10, wmRotate: 0 }), {
+    renderScoreToSvg(mkLayout({ wmType: 'image', wmImage: '印章.png', wmScale: 10, wmRotate: 0, wmRepeat: false }), {
       assets: { wm: ASSET },
     })[0] ?? ''
   const wc = num(/<image [^>]*x="([-\d.]+)" y="([-\d.]+)" width="([\d.]+)" height="([\d.]+)"/, wmImgCenter)

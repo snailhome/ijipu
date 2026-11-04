@@ -571,8 +571,8 @@ function readEntries(): Entry[] {
           size: numOr(w.size, 22, 'wm.size'),
           scale: numOr(w.scale, 100, 'wm.scale'),
           rotate: numOr(w.rotate, -45, 'wm.rotate'),
-          opacity: numOr(w.opacity, 25, 'wm.opacity'),
-          repeat: w.repeat === true,
+          opacity: numOr(w.opacity, 15, 'wm.opacity'),
+          repeat: w.repeat !== false,
           repeatGap: numOr(w.repeatGap, 300, 'wm.repeatGap'),
           offsetX: numOr(w.offsetX, 0, 'wm.offsetX'),
           offsetY: numOr(w.offsetY, 0, 'wm.offsetY'),
@@ -1037,7 +1037,9 @@ function listHTML(entries: Entry[]): string {
   const cards = published
     .map((e) => {
       const { meta } = e
-      const search = `${meta.title} ${meta.composer} ${(meta.tags ?? []).join(' ')}`.toLowerCase()
+      const header = parseJps(e.code).header
+      const search =
+        `${meta.title} ${meta.composer} ${(meta.tags ?? []).join(' ')} ${header.key ?? ''} ${header.meter ?? ''}`.toLowerCase()
       return `<a class="card" href="${esc(e.pageUrl)}" data-tags="${esc((meta.tags ?? []).join(' '))}" data-search="${esc(search)}">
   <div class="cover"><img src="${esc(e.coverUrl)}" alt="${esc(meta.title)} 的谱面缩略" loading="lazy" width="320" height="200" /></div>
   <div class="card-body">
@@ -1066,7 +1068,7 @@ ${topbarHTML('scores')}
   </header>
 
   <div class="toolbar">
-    <input class="search" id="q" type="search" placeholder="搜索曲名、作者、标签……" aria-label="搜索乐谱" autocomplete="off" />
+    <input class="search" id="q" type="search" placeholder="搜索曲名、作者、调号、标签……" aria-label="搜索乐谱" autocomplete="off" />
     <span class="count" id="count">共 ${published.length} 首</span>
   </div>
   <div class="chips" id="chips">${chips}</div>
