@@ -660,10 +660,15 @@ h1 {
 }
 
 /* 曲库封面同样是白纸图：深色主题下用应用同款反相处理，避免一格格白块 */
+:root[data-site-mode='dark'] .cover {
+  background: #191a1a;
+}
 :root[data-site-mode='dark'] .cover img {
   filter: invert(1) contrast(0.88) brightness(1.03) saturate(1);
 }
-
+:root[data-site-mode='light'] .cover {
+  background: #fff;
+}
 :root[data-site-mode='light'] .cover img {
   filter: none !important;
 }
