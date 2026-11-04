@@ -54,7 +54,8 @@
 | `order` | | | 数字，越小越靠前；首页示例也用它排序 |
 | `excerpt` | | | 片段说明（如「第 1-4 小节」） |
 | `note` | | | 编配说明（Markdown） |
-| `videoUrl` | | | 抖音 / 小红书 / 微信视频号链接；站点详情显示「看视频」 |
+| `videoUrl` | | | 旧单条视频链接（兼容；新数据用 `videos`） |
+| `videos` | | | `[{ "platform": "douyin", "url": "https://…" }]`；platform: douyin / xiaohongshu / wechat / other |
 | `card` | | | `paper` / `ink` / `brand` / `minimal` |
 | `watermark` | | | `corner` / `tile` / `none` |
 | `cover` | | | `assets/cover.webp`；省略 = 自动封面 |

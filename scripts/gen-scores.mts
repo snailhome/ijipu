@@ -44,6 +44,7 @@ import {
   splitParseIssues,
   tempoLabel,
   validateScoreMeta,
+  videoPlatformOf,
   SCORE_META_LICENSES,
 } from '@ijipu/engine'
 import type { OverlayMeta, ScoreMetaDoc, ScoreMetaLicense, ScoreRights } from '@ijipu/engine'
@@ -125,6 +126,7 @@ const META_KEYS = new Set([
   'file',
   'note',
   'videoUrl',
+  'videos',
   'publishedAt',
   'updatedAt',
   'assets',
@@ -603,6 +605,7 @@ function readEntries(): Entry[] {
       file: file as string | undefined,
       note: obj.note as string | undefined,
       videoUrl: typeof obj.videoUrl === 'string' ? obj.videoUrl : undefined,
+      videos: Array.isArray(obj.videos) ? (obj.videos as unknown as ScoreMeta['videos']) : undefined,
       assets,
       overlay,
       rights,
@@ -907,6 +910,7 @@ function detailHTML(rendered: Rendered): string {
   const tags = (meta.tags ?? []).map((t) => `<span class="tag">${esc(t)}</span>`).join('')
   const description = `${meta.title} · ${meta.composer}。用 .jps 脚本写的简谱，可看源码、预览，或在爱记谱里编辑。`
   const note = meta.note ? `<div class="note">${mdToHtml(meta.note)}</div>` : ''
+  const videos = videosOf(meta)
   const title = `${meta.title} · 乐谱 · 爱记谱 iJipu`
   /**
    * adj1192（用户要求）：右侧源码用**应用同款语法高亮**（引擎 `highlightModel` 分词，
@@ -953,7 +957,7 @@ ${topbarHTML('scores')}
       <a class="btn btn-primary" href="${esc(appHref)}">在应用里编辑</a>
       <a class="btn" href="${esc(srcUrl)}" download>下载 .jps</a>
       <a class="btn" href="/scores/${esc(meta.slug)}/score.zip" download>下载 .zip</a>
-      ${meta.videoUrl ? `<a class="btn" href="${esc(meta.videoUrl)}" target="_blank" rel="noreferrer">看视频</a>` : ''}
+      ${videos.map((v) => `<a class="btn" href="${esc(v.url)}" target="_blank" rel="noreferrer">${esc(videoLabelOf(v.platform))}</a>`).join('')}
       <button class="btn" type="button" id="copy">复制源码</button>
     </div>
     <p class="copy-note" id="copy-note" aria-live="polite"></p>
@@ -1033,6 +1037,20 @@ ${topbarHTML('scores')}
 </html>`
 }
 
+function videosOf(meta: ScoreMeta): { platform: string; url: string }[] {
+  if (Array.isArray(meta.videos) && meta.videos.length > 0) {
+    return meta.videos.map((v) => ({ platform: v.platform, url: v.url }))
+  }
+  return meta.videoUrl ? [{ platform: videoPlatformOf(meta.videoUrl), url: meta.videoUrl }] : []
+}
+
+function videoLabelOf(platform: string): string {
+  if (platform === 'douyin') return '抖音视频'
+  if (platform === 'xiaohongshu') return '小红书视频'
+  if (platform === 'wechat') return '微信视频'
+  return '看视频'
+}
+
 function listHTML(entries: Entry[]): string {
   const timeOf = (meta: ScoreMeta): string => meta.importedAt ?? meta.publishedAt ?? meta.updatedAt ?? ''
   const published = entries
@@ -1045,6 +1063,7 @@ function listHTML(entries: Entry[]): string {
   const cards = published
     .map((e) => {
       const { meta } = e
+      const videos = videosOf(meta)
       const header = parseJps(e.code).header
       const titleMeta = [header.meter, tempoLabel(header.tempoNum, header.tempoText)].filter(Boolean).join(' · ')
       const search =
@@ -1056,7 +1075,7 @@ function listHTML(entries: Entry[]): string {
     <h2 class="card-title">${esc(meta.title)}${titleMeta ? `<span class="card-title-meta">${esc(titleMeta)}</span>` : ''}</h2>
     <p class="card-sub">${esc(meta.composer)}</p>
     <div class="card-tags">${(meta.tags ?? []).slice(0, 3).map((t) => `<span class="tag">${esc(t)}</span>`).join('')}</div>
-    <div class="card-foot">${licenseBadge(meta)}${meta.excerpt ? '<span class="tag">片段</span>' : ''}${meta.videoUrl ? '<span class="tag">视频</span>' : ''}<span>更新 ${esc(meta.updatedAt)}</span></div>
+    <div class="card-foot">${licenseBadge(meta)}${meta.excerpt ? '<span class="tag">片段</span>' : ''}${videos.length > 0 ? '<span class="tag">视频</span>' : ''}<span>更新 ${esc(meta.updatedAt)}</span></div>
   </div>
 </a>`
     })

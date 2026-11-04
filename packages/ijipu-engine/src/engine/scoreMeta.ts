@@ -63,6 +63,30 @@ export interface OverlayMeta {
   }
 }
 
+export type VideoPlatform = 'douyin' | 'xiaohongshu' | 'wechat' | 'other'
+
+export interface VideoLink {
+  platform: VideoPlatform
+  url: string
+}
+
+/** 从 URL 的域名识别平台；识别不了归 other */
+export function videoPlatformOf(url: string): VideoPlatform {
+  try {
+    const host = new URL(url).hostname.toLowerCase()
+    if (host === 'douyin.com' || host.endsWith('.douyin.com') || host.endsWith('.iesdouyin.com')) return 'douyin'
+    if (host === 'xiaohongshu.com' || host.endsWith('.xiaohongshu.com') || host.endsWith('.xhslink.com')) {
+      return 'xiaohongshu'
+    }
+    if (host === 'weixin.qq.com' || host.endsWith('.weixin.qq.com') || host.endsWith('.weixin110.com')) {
+      return 'wechat'
+    }
+  } catch {
+    /* 不是合法 URL */
+  }
+  return 'other'
+}
+
 /** 一份乐谱的发布信息；应用边车、乐谱包、站点卡片、工具编辑共用 */
 export interface ScoreMetaDoc {
   format?: typeof SCORE_META_FORMAT | typeof SCORE_PACKAGE_FORMAT
@@ -73,8 +97,10 @@ export interface ScoreMetaDoc {
   composer: string
   license: ScoreMetaLicense
   source: string
-  /** 抖音 / 小红书 / 微信视频号等视频链接（可选） */
+  /** 单条视频链接（旧字段；新数据优先用 videos） */
   videoUrl?: string
+  /** 多条视频链接；工具自动识别抖音/小红书/微信 */
+  videos?: VideoLink[]
   tags: string[]
   difficulty?: number
   order?: number
@@ -178,6 +204,30 @@ function normalizeAssets(raw: unknown): ScoreMetaAsset[] | undefined {
   return out.length > 0 ? out : undefined
 }
 
+function normalizeVideos(raw: unknown): VideoLink[] | undefined {
+  if (!Array.isArray(raw)) return undefined
+  const out: VideoLink[] = []
+  const seen = new Set<string>()
+  for (const item of raw) {
+    let url = ''
+    let platform: VideoPlatform | undefined
+    if (typeof item === 'string') {
+      url = item
+    } else if (typeof item === 'object' && item !== null && !Array.isArray(item)) {
+      const v = item as Record<string, unknown>
+      if (typeof v.url === 'string') url = v.url
+      if (v.platform === 'douyin' || v.platform === 'xiaohongshu' || v.platform === 'wechat' || v.platform === 'other') {
+        platform = v.platform
+      }
+    }
+    url = url.trim()
+    if (url === '' || seen.has(url)) continue
+    seen.add(url)
+    out.push({ platform: platform ?? videoPlatformOf(url), url })
+  }
+  return out.length > 0 ? out : undefined
+}
+
 /** 把任意 JSON 归一化成 ScoreMetaDoc；连 slug/title 都没有则返回 null（视为不是 meta） */
 export function normalizeScoreMeta(raw: unknown): ScoreMetaDoc | null {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null
@@ -206,6 +256,8 @@ export function normalizeScoreMeta(raw: unknown): ScoreMetaDoc | null {
   if (o.status === 'published' || o.status === 'retired') doc.status = o.status
   const assets = normalizeAssets(o.assets)
   if (assets) doc.assets = assets
+  const videos = normalizeVideos(o.videos)
+  if (videos) doc.videos = videos
   const overlay = normalizeOverlay(o.overlay)
   if (overlay) doc.overlay = overlay
   const rights = normalizeRights(o.rights)
@@ -230,6 +282,9 @@ export function validateScoreMeta(meta: ScoreMetaDoc): string {
   if (meta.source.trim() === '') return '来源不能为空（公版写「传统」/ 授权写授权方）'
   if (meta.videoUrl !== undefined && meta.videoUrl.trim() !== '' && !/^https?:\/\//i.test(meta.videoUrl)) {
     return '视频链接必须是 http(s) 地址'
+  }
+  for (const v of meta.videos ?? []) {
+    if (!/^https?:\/\//i.test(v.url)) return '视频链接必须是 http(s) 地址'
   }
   if (!Array.isArray(meta.tags) || meta.tags.some((t) => t.trim() === '')) return 'tags 不能有空项'
   if (meta.difficulty !== undefined && (!Number.isInteger(meta.difficulty) || meta.difficulty < 1 || meta.difficulty > 5)) {
