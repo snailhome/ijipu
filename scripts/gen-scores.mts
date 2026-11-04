@@ -933,24 +933,23 @@ ${topbarHTML('scores')}
   </header>
 
   <div class="layout">
-    <section>
-      <div class="paper">
-        ${svgs.join('\n')}
-        <span class="site-mark"><a href="${esc(SITE)}/">${esc(SITE)}/</a> · ${esc(brand.author)}</span>
-      </div>
-      <div class="actions no-plain">
-        <a class="btn btn-primary" href="${esc(appHref)}">在应用里编辑</a>
-        <a class="btn" href="${esc(srcUrl)}" download>下载 .jps</a>
-        <a class="btn" href="/scores/${esc(meta.slug)}/score.zip" download>下载 .zip</a>
-        <button class="btn" type="button" id="copy">复制源码</button>
-      </div>
-      <p class="copy-note" id="copy-note" aria-live="polite"></p>
-    </section>
+    <div class="paper">
+      ${svgs.join('\n')}
+      <span class="site-mark"><a href="${esc(SITE)}/">${esc(SITE)}/</a> · ${esc(brand.author)}</span>
+    </div>
 
     <aside class="source">
       <div class="source-head"><span>源码 · ${lines} 行</span><span class="spacer"></span><a href="${esc(srcUrl)}" download>.jps</a></div>
       <pre><code id="src">${sourceHtml}</code></pre>
     </aside>
+
+    <div class="actions no-plain">
+      <a class="btn btn-primary" href="${esc(appHref)}">在应用里编辑</a>
+      <a class="btn" href="${esc(srcUrl)}" download>下载 .jps</a>
+      <a class="btn" href="/scores/${esc(meta.slug)}/score.zip" download>下载 .zip</a>
+      <button class="btn" type="button" id="copy">复制源码</button>
+    </div>
+    <p class="copy-note" id="copy-note" aria-live="polite"></p>
   </div>
 
   ${note}

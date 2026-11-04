@@ -221,10 +221,18 @@ h1 {
 .layout {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.9fr);
-  gap: 24px;
-  align-items: start;
+  column-gap: 24px;
+  row-gap: 0;
+  /* 预览纸张通常比源码高：让源码列拉伸到同一行高，两块看起来是一个整体 */
+  align-items: stretch;
   margin: 22px 0 36px;
 }
+
+/* 预览与源码同一行；按钮/复制提示留在预览列下面，不再把源码列一起撑高 */
+.layout > .paper { grid-column: 1; grid-row: 1; }
+.layout > .source { grid-column: 2; grid-row: 1; }
+.layout > .actions { grid-column: 1; grid-row: 2; }
+.layout > .copy-note { grid-column: 1; grid-row: 3; }
 
 /* 网格项默认 `min-width: auto`：SVG 的固有宽度（约 511px）会把格子撑出手机屏幕。
    显式给 0，SVG 才会按 `width:100%` 缩。 */
@@ -272,9 +280,11 @@ h1 {
 }
 
 .source {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
   border: 1px solid var(--site-border);
   border-radius: 12px;
   background: var(--site-panel);
@@ -285,6 +295,7 @@ h1 {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-height: 41px;
   padding: 10px 12px;
   border-bottom: 1px solid var(--site-border);
   color: var(--site-text-2);
@@ -298,7 +309,14 @@ h1 {
 .source pre {
   margin: 0;
   padding: 14px 16px;
-  max-height: 70vh;
+  /* 桌面：源码区与预览纸张同高，代码在自己的面板里滚动 */
+  position: absolute;
+  top: 41px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  min-height: 0;
+  max-height: none;
   overflow: auto;
   background: var(--site-code-bg);
   color: var(--site-text);
@@ -616,7 +634,23 @@ html[data-plain='1'] body {
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .layout > .paper,
+  .layout > .source,
+  .layout > .actions,
+  .layout > .copy-note {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .source {
+    display: flex;
+    flex-direction: column;
+  }
+
   .source pre {
+    position: static;
+    flex: 0 1 auto;
+    height: auto;
     max-height: 45vh;
   }
 
