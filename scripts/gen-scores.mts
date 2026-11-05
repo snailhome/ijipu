@@ -851,7 +851,7 @@ html[data-site-mode="dark"] .paper svg text:not([data-overlay]){fill:#1b1b1b!imp
 html[data-site-mode="dark"] .paper svg line:not([data-overlay]),
 html[data-site-mode="dark"] .paper svg path:not([data-overlay]){stroke:#1b1b1b!important}
 html[data-site-mode="dark"] .paper svg path[fill]:not([fill="none"]):not([data-overlay]),
-html[data-site-mode="dark"] .paper svg rect:not([data-page-bg]):not([data-overlay]){fill:#1b1b1b!important}
+html[data-site-mode="dark"] .paper svg rect:not([data-page-bg]):not([data-overlay]):not([fill="none"]){fill:#1b1b1b!important}
 html[data-site-mode="light"] .paper{background:#fff!important}
 html[data-site-mode="light"] .paper svg{filter:none!important}
 </style>

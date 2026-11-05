@@ -251,7 +251,7 @@ html[data-mode='light'] .jps-block-preview svg {
 .jps-block-preview svg path[fill]:not([fill='none']):not([data-overlay]) {
   fill: var(--jps-paper-ink);
 }
-.jps-block-preview svg rect:not([data-page-bg]):not([data-overlay]) {
+.jps-block-preview svg rect:not([data-page-bg]):not([data-overlay]):not([fill='none']) {
   fill: var(--jps-paper-ink);
 }
 .jps-block-preview svg rect[data-page-bg] {

@@ -315,7 +315,7 @@ h1 {
   fill: var(--paper-ink);
 }
 
-.paper svg rect:not([data-page-bg]):not([data-overlay]) {
+.paper svg rect:not([data-page-bg]):not([data-overlay]):not([fill='none']) {
   fill: var(--paper-ink);
 }
 
