@@ -17,6 +17,41 @@ import { getOverlaySnapshot } from '../store/overlayAssets'
 import { base64ToBytes, writeZip, type ZipEntry } from '../export/zip'
 import { scorePackageCopy as C } from '../brand/copy'
 import { APP_VERSION } from '../brand/version'
+import { isScoreShort, uniqueShortFromSlug } from '../export/scoreShort'
+
+/** 本机已用过的 slug → short；用于避免同一台机器导出的包互相撞 short */
+const SHORT_REGISTRY_KEY = 'ijipu.scorePackageShorts'
+
+function readShortRegistry(): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(SHORT_REGISTRY_KEY)
+    const parsed: unknown = raw ? JSON.parse(raw) : null
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return {}
+    const out: Record<string, string> = {}
+    for (const [slug, short] of Object.entries(parsed)) {
+      if (typeof short === 'string' && isScoreShort(short)) out[slug] = short
+    }
+    return out
+  } catch {
+    return {}
+  }
+}
+
+function shortForSlug(slug: string): string {
+  const registry = readShortRegistry()
+  return registry[slug] ?? uniqueShortFromSlug(slug, Object.values(registry))
+}
+
+function rememberShort(slug: string, short: string): void {
+  if (!isScoreShort(short)) return
+  try {
+    const registry = readShortRegistry()
+    registry[slug] = short
+    localStorage.setItem(SHORT_REGISTRY_KEY, JSON.stringify(registry))
+  } catch {
+    /* 存不下只影响下次自动填充 */
+  }
+}
 
 type Role = 'background' | 'watermark'
 
@@ -37,12 +72,6 @@ function slugify(name: string): string {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
   return s !== '' ? s : `score-${Date.now().toString(36)}`
-}
-
-function shortify(slug: string): string {
-  const letters = slug.replace(/[^a-z]/g, '')
-  if (letters.length >= 3) return letters.slice(0, 6)
-  return `pkg${Math.random().toString(36).replace(/[^a-z]/g, '').slice(0, 1) || 'x'}`
 }
 
 function today(): string {
@@ -113,7 +142,7 @@ export function ScorePackageDialog() {
     const title = (parseResult.header.titles[0] ?? '').trim() || stripExt(fileName || '未命名') || '未命名'
     const composer = (parseResult.header.authors[0] ?? '').trim() || '佚名'
     const slug = slugify(stripExt(fileName || '') || title)
-    return { title, composer, slug, short: shortify(slug) }
+    return { title, composer, slug, short: shortForSlug(slug) }
   }, [parseResult.header.titles, parseResult.header.authors, fileName])
 
   const [form, setForm] = useState<FormState>(defaults)
@@ -237,6 +266,7 @@ export function ScorePackageDialog() {
       )
 
       const zip = writeZip(files)
+      rememberShort(form.slug, form.short)
       // adj1226：记住这首歌的短链，动态谱视频片尾直接拿来用
       try {
         localStorage.setItem(`ijipu.videoShort.${fileName || 'untitled'}`, form.short)
