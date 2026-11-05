@@ -94,6 +94,8 @@ export interface ScoreMetaDoc {
   slug: string
   short: string
   title: string
+  /** 副标题：其余 B 行去空格后用「，」连接 */
+  subtitle?: string
   composer: string
   license: ScoreMetaLicense
   source: string
@@ -248,7 +250,7 @@ export function normalizeScoreMeta(raw: unknown): ScoreMetaDoc | null {
   }
   if (typeof o.difficulty === 'number') doc.difficulty = o.difficulty
   if (typeof o.order === 'number') doc.order = o.order
-  for (const key of ['excerpt', 'note', 'cover', 'file', 'videoUrl', 'retiredReason', 'retiredAt', 'publishedAt', 'updatedAt', 'exportedAt', 'exportedBy', 'contentHash', 'importedAt', 'sourceZip'] as const) {
+  for (const key of ['subtitle', 'excerpt', 'note', 'cover', 'file', 'videoUrl', 'retiredReason', 'retiredAt', 'publishedAt', 'updatedAt', 'exportedAt', 'exportedBy', 'contentHash', 'importedAt', 'sourceZip'] as const) {
     if (typeof o[key] === 'string') doc[key] = o[key]
   }
   if (o.card === 'paper' || o.card === 'ink' || o.card === 'brand' || o.card === 'minimal') doc.card = o.card
@@ -276,7 +278,7 @@ export function parseScoreMeta(text: string): ScoreMetaDoc | null {
 /** 表单校验；返回中文错误（空串 = 通过）。站点/工具可在此之后再查文件是否存在 */
 export function validateScoreMeta(meta: ScoreMetaDoc): string {
   if (!/^[a-z0-9-]+$/.test(meta.slug)) return 'slug 只能用小写字母、数字、连字符'
-  if (!/^[a-z]{3,6}$/.test(meta.short)) return 'short 必须是 3-6 位小写字母'
+  if (!/^[a-z0-9]{3,6}$/.test(meta.short)) return 'short 必须是 3-6 位小写字母或数字'
   if (meta.title.trim() === '') return '标题不能为空'
   if (meta.composer.trim() === '') return '作曲 / 作词不能为空'
   if (meta.source.trim() === '') return '来源不能为空（公版写「传统」/ 授权写授权方）'

@@ -2,9 +2,10 @@
  * dialogs/ScorePackageDialog.tsx — 导出乐谱包（zip，adj1195 / adj1205）
  *
  * 乐谱包是**运输单元**，不是发布信息编辑器：
- *   meta.json（slug/short/title/composer/assets/overlay）+ README.md + score.jps + assets/
+ *   meta.json（title/subtitle/composer/assets/overlay）+ README.md + score.jps + assets/
  *
  * 许可 / 来源 / rights / tags / 难度 等发布信息由**私有乐谱库工具**维护；
+ * short / slug 也由工具按「主标题，副标题」生成，应用只导出简谱相关字段。
  * 应用不再维护 `.jps.meta.json`，导出时也不带这些字段。
  * 规则见官网仓 `docs/SCORE-PKG.md`。
  */
@@ -17,61 +18,21 @@ import { getOverlaySnapshot } from '../store/overlayAssets'
 import { base64ToBytes, writeZip, type ZipEntry } from '../export/zip'
 import { scorePackageCopy as C } from '../brand/copy'
 import { APP_VERSION } from '../brand/version'
-import { isScoreShort, uniqueShortFromSlug } from '../export/scoreShort'
-
-/** 本机已用过的 slug → short；用于避免同一台机器导出的包互相撞 short */
-const SHORT_REGISTRY_KEY = 'ijipu.scorePackageShorts'
-
-function readShortRegistry(): Record<string, string> {
-  try {
-    const raw = localStorage.getItem(SHORT_REGISTRY_KEY)
-    const parsed: unknown = raw ? JSON.parse(raw) : null
-    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return {}
-    const out: Record<string, string> = {}
-    for (const [slug, short] of Object.entries(parsed)) {
-      if (typeof short === 'string' && isScoreShort(short)) out[slug] = short
-    }
-    return out
-  } catch {
-    return {}
-  }
-}
-
-function shortForSlug(slug: string): string {
-  const registry = readShortRegistry()
-  return registry[slug] ?? uniqueShortFromSlug(slug, Object.values(registry))
-}
-
-function rememberShort(slug: string, short: string): void {
-  if (!isScoreShort(short)) return
-  try {
-    const registry = readShortRegistry()
-    registry[slug] = short
-    localStorage.setItem(SHORT_REGISTRY_KEY, JSON.stringify(registry))
-  } catch {
-    /* 存不下只影响下次自动填充 */
-  }
-}
 
 type Role = 'background' | 'watermark'
 
 interface FormState {
   title: string
+  subtitle: string
   composer: string
-  slug: string
-  short: string
 }
 
 function stripExt(name: string): string {
   return name.replace(/\.(jps|md|txt)$/i, '')
 }
 
-function slugify(name: string): string {
-  const s = name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-  return s !== '' ? s : `score-${Date.now().toString(36)}`
+function noSpace(text: string): string {
+  return text.replace(/\s+/g, '')
 }
 
 function today(): string {
@@ -109,20 +70,21 @@ async function bytesOfHref(href: string): Promise<Uint8Array> {
 /** 包里的 README 只讲“这是什么、怎么打开”，不讲发布信息 */
 function readmeOf(meta: {
   title: string
+  subtitle?: string
   composer: string
-  slug: string
   assets: { path: string; role: string }[]
 }): string {
   return [
     `# ${meta.title}`,
+    ...(meta.subtitle ? ['', `副标题：${meta.subtitle}`] : []),
     '',
     `- 作曲 / 作词：${meta.composer}`,
-    `- 页面：https://ijipu.pages.dev/scores/${meta.slug}/`,
     '',
     '用「爱记谱 iJipu」打开 `score.jps` 即可查看 / 试听 / 编辑。',
     '应用：https://ijipu.pages.dev/app/',
     '',
-    '发布信息（许可 / 来源 / rights / tags 等）由「爱记谱乐谱库管理工具」在导入后维护。',
+    '发布信息（许可 / 来源 / rights / tags 等）由「爱记谱乐谱库管理工具」在导入后维护；',
+    'short / slug 也由工具按「主标题，副标题」自动生成。',
     '',
     '资源：',
     ...(meta.assets.length > 0 ? meta.assets.map((a) => `- ${a.path}（${a.role}）`) : ['- 无']),
@@ -139,13 +101,23 @@ export function ScorePackageDialog() {
   const pageConfig = useDocStore((s) => s.pageConfig)
 
   const defaults = useMemo<FormState>(() => {
-    const title = (parseResult.header.titles[0] ?? '').trim() || stripExt(fileName || '未命名') || '未命名'
-    const composer = (parseResult.header.authors[0] ?? '').trim() || '佚名'
-    const slug = slugify(stripExt(fileName || '') || title)
-    return { title, composer, slug, short: shortForSlug(slug) }
+    /**
+     * 主标题 = 第一个 B 去掉所有空格；
+     * 副标题 = 其余 B 去掉所有空格后，用「，」连接；
+     * 作曲/作词 = 每个 Z 去首尾空格后，用「，」连接。
+     */
+    const titles = parseResult.header.titles.map(noSpace).filter((s) => s !== '')
+    const title = titles[0] ?? (noSpace(stripExt(fileName || '未命名')) || '未命名')
+    const subtitle = titles.slice(1).join('，')
+    const composer =
+      parseResult.header.authors
+        .map((s) => s.trim())
+        .filter((s) => s !== '')
+        .join('，') || '佚名'
+    return { title, subtitle, composer }
   }, [parseResult.header.titles, parseResult.header.authors, fileName])
 
-  const [form, setForm] = useState<FormState>(defaults)
+  const [form] = useState<FormState>(defaults)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
@@ -176,18 +148,13 @@ export function ScorePackageDialog() {
     return parts.length > 0 ? parts.join('；') : C.assetsNone
   }, [assetPlan, pageConfig.wmEnabled, pageConfig.wmType, pageConfig.wmText])
 
-  const set = <K extends keyof FormState,>(key: K, value: FormState[K]): void => {
-    setForm((prev) => ({ ...prev, [key]: value }))
-  }
-
   const doExport = async (): Promise<void> => {
     setErr(null)
     const title = form.title.trim()
+    const subtitle = form.subtitle.trim()
     const composer = form.composer.trim()
     if (title === '') return setErr(C.needTitle)
     if (composer === '') return setErr(C.needComposer)
-    if (!/^[a-z0-9-]+$/.test(form.slug)) return setErr(C.badSlug)
-    if (!/^[a-z]{3,6}$/.test(form.short)) return setErr(C.badShort)
     const snap = getOverlaySnapshot()
     if (pageConfig.bgEnabled && pageConfig.bgImage.trim() === '') {
       return setErr('背景已开启，但还没选择背景图')
@@ -244,13 +211,12 @@ export function ScorePackageDialog() {
           offsetY: pageConfig.wmOffsetY,
         },
       }
-      // 只带“运输信息”；许可/rights/source/tags 等发布信息由乐谱库工具维护
+      // 只带“运输信息”；short/slug 由乐谱库工具按「主标题，副标题」生成
       const meta = {
         format: 'ijipu-score-package',
         version: 1,
-        slug: form.slug,
-        short: form.short,
         title,
+        subtitle,
         composer,
         exportedAt: today(),
         exportedBy: `iJipu ${APP_VERSION}`,
@@ -266,19 +232,13 @@ export function ScorePackageDialog() {
       )
 
       const zip = writeZip(files)
-      rememberShort(form.slug, form.short)
-      // adj1226：记住这首歌的短链，动态谱视频片尾直接拿来用
-      try {
-        localStorage.setItem(`ijipu.videoShort.${fileName || 'untitled'}`, form.short)
-      } catch {
-        /* 存不下只影响视频片尾默认值 */
-      }
       const out = zip.buffer.slice(zip.byteOffset, zip.byteOffset + zip.byteLength) as ArrayBuffer
       const blob = new Blob([out], { type: 'application/zip' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
+      const safeName = `${title}${subtitle ? `-${subtitle}` : ''}`.replace(/[\\/:*?"<>|]/g, '-').slice(0, 60)
       a.href = url
-      a.download = `${form.slug}.zip`
+      a.download = `${safeName || 'ijipu-score'}.zip`
       a.click()
       URL.revokeObjectURL(url)
       showNotice(C.done)
@@ -298,19 +258,15 @@ export function ScorePackageDialog() {
           <div className="score-pkg-grid">
             <label className="score-pkg-field">
               <span>{C.fieldTitle}</span>
-              <input className="score-pkg-input" value={form.title} onChange={(e) => set('title', e.target.value)} />
+              <div className="score-pkg-readonly">{form.title}</div>
             </label>
             <label className="score-pkg-field">
               <span>{C.fieldComposer}</span>
-              <input className="score-pkg-input" value={form.composer} onChange={(e) => set('composer', e.target.value)} />
+              <div className="score-pkg-readonly">{form.composer}</div>
             </label>
-            <label className="score-pkg-field">
-              <span>{C.fieldSlug}</span>
-              <input className="score-pkg-input" value={form.slug} onChange={(e) => set('slug', e.target.value)} />
-            </label>
-            <label className="score-pkg-field">
-              <span>{C.fieldShort}</span>
-              <input className="score-pkg-input" value={form.short} onChange={(e) => set('short', e.target.value)} />
+            <label className="score-pkg-field score-pkg-span2">
+              <span>{C.fieldSubtitle}</span>
+              <div className="score-pkg-readonly">{form.subtitle || '（无）'}</div>
             </label>
           </div>
           <div className="score-pkg-assets">

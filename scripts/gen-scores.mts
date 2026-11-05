@@ -109,6 +109,7 @@ const META_KEYS = new Set([
   'version',
   'slug',
   'title',
+  'subtitle',
   'composer',
   'license',
   'source',
@@ -421,7 +422,7 @@ function readEntries(): Entry[] {
     const composer = needString(obj.composer, 'composer', where)
     const source = needString(obj.source, 'source', where)
     const short = needString(obj.short, 'short', where)
-    if (!/^[a-z]{3,6}$/.test(short)) fail(`${slug} 的 short「${short}」必须是 3-6 位小写字母`)
+    if (!/^[a-z0-9]{3,6}$/.test(short)) fail(`${slug} 的 short「${short}」必须是 3-6 位小写字母或数字`)
     if (RESERVED_SHORT.has(short)) fail(`${slug} 的 short「${short}」是保留字`)
     const owner = shortOwner.get(short)
     if (owner !== undefined) fail(`短码「${short}」被 ${owner} 和 ${slug} 同时占用`)
@@ -588,6 +589,7 @@ function readEntries(): Entry[] {
     const meta: ScoreMeta = {
       slug,
       title,
+      subtitle: typeof obj.subtitle === 'string' ? obj.subtitle : undefined,
       composer,
       license,
       source,

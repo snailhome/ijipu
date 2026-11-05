@@ -3607,6 +3607,16 @@ body {
   font-size: 14px;
 }
 .score-pkg-input:focus { outline: none; border-color: var(--jp-accent); }
+.score-pkg-readonly {
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 1px solid var(--jp-border);
+  border-radius: 6px;
+  background: var(--jp-bg-panel);
+  color: var(--jp-text-primary);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
 textarea.score-pkg-input { min-height: 64px; resize: vertical; }
 .score-pkg-assets {
   padding: 7px 10px;

@@ -24,7 +24,7 @@
 硬规则：
 
 1. **文件在 zip 根目录**，不要套一层 `<slug>/`。
-2. zip 名 = `meta.slug` + `.zip`（导入时不一致要报错，或由工具改名并记录）。
+2. zip 名自由；应用导出的包可以不带 slug/short，由工具按「主标题，副标题」生成。
 3. 不接收 `__MACOSX/`、`.DS_Store`、`Thumbs.db`；工具导入时忽略，校验时不计。
 4. 不接收嵌套 zip。
 5. 只允许上面列出的文件名与 `assets/**`；多余文件报错（防夹带）。
@@ -35,17 +35,19 @@
 
 > **字段模型与校验的唯一实现**：`packages/ijipu-engine/src/engine/scoreMeta.ts`
 > （`ScoreMetaDoc` / `normalizeScoreMeta` / `validateScoreMeta`）。
-> 应用只导出**运输字段**（slug/short/title/composer/assets/overlay）；
+> 应用只导出**运输字段**（title/subtitle/composer/assets/overlay），**不带 slug/short**；
 > 许可、来源、rights、tags 等**发布信息由乐谱库工具维护**，导入时补默认值。
+> short 由工具按 `SHA-256(主标题，副标题去空格) → 33 进制 4 位` 生成，slug = `score-<short>`。
 
 | 字段 | 包内 | 库内 | 规则 |
 |---|---|---|---|
 | `format` | ✓ | | 固定 `"ijipu-score-package"` |
 | `version` | ✓ | | 固定 `1`（整数） |
-| `slug` | ✓ | ✓ | `[a-z0-9-]+`，发布后不改；= zip 名 |
-| `short` | ✓ | ✓ | `[a-z]{3,6}`，全局唯一，发布后不改 |
-| `title` | ✓ | ✓ | 非空 |
-| `composer` | ✓ | ✓ | 非空；公版写「传统」/作者 |
+| `slug` | | ✓ | 工具生成 `score-<short>`；发布后不改 |
+| `short` | | ✓ | 工具生成 4 位 `[a-z0-9]`，全局唯一，发布后不改 |
+| `title` | ✓ | ✓ | 主标题：第一个 `B` 去空格 |
+| `subtitle` | ✓ | ✓ | 副标题：其余 `B` 去空格后用「，」连接 |
+| `composer` | ✓ | ✓ | 非空；全部 `Z` 去首尾空格后用「，」连接；公版写「传统」/作者 |
 | `license` | | ✓ | 工具默认 `CC`；`PD` / `ORIGINAL` / `AUTHORIZED` / `CC` |
 | `rights` | | ✓ | 权利分层；工具默认见 §2.3 |
 | `source` | | ✓ | 工具默认 `无`；审计用，页脚会显示 |
@@ -190,11 +192,12 @@ publishedAt / updatedAt: 导入当天
 人读，不进渲染。导出器按 `meta.json` 生成，至少含：
 
 ```
-曲名 / 作曲 / 来源 / 许可
-页面：https://ijipu.pages.dev/scores/<slug>/
+主标题 / 副标题 / 作曲作词
 怎么打开：用「爱记谱 iJipu」打开 score.jps
 资源清单：assets/bg.webp（背景）、assets/wm.png（水印）
 ```
+
+short / slug 由工具导入时生成，README 不写死页面地址。
 
 `README.md` 缺失时导入器可自动补；`meta.json` 缺失直接失败。
 

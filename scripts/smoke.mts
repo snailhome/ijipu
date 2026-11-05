@@ -253,7 +253,6 @@ import { highlightCodeWrapped } from '../src/editor/highlight.ts'
 import { HEADER_HINTS, filterHeaderHints, BARLINE_MODIFIER_HINTS, NOTE_MODIFIER_HINTS, GRACE_MODIFIER_HINTS, isBarlineModifierContext, isGraceModifierContext, filterModifierHints } from '../src/editor/completions.ts'
 // adj629x：设置面板「恢复默认」的草稿语义（整份替换；浅合并会把可选字段留下）
 import { draftAfterReset } from '../src/dialogs/pageConfigReset.ts'
-import { isScoreShort, shortFromSlug, uniqueShortFromSlug } from '../src/export/scoreShort.ts'
 // adj722：播放进度读数 `mm:ss`
 import { fmtClock } from '../src/dialogs/playbackClock.ts'
 // adj723d：试听单实例保证（代次守卫）+ adj723e：自动播放判定
@@ -29238,7 +29237,7 @@ C2: 歌，@那么我@是想要画你的手。@ {tp 1// 2/.} 你看我多么 {tp 
     const short = String(meta.short ?? '')
     if (String(meta.slug ?? '') !== dir) scoreProblems.push(`${dir}: slug 与目录名不一致`)
     if (!scoreLicenses.includes(String(meta.license ?? ''))) scoreProblems.push(`${dir}: license 不合法`)
-    if (!/^[a-z]{3,6}$/.test(short)) scoreProblems.push(`${dir}: short 不是 3-6 位小写字母`)
+    if (!/^[a-z0-9]{3,6}$/.test(short)) scoreProblems.push(`${dir}: short 不是 3-6 位小写字母或数字`)
     if (shortSeen1190.has(short)) scoreProblems.push(`${dir}: short 与别的条目重复（${short}）`)
     shortSeen1190.add(short)
     if (!/^\d{4}-\d{2}-\d{2}$/.test(String(meta.publishedAt ?? ''))) scoreProblems.push(`${dir}: publishedAt`)
@@ -38063,28 +38062,6 @@ function runAdj1189Tests(): void {
       defaultPageConfig.wmEnabled === false,
     JSON.stringify({ text: defaultPageConfig.wmText, size: defaultPageConfig.wmSize }),
   )
-  {
-    // adj1242：short 不能再统一取 slug 的 scorem；按 slug 哈希生成并本地去重
-    const a = shortFromSlug('score-mw0yun7f')
-    const b = shortFromSlug('score-mw1egmo5')
-    const uniq = uniqueShortFromSlug('score-mw0yun7f', [a])
-    check(
-      'adj1242 short 自动生成：6 位小写字母、同 slug 稳定、不同 slug 不都叫 scorem',
-      isScoreShort(a) && a === shortFromSlug('score-mw0yun7f') && a !== b && a !== 'scorem' && b !== 'scorem',
-      JSON.stringify({ a, b }),
-    )
-    check(
-      'adj1242 short 本地去重：已占用的短码会换一个合法短码',
-      uniq !== a && isScoreShort(uniq),
-      JSON.stringify({ a, uniq }),
-    )
-    const pkgSrc = readFileSync(join(root, 'src/dialogs/ScorePackageDialog.tsx'), 'utf8')
-    check(
-      'adj1242 导出乐谱包使用本地 short 注册表（不再调用旧的 shortify）',
-      /shortForSlug\(slug\)/.test(pkgSrc) && /ijipu\.scorePackageShorts/.test(pkgSrc) && !/function shortify/.test(pkgSrc),
-      '',
-    )
-  }
   const overlaySrc = readFileSync(join(root, 'src/preview/DynamicFrameOverlay.tsx'), 'utf8')
   check(
     'adj1189 相机位预览放大：高度上限 78%/68%、宽度 96%（控制条预留高度不变）',
