@@ -295,3 +295,15 @@
 3. **可选字段**（不在 `defaultPageConfig` 上）若属 L2，必须同时登记到 `engine/settings.ts` 的 `OPTIONAL_CONFIG_FIELDS`（有编译期断言兜底）。
 4. **字体一律用完整栈**（末尾必须落到 `sans-serif/serif/monospace`）：候选集中在 `engine/fonts.ts`，读取旧值经 `normalizeFontStack` 自动补 fallback。
 5. L1 的新键：集中定义在 `src/store/editorPrefs.ts` 或 store 顶部常量，`ijipu.` 前缀、损坏回退默认、越界钳制。
+
+## 八、乐谱包/发布身份边界（用户 2026-11-05 定，**一直生效**）
+
+- **应用侧只做简谱相关**：`.jps` 解析、排版、渲染、试听、导出 `score.jps` / 图片 / 视频。
+- 应用导出的乐谱包只带**运输字段**：`title` / `subtitle` / `composer` / `assets` / `overlay`；
+  **不带 `slug` / `short`**，也不生成、不让用户输入 short。
+- **short / slug / 许可 / 来源 / rights / tags 等发布身份，一律由私有乐谱库工具维护**。
+  short 规则：`SHA-256(主标题，副标题去空格) → 33 进制 4 位 → 盐探测 → 映射持久化`；
+  slug = `score-<short>`。
+- 同名乐谱要区分，**改副标题**（B 行）来得到不同 short；不要恢复应用侧的 short 生成/注册表。
+- 后续做跨端功能分析时，先问一句：这是“简谱相关”还是“发布/站点身份相关”？
+  后者放乐谱库工具/站点，不要塞回应用。
