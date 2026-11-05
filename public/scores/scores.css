@@ -662,9 +662,9 @@ h1 {
 .cover::before {
   content: '';
   position: absolute;
-  inset: 14px 20px;
-  /* 卡片预览本身不大，阴影只做 1px 落影 + 6px 扩散，别糊成一圈黑 */
-  box-shadow: 0 1px 6px rgb(0 0 0 / 28%);
+  inset: 10px 12px;
+  /* 卡片预览本身不大，阴影只做 1px 落影 + 4px 扩散，别糊成一圈黑 */
+  box-shadow: 0 1px 4px rgb(0 0 0 / 24%);
   pointer-events: none;
 }
 
@@ -673,8 +673,8 @@ h1 {
   z-index: 1;
   width: 100%;
   height: 100%;
-  /* 左右多留白：页面不能贴满预览区，阴影区与页面之间要看得见空 */
-  padding: 14px 20px;
+  /* 左右留一点白，页面不贴死预览区；上下维持 10px，页面别被缩太小 */
+  padding: 10px 12px;
   object-fit: contain;
   forced-color-adjust: none;
 }
@@ -684,7 +684,7 @@ h1 {
   background: #191a1a;
 }
 :root[data-site-mode='dark'] .cover::before {
-  box-shadow: 0 1px 7px rgb(0 0 0 / 55%);
+  box-shadow: 0 1px 5px rgb(0 0 0 / 45%);
 }
 :root[data-site-mode='dark'] .cover img {
   filter: invert(1) contrast(0.88) brightness(1.03) saturate(1);
