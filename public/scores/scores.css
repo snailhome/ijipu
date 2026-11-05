@@ -658,17 +658,17 @@ h1 {
   forced-color-adjust: none;
 }
 
-/* 卡片预览区的页面外阴影：伪元素按 A4 纸面尺寸贴住图片边缘，不参与图片 filter */
+/* 卡片预览区的页面外阴影：伪元素只给深色主题用（浅色直接给图片投影像，
+   保证阴影从页面边缘开始，不再和页面隔开一条空带） */
 .cover::before {
   content: '';
   position: absolute;
-  top: 0;
-  bottom: 0;
+  top: 6px;
+  bottom: auto;
   left: 50%;
-  height: 100%;
+  height: calc(100% - 12px);
   aspect-ratio: 210 / 297;
   transform: translateX(-50%);
-  box-shadow: 0 0 4px rgb(0 0 0 / 30%);
   pointer-events: none;
 }
 
@@ -676,10 +676,11 @@ h1 {
   position: relative;
   z-index: 1;
   width: auto;
-  height: 100%;
+  height: calc(100% - 12px);
   max-width: 100%;
   padding: 0;
   object-fit: contain;
+  box-shadow: 0 0 8px rgb(0 0 0 / 34%);
   forced-color-adjust: none;
 }
 
@@ -688,7 +689,11 @@ h1 {
   background: #191a1a;
 }
 :root[data-site-mode='dark'] .cover::before {
-  box-shadow: 0 0 5px rgb(0 0 0 / 55%);
+  box-shadow: 0 0 7px rgb(0 0 0 / 60%);
+}
+:root[data-site-mode='dark'] .cover img {
+  /* 图片本身会反相，投影会被翻成白光，改用不参与 filter 的伪元素 */
+  box-shadow: none;
 }
 :root[data-site-mode='dark'] .cover img {
   filter: invert(1) contrast(0.88) brightness(1.03) saturate(1);
