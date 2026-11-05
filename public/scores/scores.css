@@ -253,7 +253,7 @@ h1 {
   padding: 18px 18px 36px;
   border-radius: 12px;
   background: var(--paper-bg, #fff);
-  box-shadow: 0 10px 34px var(--site-shadow);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 16%), 0 24px 60px var(--site-shadow);
   overflow: hidden;
   /* 谱面颜色由站点深/浅主题显式给出；only light opt out 手机浏览器的强制深色/颜色反转 */
   color-scheme: only light;
@@ -278,6 +278,8 @@ h1 {
   display: block;
   width: 100%;
   height: auto;
+  /* adj1231：页面本身再落一层影子，强化"纸放在预览区上"的效果 */
+  box-shadow: 0 2px 16px rgb(0 0 0 / 32%);
 }
 
 .paper svg,

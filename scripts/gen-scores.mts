@@ -1084,9 +1084,10 @@ function videoLabelOf(platform: string): string {
 
 function listHTML(entries: Entry[]): string {
   const timeOf = (meta: ScoreMeta): string => meta.importedAt ?? meta.publishedAt ?? meta.updatedAt ?? ''
+  const updateTimeOf = (meta: ScoreMeta): string => meta.updatedAt ?? meta.importedAt ?? meta.publishedAt ?? ''
   const published = entries
     .filter((e) => e.meta.status !== 'retired')
-    .sort((a, b) => timeOf(b.meta).localeCompare(timeOf(a.meta)) || a.meta.title.localeCompare(b.meta.title, 'zh-Hans-CN'))
+    .sort((a, b) => updateTimeOf(b.meta).localeCompare(updateTimeOf(a.meta)) || a.meta.title.localeCompare(b.meta.title, 'zh-Hans-CN'))
   const tags: string[] = []
   for (const e of published) for (const t of e.meta.tags ?? []) if (!tags.includes(t)) tags.push(t)
   tags.sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'))
@@ -1148,8 +1149,8 @@ ${topbarHTML('scores')}
     <span class="count" id="count">共 ${published.length} 首</span>
     <label class="sort-label">排序
       <select class="sort-select" id="sort" aria-label="排序字段">
-        <option value="imported" selected>导入时间</option>
-        <option value="updated">更新时间</option>
+        <option value="updated" selected>更新时间</option>
+        <option value="imported">导入时间</option>
         <option value="title">标题</option>
         <option value="composer">作曲 / 作词</option>
         <option value="difficulty">难度</option>
