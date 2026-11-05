@@ -1,7 +1,7 @@
 # 闲庭絮
 
 - 作曲 / 作词：刘珂矣 作词
-- 页面：https://ijipu.pages.dev/scores/score-mw277qj8/
+- 页面：https://ijipu.pages.dev/scores/score-mw2zelcw/
 
 用「爱记谱 iJipu」打开 `score.jps` 即可查看 / 试听 / 编辑。
 应用：https://ijipu.pages.dev/app/
