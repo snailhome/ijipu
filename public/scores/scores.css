@@ -663,7 +663,8 @@ h1 {
   content: '';
   position: absolute;
   inset: 10px;
-  box-shadow: 0 0 0 1px rgb(0 0 0 / 8%), 0 4px 20px rgb(0 0 0 / 45%);
+  /* 卡片预览本身不大，阴影只做 1px 落影 + 6px 扩散，别糊成一圈黑 */
+  box-shadow: 0 1px 6px rgb(0 0 0 / 28%);
   pointer-events: none;
 }
 
@@ -682,7 +683,7 @@ h1 {
   background: #191a1a;
 }
 :root[data-site-mode='dark'] .cover::before {
-  box-shadow: 0 0 0 1px rgb(255 255 255 / 10%), 0 6px 24px rgb(0 0 0 / 85%);
+  box-shadow: 0 1px 7px rgb(0 0 0 / 55%);
 }
 :root[data-site-mode='dark'] .cover img {
   filter: invert(1) contrast(0.88) brightness(1.03) saturate(1);
