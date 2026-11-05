@@ -1,8 +1,8 @@
 {
   "format": "ijipu-score-package",
   "version": 1,
-  "slug": "score-mw1ggbfg",
-  "short": "scorae",
+  "slug": "score-8c8m",
+  "short": "8c8m",
   "title": "敕勒歌",
   "composer": "[南北朝]佚名、薛保勤 作词",
   "exportedAt": "2026-11-04",
@@ -64,5 +64,6 @@
       "platform": "douyin",
       "url": "https://v.douyin.com/TH08bsROMx0/"
     }
-  ]
+  ],
+  "subtitle": "演唱：谭维维"
 }

@@ -1,24 +1,23 @@
 {
   "format": "ijipu-score-package",
   "version": 1,
-  "slug": "score-mw1i3te2",
-  "short": "scorag",
-  "title": "人间一两风",
-  "composer": "刘柯矣、刘凯 词",
-  "exportedAt": "2026-11-04",
-  "exportedBy": "iJipu 0.77.1",
-  "assets": [
-    {
-      "path": "assets/bg.jpg",
-      "role": "background"
-    }
+  "slug": "score-811a",
+  "short": "811a",
+  "title": "安和桥",
+  "composer": "宋冬野 词曲",
+  "license": "CC",
+  "source": "无",
+  "tags": [
+    "民谣"
   ],
+  "publishedAt": "2026-11-04",
+  "updatedAt": "2026-11-04",
   "overlay": {
     "bg": {
-      "enabled": true,
+      "enabled": false,
       "scale": 100,
       "rotate": 0,
-      "opacity": 50,
+      "opacity": 100,
       "offsetX": 0,
       "offsetY": 0
     },
@@ -36,17 +35,14 @@
       "offsetY": 0
     }
   },
-  "license": "CC",
-  "source": "无",
-  "tags": [],
-  "publishedAt": "2026-11-04",
-  "updatedAt": "2026-11-04",
-  "status": "published",
   "rights": {
     "work": "CC",
-    "arrangement": "CC",
     "notation": "CC-BY-NC-SA-4.0",
+    "arrangement": "CC",
     "ccLicense": "CC-BY-NC-SA-4.0",
     "attribution": "无"
-  }
+  },
+  "note": "",
+  "excerpt": "",
+  "difficulty": 3
 }

@@ -1,10 +1,10 @@
 {
   "format": "ijipu-score-package",
   "version": 1,
-  "slug": "score-mw1h9tn5",
-  "short": "scoraf",
-  "title": "春暮花落雨",
-  "composer": "凤一 词",
+  "slug": "score-xnjk",
+  "short": "xnjk",
+  "title": "人间一两风",
+  "composer": "刘柯矣、刘凯 词",
   "exportedAt": "2026-11-04",
   "exportedBy": "iJipu 0.77.1",
   "assets": [
@@ -16,11 +16,11 @@
   "overlay": {
     "bg": {
       "enabled": true,
-      "scale": 215,
+      "scale": 100,
       "rotate": 0,
-      "opacity": 100,
-      "offsetX": 24,
-      "offsetY": -1
+      "opacity": 50,
+      "offsetX": 0,
+      "offsetY": 0
     },
     "wm": {
       "enabled": true,
@@ -38,9 +38,7 @@
   },
   "license": "CC",
   "source": "无",
-  "tags": [
-    "民乐"
-  ],
+  "tags": [],
   "publishedAt": "2026-11-04",
   "updatedAt": "2026-11-04",
   "status": "published",
@@ -50,8 +48,5 @@
     "notation": "CC-BY-NC-SA-4.0",
     "ccLicense": "CC-BY-NC-SA-4.0",
     "attribution": "无"
-  },
-  "note": "",
-  "excerpt": "民乐",
-  "videoUrl": "https://v.douyin.com/pJZQ_I5JHWE/"
+  }
 }

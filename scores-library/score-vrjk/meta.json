@@ -1,17 +1,12 @@
 {
   "format": "ijipu-score-package",
   "version": 1,
-  "slug": "score-mw1f3qlh",
-  "short": "scorab",
-  "title": "安和桥",
-  "composer": "宋冬野 词曲",
-  "license": "CC",
-  "source": "无",
-  "tags": [
-    "民谣"
-  ],
-  "publishedAt": "2026-11-04",
-  "updatedAt": "2026-11-04",
+  "slug": "score-vrjk",
+  "short": "vrjk",
+  "title": "茶花开了",
+  "composer": "林晨阳 词曲",
+  "exportedAt": "2026-11-04",
+  "exportedBy": "iJipu 0.77.1",
   "overlay": {
     "bg": {
       "enabled": false,
@@ -28,17 +23,25 @@
       "size": 22,
       "scale": 100,
       "rotate": -45,
-      "opacity": 15,
+      "opacity": 10,
       "repeat": true,
       "repeatGap": 300,
       "offsetX": 0,
       "offsetY": 0
     }
   },
+  "license": "CC",
+  "source": "无",
+  "tags": [
+    "民谣"
+  ],
+  "publishedAt": "2026-11-04",
+  "updatedAt": "2026-11-04",
+  "status": "published",
   "rights": {
     "work": "CC",
-    "notation": "CC-BY-NC-SA-4.0",
     "arrangement": "CC",
+    "notation": "CC-BY-NC-SA-4.0",
     "ccLicense": "CC-BY-NC-SA-4.0",
     "attribution": "无"
   },

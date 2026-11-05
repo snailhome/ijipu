@@ -1,20 +1,26 @@
 {
   "format": "ijipu-score-package",
   "version": 1,
-  "slug": "score-mw1kdg8s",
-  "short": "scorah",
-  "title": "空  山  静",
-  "composer": "唐富 词曲",
+  "slug": "score-rvcq",
+  "short": "rvcq",
+  "title": "花妖",
+  "composer": "刀郞 词曲",
   "exportedAt": "2026-11-04",
   "exportedBy": "iJipu 0.77.1",
+  "assets": [
+    {
+      "path": "assets/bg.webp",
+      "role": "background"
+    }
+  ],
   "overlay": {
     "bg": {
-      "enabled": false,
-      "scale": 100,
+      "enabled": true,
+      "scale": 110,
       "rotate": 0,
-      "opacity": 100,
-      "offsetX": 0,
-      "offsetY": 0
+      "opacity": 20,
+      "offsetX": 2,
+      "offsetY": 39
     },
     "wm": {
       "enabled": true,
@@ -37,7 +43,6 @@
   ],
   "publishedAt": "2026-11-04",
   "updatedAt": "2026-11-04",
-  "importedAt": "2026-11-04",
   "status": "published",
   "rights": {
     "work": "CC",
@@ -47,5 +52,7 @@
     "attribution": "无"
   },
   "note": "",
-  "excerpt": ""
+  "excerpt": "",
+  "difficulty": 4,
+  "videoUrl": "https://v.douyin.com/-PhoPACCY3Q/"
 }

@@ -1,29 +1,18 @@
 {
   "format": "ijipu-score-package",
   "version": 1,
-  "slug": "score-mw0yun7f",
-  "short": "scorem",
-  "title": "望月",
-  "composer": "于一一 作词",
-  "license": "CC",
-  "source": "无",
-  "tags": [
-    "国风"
-  ],
-  "publishedAt": "2026-11-04",
-  "updatedAt": "2026-11-04",
-  "assets": [
-    {
-      "path": "assets/bg.jpg",
-      "role": "background"
-    }
-  ],
+  "slug": "score-uyua",
+  "short": "uyua",
+  "title": "空山静",
+  "composer": "唐富 词曲",
+  "exportedAt": "2026-11-04",
+  "exportedBy": "iJipu 0.77.1",
   "overlay": {
     "bg": {
-      "enabled": true,
+      "enabled": false,
       "scale": 100,
       "rotate": 0,
-      "opacity": 20,
+      "opacity": 100,
       "offsetX": 0,
       "offsetY": 0
     },
@@ -34,23 +23,30 @@
       "size": 22,
       "scale": 100,
       "rotate": -45,
-      "opacity": 25,
+      "opacity": 15,
       "repeat": true,
       "repeatGap": 300,
       "offsetX": 0,
       "offsetY": 0
     }
   },
+  "license": "CC",
+  "source": "无",
+  "tags": [
+    "国风"
+  ],
+  "publishedAt": "2026-11-04",
+  "updatedAt": "2026-11-04",
+  "importedAt": "2026-11-04",
+  "status": "published",
   "rights": {
     "work": "CC",
-    "notation": "CC-BY-NC-SA-4.0",
     "arrangement": "CC",
+    "notation": "CC-BY-NC-SA-4.0",
     "ccLicense": "CC-BY-NC-SA-4.0",
     "attribution": "无"
   },
-  "status": "published",
-  "difficulty": 3,
   "note": "",
   "excerpt": "",
-  "videoUrl": "https://v.douyin.com/9lmVJWQXpEM/"
+  "subtitle": "演唱：唐富"
 }
