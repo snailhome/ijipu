@@ -236,9 +236,14 @@ export function ScorePackageDialog() {
       const blob = new Blob([out], { type: 'application/zip' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
-      const safeName = `${title}${subtitle ? `-${subtitle}` : ''}`.replace(/[\\/:*?"<>|]/g, '-').slice(0, 60)
+      // adj1244：默认文件名 = 主标题，副标题-短时间戳.zip
+      const stamp = Date.now().toString(36)
+      const stem = `${title}${subtitle ? `，${subtitle}` : ''}`
+        .replace(/[\\/:*?"<>|]/g, '-')
+        .replace(/[，\s-]+$/g, '')
+        .slice(0, 60)
       a.href = url
-      a.download = `${safeName || 'ijipu-score'}.zip`
+      a.download = `${stem || 'ijipu-score'}-${stamp}.zip`
       a.click()
       URL.revokeObjectURL(url)
       showNotice(C.done)
