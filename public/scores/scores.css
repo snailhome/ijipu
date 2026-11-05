@@ -648,8 +648,8 @@ h1 {
   align-items: center;
   justify-content: center;
   position: relative;
-  /* 竖版：封面是"预览的第一页"，用竖版才看得见整页（用户 2026-11-03 口径） */
-  aspect-ratio: 3 / 4;
+  /* 预览区按 A4 纸张比例（210:297），页面本身也是 A4，四周自然留白 */
+  aspect-ratio: 210 / 297;
   border-bottom: 1px solid var(--site-border);
   background: #fff;
   overflow: hidden;
