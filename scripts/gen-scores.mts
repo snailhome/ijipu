@@ -1501,6 +1501,7 @@ function readAppScores(): {
         subtitle: typeof meta.subtitle === 'string' ? meta.subtitle : '',
         composer: String(meta.composer ?? ''),
         tags: Array.isArray(meta.tags) ? meta.tags : [],
+        order: typeof meta.order === 'number' ? meta.order : 100,
         updatedAt: typeof meta.updatedAt === 'string' ? meta.updatedAt : '',
         code,
       })
@@ -1511,7 +1512,7 @@ function readAppScores(): {
   const isSample = (row: Record<string, unknown>): boolean =>
     Array.isArray(row.tags) && row.tags.includes('示例谱')
   return {
-    samples: rows.filter(isSample),
+    samples: rows.filter(isSample).sort((a, b) => Number(a.order) - Number(b.order)),
     library: rows.filter((row) => !isSample(row)),
   }
 }
