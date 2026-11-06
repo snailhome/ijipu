@@ -65,12 +65,6 @@ async function withResolvedCardImage(style: CardStyle): Promise<CardStyle> {
   }
 }
 
-/** 文件名本身就是 3-6 位小写字母时，直接当短链默认值（如 `star.jps`） */
-function guessShortOf(name: string | null | undefined): string {
-  const base = (name ?? '').replace(/\.[^.]+$/, '').toLowerCase()
-  return /^[a-z]{3,6}$/.test(base) ? base : ''
-}
-
 const ASPECTS: { id: DynamicAspect; label: string; ratio: number }[] = [  { id: '9x16', label: '9:16', ratio: 9 / 16 },
   { id: '1x1', label: '1:1', ratio: 1 },
   { id: '16x9', label: '16:9', ratio: 16 / 9 },
@@ -206,33 +200,11 @@ export function DynamicFrameOverlay() {
    * 所以关掉之后预览也从第一拍开始；与「带声音」一样是**本次会话**的选项（L3，关掉相机位即回默认）。
    */
   const [withCards, setWithCards] = useState(true)
-  const fileName = useDocStore((s) => s.fileName)
   /**
-   * adj1226：片尾短链代码。应用里没有保存站点 short（short 由乐谱库工具分配），
-   * 所以这里按文件记住：导出过乐谱包会写入；没写过就默认文件名（若恰好是 3-6 位小写字母）。
+   * adj1245（用户要求）：片尾短链默认空，不再按文件名/上次导出自动填；
+   * 需要时手动填乐谱库分配的 4 位短码（允许数字）。
    */
-  const shortStorageKey = `ijipu.videoShort.${fileName || 'untitled'}`
-  const [shortCode, setShortCode] = useState(() => {
-    try {
-      return localStorage.getItem(shortStorageKey) ?? guessShortOf(fileName)
-    } catch {
-      return guessShortOf(fileName)
-    }
-  })
-  useEffect(() => {
-    try {
-      setShortCode(localStorage.getItem(shortStorageKey) ?? guessShortOf(fileName))
-    } catch {
-      setShortCode(guessShortOf(fileName))
-    }
-  }, [shortStorageKey, fileName])
-  useEffect(() => {
-    try {
-      localStorage.setItem(shortStorageKey, shortCode)
-    } catch {
-      /* 存不下只影响下次默认值 */
-    }
-  }, [shortStorageKey, shortCode])
+  const [shortCode, setShortCode] = useState('')
   /**
    * adj1185（用户实报「导出后还是没有提示」）：除了右上角 toast，在**相机位控制条里**也留一条
    * 导出结果（路径 + 打开文件/文件夹）。相机位浮层 z-index 60，toast 若被别的浮层盖住，
@@ -912,12 +884,12 @@ export function DynamicFrameOverlay() {
               value={shortCode}
               maxLength={6}
               disabled={encoding || preparingAudio || !withCards}
-              placeholder="star"
+              placeholder="如 y805"
               aria-label={dynamicVideoCopy.shortHint}
               onChange={(e) => {
                 const raw = e.target.value.trim()
-                const hit = raw.match(/\/s\/([a-z]{3,6})\/?$/i)
-                const next = (hit ? hit[1] : raw).toLowerCase().replace(/[^a-z]/g, '').slice(0, 6)
+                const hit = raw.match(/\/s\/([a-z0-9]{3,6})\/?$/i)
+                const next = (hit ? hit[1] : raw).toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 6)
                 setShortCode(next)
               }}
             />

@@ -1235,7 +1235,7 @@ export const dynamicVideoCopy = {
   cardMine: '我的模板',
   cardManage: '管理模板…',
   shortLabel: '短链',
-  shortHint: '乐谱库短链代码（3-6 位小写字母）；片尾会显示 https://ijipu.pages.dev/s/代码',
+  shortHint: '乐谱库短链代码（3-6 位小写字母或数字）；留空则片尾不显示；填了会显示 https://ijipu.pages.dev/s/代码',
   play: '播放',
   pause: '暂停',
   reload: '重新载入当前谱',

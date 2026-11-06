@@ -965,7 +965,7 @@ export async function createDynamicSession(
     const shortY = layout.shortY
     const maxW = layout.maxW
     const shortCode = (opts?.shortCode ?? '').trim().toLowerCase()
-    const shortUrl = /^[a-z]{3,6}$/.test(shortCode) ? `${brand.siteUrl}/s/${shortCode}` : ''
+    const shortUrl = /^[a-z0-9]{3,6}$/.test(shortCode) ? `${brand.siteUrl}/s/${shortCode}` : ''
     // adj1069：强调线放在标题与标语之间，距离按 titleSize（三种比例同值），不再固定在标题上方
     const accentY = layout.accentY
     const lineRatio = layout.lineRatio

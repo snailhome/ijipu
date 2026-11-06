@@ -38071,4 +38071,21 @@ function runAdj1189Tests(): void {
       /const top = rect\.top \+ 6/.test(overlaySrc),
     '',
   )
+  {
+    // adj1245：片尾短链输入默认空，允许数字（工具侧 4 位码可能是 y805）
+    check(
+      'adj1245 片尾短链默认空（不按文件名/上次导出自动填），允许数字',
+      /const \[shortCode, setShortCode\] = useState\(''\)/.test(overlaySrc) &&
+        !overlaySrc.includes('guessShortOf') &&
+        /\[a-z0-9\]\{3,6\}/.test(overlaySrc) &&
+        /replace\(\/\[\^a-z0-9\]\/g, ''\)/.test(overlaySrc),
+      '',
+    )
+    const rendererSrc = readFileSync(join(root, 'src/export/video/renderer.ts'), 'utf8')
+    check(
+      'adj1245 片尾短链渲染接受数字（/s/y805 这类 4 位码）',
+      /\^\[a-z0-9\]\{3,6\}\$\/\.test\(shortCode\)/.test(rendererSrc),
+      '',
+    )
+  }
 }
