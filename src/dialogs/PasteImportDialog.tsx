@@ -13,16 +13,30 @@
  * （不带遮罩/标题栏/✕），并且**输入框吃掉剩余高度**：dock 拉高时粘贴框跟着变高，
  * 长源码不用在小框里来回滚。弹窗模式（`inline=false`）行为与外观完全不变。
  */
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Modal } from '../ui/Modal'
 import { HelpBadge } from '../ui/HelpBadge'
 import { useDocStore } from '../store/docStore'
 import { useUiStore } from '../store/uiStore'
-import { pasteImportCopy } from '../brand/copy'
+import { pasteImportCopy, scorePackageImportCopy } from '../brand/copy'
+import {
+  createSubdir,
+  getWorkspace,
+  hasEntry,
+  writeWorkspaceBytes,
+  writeWorkspaceText,
+} from '../store/workspace'
+import { readScorePackage, safePackageDirName, suggestNewDirName } from '../store/scorePackageImport'
+
+const TEXT_PACKAGE_EXT = new Set(['json', 'md', 'jps', 'txt'])
+const decoder = new TextDecoder('utf-8')
 
 export function PasteImportDialog({ inline = false }: { inline?: boolean } = {}) {
   const [text, setText] = useState('')
+  const [packageBusy, setPackageBusy] = useState(false)
+  const packageInputRef = useRef<HTMLInputElement | null>(null)
   const importSource = useDocStore((s) => s.importSource)
+  const openWorkspaceFile = useDocStore((s) => s.openWorkspaceFile)
   const closeModal = useUiStore((s) => s.closeModal)
   const closeDock = useUiStore((s) => s.closeDock)
   const showNotice = useUiStore((s) => s.showNotice)
@@ -57,6 +71,81 @@ export function PasteImportDialog({ inline = false }: { inline?: boolean } = {})
     }
     showNotice(pasteImportCopy.ok(text.replace(/\s/g, '').length), 'ok')
     dismiss()
+  }
+
+  const pickPackage = async (file: File | undefined): Promise<void> => {
+    if (!file) return
+    setPackageBusy(true)
+    try {
+      const ws = await getWorkspace()
+      if (!ws) {
+        showNotice(scorePackageImportCopy.needWorkspace, 'warn')
+        return
+      }
+      let pkg: ReturnType<typeof readScorePackage>
+      try {
+        pkg = readScorePackage(new Uint8Array(await file.arrayBuffer()))
+      } catch (e) {
+        const msg = e instanceof Error && e.message === 'bad-path'
+          ? scorePackageImportCopy.badPath
+          : scorePackageImportCopy.badZip
+        showNotice(msg, 'error')
+        return
+      }
+
+      const base = safePackageDirName(pkg.title)
+      let dirName = base
+      const exists = await hasEntry(ws, ws.path, dirName)
+      if (exists) {
+        const overwrite = window.confirm(scorePackageImportCopy.conflict(dirName))
+        if (!overwrite) {
+          let attempt = 2
+          for (;;) {
+            const input = window.prompt(scorePackageImportCopy.newDirTitle, suggestNewDirName(base, attempt))
+            attempt += 1
+            if (input === null) return
+            const name = input.trim()
+            if (name === '' || /[\\/:*?"<>|]/.test(name)) {
+              showNotice(scorePackageImportCopy.invalidDir, 'warn')
+              continue
+            }
+            if (await hasEntry(ws, ws.path, name)) {
+              showNotice(scorePackageImportCopy.newDirHint(name), 'warn')
+              continue
+            }
+            dirName = name
+            break
+          }
+          await createSubdir(ws, ws.path, dirName)
+        }
+      } else {
+        await createSubdir(ws, ws.path, dirName)
+      }
+
+      showNotice(scorePackageImportCopy.creating, 'ok')
+      for (const f of pkg.files) {
+        const segs = [...ws.path, dirName, ...f.path.split('/')]
+        const ext = f.path.split('.').pop()?.toLowerCase() ?? ''
+        if (TEXT_PACKAGE_EXT.has(ext)) {
+          await writeWorkspaceText(ws, segs, decoder.decode(f.bytes))
+        } else {
+          await writeWorkspaceBytes(ws, segs, f.bytes)
+        }
+      }
+      const opened = await openWorkspaceFile([...ws.path, dirName, 'score.jps'])
+      showNotice(scorePackageImportCopy.done(dirName), 'ok')
+      if (!opened) showNotice(scorePackageImportCopy.openFailed, 'warn')
+      dismiss()
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      showNotice(
+        msg.includes('二进制') ? scorePackageImportCopy.unsupportedBinary : scorePackageImportCopy.failed(msg),
+        'error',
+      )
+    } finally {
+      setPackageBusy(false)
+      if (packageInputRef.current) packageInputRef.current.value = ''
+    }
   }
 
   return (
@@ -102,13 +191,28 @@ export function PasteImportDialog({ inline = false }: { inline?: boolean } = {})
           <button type="button" className="btn" onClick={() => void fromClipboard()}>
             {pasteImportCopy.fromClipboard}
           </button>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
             <button type="button" className="btn" onClick={dismiss}>
               {pasteImportCopy.cancelBtn}
             </button>
             <button type="button" className="btn primary" onClick={doImport}>
               {pasteImportCopy.importBtn}
             </button>
+            <button
+              type="button"
+              className="btn"
+              disabled={packageBusy}
+              onClick={() => packageInputRef.current?.click()}
+            >
+              {packageBusy ? '正在导入…' : scorePackageImportCopy.button}
+            </button>
+            <input
+              ref={packageInputRef}
+              type="file"
+              accept=".zip,application/zip"
+              hidden
+              onChange={(e) => void pickPackage(e.target.files?.[0])}
+            />
           </div>
         </div>
       </div>

@@ -179,6 +179,25 @@ export const pasteImportCopy = {
   name: '粘贴导入',
 } as const
 
+/** adj1249：从乐谱包（zip）导入到当前工作区目录 */
+export const scorePackageImportCopy = {
+  button: '从乐谱包导入',
+  needWorkspace: '请先在底栏「工作区」里选择一个工作区，再导入乐谱包。',
+  chooseTitle: '选择乐谱包',
+  badZip: '这个 zip 不是有效的乐谱包：缺少 meta.json 或 score.jps。',
+  badPath: '乐谱包里有不允许的路径，已中止导入。',
+  conflict: (name: string): string =>
+    `目录「${name}」已存在。\n\n点「确定」覆盖已有目录；点「取消」创建新目录。`,
+  newDirTitle: '新目录名',
+  newDirHint: (name: string): string => `目录「${name}」仍存在，请换一个名字。`,
+  invalidDir: '目录名不能为空，也不能包含 / \\ : * ? " < > |。',
+  creating: '正在解压乐谱包…',
+  done: (name: string): string => `已导入到「${name}」`,
+  openFailed: '乐谱包已解压，但 score.jps 打不开：请到工作区里手动打开。',
+  unsupportedBinary: '当前工作区不支持写入图片资源，已停止导入。',
+  failed: (e: string): string => `导入乐谱包失败：${e}`,
+} as const
+
 /**
  * adj540：「工作区」文案（Android/移动端"选一个文件夹当工作区"）
  *

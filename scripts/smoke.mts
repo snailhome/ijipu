@@ -253,6 +253,8 @@ import { highlightCodeWrapped } from '../src/editor/highlight.ts'
 import { HEADER_HINTS, filterHeaderHints, BARLINE_MODIFIER_HINTS, NOTE_MODIFIER_HINTS, GRACE_MODIFIER_HINTS, isBarlineModifierContext, isGraceModifierContext, filterModifierHints } from '../src/editor/completions.ts'
 // adj629x：设置面板「恢复默认」的草稿语义（整份替换；浅合并会把可选字段留下）
 import { draftAfterReset } from '../src/dialogs/pageConfigReset.ts'
+import { writeZip } from '../src/export/zip.ts'
+import { readScorePackage, safePackageDirName, suggestNewDirName } from '../src/store/scorePackageImport.ts'
 // adj722：播放进度读数 `mm:ss`
 import { fmtClock } from '../src/dialogs/playbackClock.ts'
 // adj723d：试听单实例保证（代次守卫）+ adj723e：自动播放判定
@@ -38126,6 +38128,45 @@ function runAdj1189Tests(): void {
     check(
       'adj1248 官网 index.json 暴露 samples / library（含源码）',
       gen.includes('samples: appScores.samples') && gen.includes('library: appScores.library'),
+      '',
+    )
+  }
+  {
+    // adj1249：从乐谱包导入工作区（zip 解析 + 目录名/重名建议）
+    const enc = new TextEncoder()
+    const zip = writeZip([
+      { name: 'meta.json', data: enc.encode(JSON.stringify({ title: '测试/乐谱:包' })) },
+      { name: 'score.jps', data: enc.encode('V: 1.0\nB: 测试曲\nQ: 1 2 3 4 |\n') },
+      { name: 'assets/bg.png', data: new Uint8Array([137, 80, 78, 71]) },
+    ])
+    const pkg = readScorePackage(zip)
+    check(
+      'adj1249 乐谱包解析：标题 / meta / score / assets 都在',
+      pkg.title === '测试/乐谱:包' &&
+        pkg.files.length === 3 &&
+        pkg.files.some((f) => f.path === 'score.jps') &&
+        pkg.files.some((f) => f.path === 'assets/bg.png'),
+      `${pkg.title} / ${pkg.files.map((f) => f.path).join(',')}`,
+    )
+    check(
+      'adj1249 目录名清洗 / 重名默认名',
+      safePackageDirName('测试/乐谱:包') === '测试-乐谱-包' &&
+        suggestNewDirName('测试', 2) === '测试 (2)' &&
+        suggestNewDirName('测试', 3) === '测试 (3)',
+      `${safePackageDirName('测试/乐谱:包')} / ${suggestNewDirName('测试', 2)}`,
+    )
+    const pasteSrc = readFileSync(join(root, 'src/dialogs/PasteImportDialog.tsx'), 'utf8')
+    check(
+      'adj1249 导入底栏增加「从乐谱包导入」并读 zip',
+      pasteSrc.includes('scorePackageImportCopy.button') &&
+        pasteSrc.includes('readScorePackage') &&
+        pasteSrc.includes('writeWorkspaceBytes'),
+      '',
+    )
+    const libRs = readFileSync(join(root, 'src-tauri/src/lib.rs'), 'utf8')
+    check(
+      'adj1249 桌面壳支持写二进制资源（ws_write_binary）',
+      /fn ws_write_binary\(/.test(libRs) && /ws_write_binary,/.test(libRs),
       '',
     )
   }

@@ -35,6 +35,7 @@ import {
   type WorkspaceRecord,
 } from './fileHandleDb'
 import { ensureWritePermission } from './saveSupport'
+import { bytesToBase64 } from '../export/zip'
 // adj954：运行环境判定与 `invoke` 的取用统一走品牌层唯一出处（原先进口里自己读 `__TAURI__`）
 import { tauriCore } from '../brand/env'
 import {
@@ -725,7 +726,25 @@ async function writeTextRaw(rec: WorkspaceRecord, segs: readonly string[], text:
   if (back !== text) throw new Error('回读内容与预期不一致')
 }
 
-/** 新建目录（同名已存在 ⇒ `EXISTS`，交给调用方提示；不静默复用） */
+/** 写二进制（乐谱包 assets 里的图片等）。FSA 直接写 bytes；桌面壳走 base64 IPC。 */
+async function writeBytesRaw(rec: WorkspaceRecord, segs: readonly string[], bytes: Uint8Array): Promise<void> {
+  const root = rec.handle
+  const s = normalizeRelPath(segs)
+  if (backendOf(rec) === 'vault') throw new Error('当前工作区不支持写入二进制文件')
+  if (backendOf(rec) === 'fsa' && root) {
+    const perm = await ensureWritePermission(root)
+    if (perm === 'denied') throw new Error('permission denied')
+    const fh = await resolveFileHandle(root, s, true)
+    const w = await (fh as unknown as { createWritable: () => Promise<FileSystemWritableFileStream> }).createWritable()
+    const ab = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
+    await w.write(ab)
+    await w.close()
+    return
+  }
+  await invokeWs<null>('ws_write_binary', { root: rec.dir, segs: s, base64: bytesToBase64(bytes) })
+}
+
+
 async function makeDirRaw(rec: WorkspaceRecord, segs: readonly string[]): Promise<void> {
   const root = rec.handle
   const viaBridge = vaultCall<Record<string, never>>('mkdir', { path: hostPathOf(segs) })
@@ -1335,6 +1354,15 @@ export async function writeWorkspaceText(
   text: string,
 ): Promise<void> {
   return writeTextRaw(rec, path, text)
+}
+
+/** 写工作区二进制文件（乐谱包 assets 解压用） */
+export async function writeWorkspaceBytes(
+  rec: WorkspaceRecord,
+  path: readonly string[],
+  bytes: Uint8Array,
+): Promise<void> {
+  return writeBytesRaw(rec, path, bytes)
 }
 
 /**

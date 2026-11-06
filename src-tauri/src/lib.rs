@@ -937,6 +937,22 @@ fn ws_write_text(root: String, segs: Vec<String>, text: String) -> Result<(), St
     Ok(())
 }
 
+/// 写二进制文件（乐谱包 assets 解压）——与 `ws_write_text` 同样的父目录补建 + 回读校验。
+#[tauri::command(async)]
+fn ws_write_binary(root: String, segs: Vec<String>, base64: String) -> Result<(), String> {
+    let p = ws_path(&root, &segs)?;
+    let bytes = crate::b64::decode(&base64).ok_or_else(|| "不是合法 base64".to_string())?;
+    if let Some(parent) = p.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("{}: {}", parent.display(), e))?;
+    }
+    std::fs::write(&p, &bytes).map_err(|e| format!("{}: {}", p.display(), e))?;
+    let back = std::fs::read(&p).map_err(|e| format!("回读失败 {}: {}", p.display(), e))?;
+    if back != bytes {
+        return Err("写入后回读内容与预期不一致".to_string());
+    }
+    Ok(())
+}
+
 /// 新建目录（同名已存在 ⇒ 返回 `EXISTS` 交给前端提示，不静默复用）
 #[tauri::command(async)]
 fn ws_create_dir(root: String, segs: Vec<String>) -> Result<(), String> {
@@ -1387,6 +1403,7 @@ pub fn run() {
             ws_is_dir_empty,
             ws_read_text,
             ws_write_text,
+            ws_write_binary,
             // adj965：读水印/背景图的原始字节（绝对路径 + 工作区相对路径两条；含扩展名白名单与大小上限）
             read_asset_file,
             ws_read_binary,
