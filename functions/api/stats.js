@@ -6,6 +6,8 @@
  *
  * 返回首页 / 应用 / 乐谱库 / 每首谱的 PV、UV。
  */
+import { ensureVisitsTable, isMissingTable } from '../_lib/visits.js'
+
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, content-type',
@@ -47,6 +49,11 @@ export async function onRequestGet({ request, env }) {
   )
     .bind(since)
     .all()
+    .catch(async (e) => {
+      if (!isMissingTable(e)) throw e
+      await ensureVisitsTable(env)
+      return { results: [] }
+    })
 
   const dailyRows = await env.DB.prepare(
     `SELECT day, SUM(views) AS pv, COUNT(*) AS uv
@@ -57,6 +64,11 @@ export async function onRequestGet({ request, env }) {
   )
     .bind(since)
     .all()
+    .catch(async (e) => {
+      if (!isMissingTable(e)) throw e
+      await ensureVisitsTable(env)
+      return { results: [] }
+    })
 
   const daily = (dailyRows.results ?? []).map((row) => ({
     day: String(row.day),

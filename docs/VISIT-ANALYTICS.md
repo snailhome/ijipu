@@ -35,9 +35,13 @@ database_id = "你的 database id"
 
 ## 2. 建表
 
+推荐先执行 migration：
+
 ```bash
 npx wrangler d1 execute ijipu-visits --remote --file=migrations/0001_visits.sql
 ```
+
+`/api/visit` 也带**首次访问自动建表**兜底：D1 绑定正确但表还没建时，会先执行固定的 `CREATE TABLE IF NOT EXISTS` 再写入，不会再直接 500。
 
 ## 3. 设置统计令牌
 

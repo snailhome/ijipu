@@ -6,12 +6,15 @@
  *  · 同一天 + 同一路径 + 同一 visitor + 同一 channel 只保留一行，
  *    views 累加 ⇒ PV = SUM(views)，UV = COUNT(*)
  */
+import { ensureVisitsTable, isMissingTable } from '../_lib/visits.js'
+
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Max-Age': '86400',
 }
+
 
 const PATH_RE = /^\/(?:app\/|scores\/(?:[a-z0-9-]+\/)?)?$/
 const CHANNELS = new Set(['web', 'pwa', 'desktop'])
@@ -46,13 +49,22 @@ export async function onRequestPost({ request, env }) {
     if (!/^[a-zA-Z0-9_-]{8,80}$/.test(visitor)) return json(400, { error: 'visitor 不合法' })
     if (!CHANNELS.has(channel)) return json(400, { error: 'channel 不合法' })
 
-    await env.DB.prepare(
-      `INSERT INTO visits(path, day, visitor, channel, views)
-       VALUES (?, ?, ?, ?, 1)
-       ON CONFLICT(path, day, visitor, channel) DO UPDATE SET views = views + 1`,
-    )
-      .bind(path, shanghaiDay(), visitor, channel)
-      .run()
+    const upsert = () =>
+      env.DB.prepare(
+        `INSERT INTO visits(path, day, visitor, channel, views)
+         VALUES (?, ?, ?, ?, 1)
+         ON CONFLICT(path, day, visitor, channel) DO UPDATE SET views = views + 1`,
+      )
+        .bind(path, shanghaiDay(), visitor, channel)
+        .run()
+
+    try {
+      await upsert()
+    } catch (e) {
+      if (!isMissingTable(e)) throw e
+      await ensureVisitsTable(env)
+      await upsert()
+    }
 
     return new Response(null, { status: 204, headers: CORS })
   } catch {

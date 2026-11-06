@@ -38182,7 +38182,8 @@ function runAdj1189Tests(): void {
       'adj1252 访问上报只收四个页面，按 path/day/visitor/channel 去重累加',
       visitFn.includes('ON CONFLICT(path, day, visitor, channel)') &&
         visitFn.includes('views = views + 1') &&
-        visitFn.includes('PATH_RE'),
+        visitFn.includes('PATH_RE') &&
+        visitFn.includes('ensureVisitsTable'),
       '',
     )
     check(
