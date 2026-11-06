@@ -1,0 +1,21 @@
+{
+  "slug": "score-7j8q",
+  "title": "送别",
+  "composer": "李叔同 词 / J. P. 奥德曼 曲",
+  "license": "PD",
+  "source": "词：李叔同（†1942）；曲：Auld Lang Syne（苏格兰民谣）；原文见 public/samples/送别.jps",
+  "short": "7j8q",
+  "tags": [
+    "完整",
+    "多段歌词",
+    "4/4"
+  ],
+  "difficulty": 2,
+  "order": 60,
+  "status": "published",
+  "card": "paper",
+  "watermark": "corner",
+  "publishedAt": "2026-11-03",
+  "updatedAt": "2026-11-03",
+  "note": "16 小节完整版，两段歌词（C1 / C2）。"
+}

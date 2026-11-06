@@ -1,0 +1,22 @@
+{
+  "slug": "score-9b6k",
+  "title": "茉莉花",
+  "composer": "中国民歌（传统）",
+  "license": "PD",
+  "source": "中国民歌；原文见 public/samples/茉莉花.jps",
+  "short": "9b6k",
+  "tags": [
+    "示例谱",
+    "民歌",
+    "4/4",
+    "连音线"
+  ],
+  "difficulty": 2,
+  "order": 20,
+  "status": "published",
+  "card": "paper",
+  "watermark": "corner",
+  "publishedAt": "2026-11-03",
+  "updatedAt": "2026-11-03",
+  "note": "完整版。首页示例用的是同一份原文的简化副本，所以曲库里只有这一个条目。"
+}
