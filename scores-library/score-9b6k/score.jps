@@ -20,4 +20,4 @@ C: 花@茉@莉@花。
 
 
 #====== 以下为页面设置，请勿手动修改 ======
-# jps-config:{"margin_bottom":33,"margin_left":60,"margin_right":60,"body_margin_top":31,"descAreaH":71,"miaoshu_size":15,"geci_font":"'Kaiti SC', 'KaiTi', 'STKaiti', 'Noto Serif CJK SC', 'AR PL UKai CN', serif","geci_size":16,"note_size":17,"height_quci":31,"height_cici":1,"height_ciqu":24,"height_ciqu_lyric":14,"metaPos":{"author_0":{"x":0,"y":-19},"tempo":{"x":0,"y":-9},"meter":{"x":9,"y":-80},"keyline":{"x":9,"y":-15},"notes_0":{"x":8,"y":16}},"lyricShrink":false,"showInstrument":false,"segmentRowGap":{"bz":17}}
+# jps-config:{}
