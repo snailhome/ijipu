@@ -1,7 +1,8 @@
 /**
  * scripts/gen-scores.mts — 曲库构建器（adj1190，方案 `docs/SCORE-SHARING-PLAN.md`）
  *
- * 输入：`public/scores/<slug>/meta.json`（+ 同目录 `score.jps`，或 `meta.file` 指向已有 `.jps`）
+ * 输入：`scores-library/<path>/<slug>/meta.json`（发布区镜像；同目录 score.jps）
+ *  `public/scores/` 仅保留给应用欢迎页 `?raw` 引用，不再作为站点条目。
  * 输出（全部落在 `dist/`，不写回 `public/`）：
  *
  *   dist/scores/index.html            列表（静态卡片 + 客户端筛选）
@@ -60,12 +61,10 @@ import { mdToHtml } from '../src/help/markdown'
 
 const ROOT = process.cwd()
 const PUBLIC = join(ROOT, 'public')
-const SRC = join(PUBLIC, 'scores')
 /** adj1194：本地乐谱库（工作格式 = 每首一个目录；zip 只在 _inbox/_packages） */
 const LIB = join(ROOT, 'scores-library')
 const DIST = join(ROOT, 'dist')
 const SITE = brand.siteUrl.replace(/\/+$/, '')
-
 /** 内容许可（用户 2026-11-03 拍板：只标"记谱/排版"，不加"旋律：公版"那一行） */
 const CONTENT_LICENSE = 'CC BY-NC-SA 4.0'
 
@@ -354,14 +353,6 @@ function varsOf(mode: 'dark' | 'light'): string {
 /* 读取与校验                                                          */
 /* ------------------------------------------------------------------ */
 
-function listPublicSources(): ScoreSource[] {
-  if (!existsSync(SRC)) return []
-  return readdirSync(SRC, { withFileTypes: true })
-    .filter((d) => d.isDirectory() && !d.name.startsWith('_') && !d.name.startsWith('.'))
-    .map((d) => ({ dir: join(SRC, d.name), kind: 'public' as const }))
-    .sort((a, b) => a.dir.localeCompare(b.dir))
-}
-
 /** 递归扫库：`_inbox` / `_packages` / `_trash` 与点目录不参与 */
 function listLibrarySources(): ScoreSource[] {
   if (!existsSync(LIB)) return []
@@ -380,8 +371,9 @@ function listLibrarySources(): ScoreSource[] {
 }
 
 function readEntries(): Entry[] {
-  const sources = [...listPublicSources(), ...listLibrarySources()]
-  if (sources.length === 0) fail('public/scores/ 与 scores-library/ 都没有条目')
+  // 站点条目只来自发布区镜像 scores-library；public/scores 只保留给欢迎页 ?raw 引用
+  const sources = listLibrarySources()
+  if (sources.length === 0) fail('scores-library/ 没有条目（先由乐谱库工具同步发布区）')
 
   const entries: Entry[] = []
   const shortOwner = new Map<string, string>()

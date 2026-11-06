@@ -54,9 +54,10 @@
  */
 import moly from '../../public/samples/茉莉花.jps?raw'
 /**
- * adj1190（用户 2026-11-03 拍板「合一份」）：首页示例的源码**不再写在这个文件里**，
- * 唯一真源是 `public/scores/<slug>/score.jps`（曲库与首页共用同一份）。
- * 这里只做 `?raw` 导入 + 原有变量名别名，`BRAND_SAMPLES` 的标签与顺序一个字都没动。
+ * adj1190（用户 2026-11-03 拍板「合一份」）：首页示例的源码**不再写在这个文件里**。
+ * 2026-11-06 示例谱迁入本地乐谱库后：列表/源码由 `scores-library/**` 发布区提供；
+ * `public/scores/<slug>/score.jps` 的固定 `?raw` 导入只保留给旧示例常量和欢迎页兜底。
+ * 这里只做 `?raw` 导入 + 原有变量名别名。
  *
  * 为什么保留别名而不是直接用导入名：下面每一段上方都写了大段"这段演示什么语法、
  * 当年踩过什么坑"的注释；换名字会把这些历史说明和代码断开。别名一层最省事。
@@ -84,11 +85,10 @@ type HomeMeta = {
   file?: string
 }
 const HOME_METAS = {
-  ...import.meta.glob('../../public/scores/*/meta.json', { eager: true, import: 'default' }),
+  // 站点示例现在由本地乐谱库的发布区驱动；public/scores 只保留给下面的 ?raw 固定引用
   ...import.meta.glob('../../scores-library/**/meta.json', { eager: true, import: 'default' }),
 } as Record<string, HomeMeta>
 const HOME_SOURCES = {
-  ...import.meta.glob('../../public/scores/*/score.jps', { eager: true, query: '?raw', import: 'default' }),
   ...import.meta.glob('../../scores-library/**/score.jps', { eager: true, query: '?raw', import: 'default' }),
 } as Record<string, string>
 
@@ -100,6 +100,14 @@ const HOME_LABELS: Record<string, string> = {
   lexdd: '铃儿响叮当（临时伴奏）',
   duet: '送别（临时多声部）',
   yydj: '友谊地久天长（多声部）',
+  // 2026-11-06 示例迁入库后的 4 位 short
+  'score-ag9y': '小星星',
+  'score-9b6k': '茉莉花（完整）',
+  'score-nevt': '欢乐颂（倚音与连音）',
+  'score-qqwd': '两只老虎（跳房子与反复）',
+  'score-qnhf': '铃儿响叮当（临时伴奏）',
+  'score-mn73': '送别（临时多声部）',
+  'score-uut8': '友谊地久天长（多声部）',
 }
 
 /**
