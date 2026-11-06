@@ -252,14 +252,9 @@
           示例从「小星星」开始，依次覆盖反复、跳房子、临时伴奏与多声部。
         </p>
         <div class="pg-samples" role="tablist" aria-label="示例">
-          <button type="button" role="tab" class="active" aria-selected="true" data-pg-sample="0">小星星</button>
-          <button type="button" role="tab" aria-selected="false" data-pg-sample="1">茉莉花（完整）</button>
-          <button type="button" role="tab" aria-selected="false" data-pg-sample="2">倚音与连音</button>
-          <button type="button" role="tab" aria-selected="false" data-pg-sample="3">跳房子与反复</button>
-          <button type="button" role="tab" aria-selected="false" data-pg-sample="4">临时伴奏 {bz}</button>
-          <button type="button" role="tab" aria-selected="false" data-pg-sample="5">临时多声部 {dsb}</button>
-          <button type="button" role="tab" aria-selected="false" data-pg-sample="6">多声部</button>
+          <!-- 示例按钮由 src/landing/playground.ts 按 tag=示例谱 动态生成，避免 HTML 里留死名单 -->
         </div>
+        <noscript><p class="pg-lead">示例按钮需要 JavaScript；下面的预置源码仍可直接查看。</p></noscript>
         <!--
           这个块与**文档页里的每个 ```jps 块是同一套 DOM 结构**（行为在 src/help/jpsPreview.ts），
           区别只是：这里的源码由上面的示例按钮决定，而文档页的源码写在 Markdown 里。

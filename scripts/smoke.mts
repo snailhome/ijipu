@@ -30579,6 +30579,20 @@ C2: 歌，@那么我@是想要画你的手。@ {tp 1// 2/.} 你看我多么 {tp 
   check('adj898 首页预置的示例源码 == BRAND_SAMPLES[0]（小星星），两处逐字一致',
     presetSrc !== '' && homeHtml.includes(presetSrc),
     presetSrc !== '' && homeHtml.includes(presetSrc) ? '' : `HTML 里找不到：${JSON.stringify(presetSrc)}`)
+  {
+    // adj1247：首页示例按钮必须由 tag=示例谱 动态生成，HTML 里不能留死名单
+    const bar = /<div class="pg-samples"[^>]*>([\s\S]*?)<\/div>/.exec(homeHtml)?.[1] ?? ''
+    check(
+      'adj1247 首页示例按钮没有写死在 HTML 里（由 BRAND_SAMPLES 动态生成）',
+      !/data-pg-sample/.test(bar),
+      bar.trim().slice(0, 120),
+    )
+    check(
+      'adj1247 首页示例只来自 tags 含「示例谱」的条目',
+      readFileSync(join(root, 'src/landing/samples.ts'), 'utf8').includes("meta.tags?.includes('示例谱') === true"),
+      '',
+    )
+  }
   // 负对照：把预置那段改一个字 ⇒ 上面这条判据就该判假（说明它真的在逐字比对）
   check('adj898 负对照：预置源码改一个字就不再匹配',
     presetSrc !== '' && !homeHtml.includes(presetSrc.replace('小星星', '小星星X')), '')
