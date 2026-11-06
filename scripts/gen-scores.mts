@@ -981,7 +981,7 @@ ${topbarHTML('scores')}
       <button class="btn" type="button" id="copy">复制源码</button>
       <button class="btn" type="button" id="copy-short" title="${esc(meta.short)}" data-short="${esc(meta.short)}">复制短链</button>
     </div>
-    <p class="copy-note" id="copy-note" aria-live="polite"></p>
+    <div class="copy-tip" id="copy-tip" role="status" aria-live="polite" hidden></div>
   </div>
 
   ${note}
@@ -996,12 +996,23 @@ ${topbarHTML('scores')}
 (function () {
   var btn = document.getElementById('copy');
   var shortBtn = document.getElementById('copy-short');
-  var note = document.getElementById('copy-note');
+  var tip = document.getElementById('copy-tip');
   var src = document.getElementById('src');
   if (!btn || !src) return;
   var sourceText = src.textContent || '';
   var shortUrl = ${JSON.stringify(shortUrl)};
-  function done(msg) { if (note) note.textContent = msg; }
+  var tipTimer = 0;
+  function done(msg, isError) {
+    if (!tip) return;
+    tip.textContent = msg;
+    tip.className = 'copy-tip' + (isError ? ' is-error' : '') + ' show';
+    tip.hidden = false;
+    clearTimeout(tipTimer);
+    tipTimer = setTimeout(function () {
+      tip.className = 'copy-tip';
+      setTimeout(function () { tip.hidden = true; }, 180);
+    }, 2200);
+  }
   function copyText(text, okMsg, failMsg) {
     function fallback() {
       var ta = document.createElement('textarea');
@@ -1011,12 +1022,12 @@ ${topbarHTML('scores')}
       ta.style.opacity = '0';
       document.body.appendChild(ta);
       ta.select();
-      try { document.execCommand('copy'); done(okMsg); }
-      catch (e) { done(failMsg); }
+      try { document.execCommand('copy'); done(okMsg, false); }
+      catch (e) { done(failMsg, true); }
       document.body.removeChild(ta);
     }
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).then(function () { done(okMsg); }, fallback);
+      navigator.clipboard.writeText(text).then(function () { done(okMsg, false); }, fallback);
     } else {
       fallback();
     }
@@ -1109,7 +1120,7 @@ function listHTML(entries: Entry[]): string {
     <h2 class="card-title">${esc(meta.title)}${titleMeta ? `<span class="card-title-meta">${esc(titleMeta)}</span>` : ''}</h2>
     <p class="card-sub">${esc(meta.composer)}</p>
     <div class="card-tags">${(meta.tags ?? []).slice(0, 3).map((t) => `<span class="tag">${esc(t)}</span>`).join('')}</div>
-    <div class="card-foot">${licenseBadge(meta)}${meta.short ? `<span class="tag card-short">s/${esc(meta.short)}</span>` : ''}${meta.excerpt ? '<span class="tag">片段</span>' : ''}${videos.length > 0 ? '<span class="tag">视频</span>' : ''}<span>更新 ${esc(meta.updatedAt)}</span></div>
+    <div class="card-foot">${licenseBadge(meta)}${meta.short ? `<span class="tag card-short" role="button" tabindex="0" data-short="${esc(meta.short)}" title="点击复制短链链接">s/${esc(meta.short)}</span>` : ''}${meta.excerpt ? '<span class="tag">片段</span>' : ''}${videos.length > 0 ? '<span class="tag">视频</span>' : ''}<span>更新 ${esc(meta.updatedAt)}</span></div>
   </div>
 </a>`
     })
@@ -1166,6 +1177,7 @@ ${topbarHTML('scores')}
   <div class="cards" id="cards">
 ${cards}
   </div>
+  <div class="copy-tip" id="copy-tip" role="status" aria-live="polite" hidden></div>
   ${pagerHTML('bottom')}
   ${published.length === 0 ? '<p class="empty">还没有收录乐谱。</p>' : ''}
   <noscript><p class="empty">筛选需要 JavaScript；上面的乐谱卡片仍然可以直接打开。</p></noscript>
@@ -1189,6 +1201,66 @@ ${cards}
   var desc = true;
   var page = 1;
   var pageSize = 20;
+  var site = ${JSON.stringify(SITE)};
+  var copyTip = document.getElementById('copy-tip');
+  var copyTipTimer = 0;
+  function showCopyTip(message, isError) {
+    if (!copyTip) return;
+    copyTip.textContent = message;
+    copyTip.className = 'copy-tip' + (isError ? ' is-error' : '') + ' show';
+    copyTip.hidden = false;
+    clearTimeout(copyTipTimer);
+    copyTipTimer = setTimeout(function () {
+      copyTip.className = 'copy-tip';
+      setTimeout(function () { copyTip.hidden = true; }, 180);
+    }, 2200);
+  }
+  function fallbackCopy(text) {
+    try {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      showCopyTip('已复制短链：' + text, false);
+    } catch (e) {
+      showCopyTip('复制短链失败，请手动复制', true);
+    }
+  }
+  function copyShort(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () {
+        showCopyTip('已复制短链：' + text, false);
+      }, function () { fallbackCopy(text); });
+    } else {
+      fallbackCopy(text);
+    }
+  }
+  function shortTagOf(target) {
+    while (target && target !== document) {
+      if (target.classList && target.classList.contains('card-short')) return target;
+      target = target.parentNode;
+    }
+    return null;
+  }
+  document.addEventListener('click', function (e) {
+    var el = shortTagOf(e.target);
+    if (!el) return;
+    e.preventDefault();
+    e.stopPropagation();
+    copyShort(site + '/s/' + (el.getAttribute('data-short') || ''));
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    var el = shortTagOf(e.target);
+    if (!el) return;
+    e.preventDefault();
+    e.stopPropagation();
+    copyShort(site + '/s/' + (el.getAttribute('data-short') || ''));
+  });
   function compareCards(a, b, key) {
     if (key === 'title' || key === 'composer') {
       return (a.getAttribute('data-' + key) || '').localeCompare(b.getAttribute('data-' + key) || '', 'zh-Hans-CN');

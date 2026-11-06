@@ -849,6 +849,47 @@ html[data-plain='1'] body {
   }
 }
 
+.card-short {
+  cursor: pointer;
+  border-bottom: 1px dashed currentColor;
+}
+
+.card-short:hover,
+.card-short:focus-visible {
+  outline: none;
+  border-bottom-style: solid;
+  color: var(--site-accent);
+}
+
+.copy-tip {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  z-index: 60;
+  max-width: min(560px, calc(100vw - 32px));
+  padding: 9px 16px;
+  border: 1px solid var(--site-border);
+  border-radius: 999px;
+  background: var(--site-panel);
+  color: var(--site-text);
+  box-shadow: 0 8px 28px rgb(0 0 0 / 35%);
+  transform: translate(-50%, 8px);
+  opacity: 0;
+  pointer-events: none;
+  font-size: 13px;
+  transition: opacity .16s ease, transform .16s ease;
+}
+
+.copy-tip.show {
+  transform: translate(-50%, 0);
+  opacity: 1;
+}
+
+.copy-tip.is-error {
+  border-color: #ff8a95;
+  color: #ff8a95;
+}
+
 @media (max-width: 520px) {
   .topbar-inner {
     height: 50px;
