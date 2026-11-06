@@ -8,7 +8,7 @@ import { parseJps, defaultPageConfig, applyFontOverride, mergeJpsConfig, mergeCo
 import type { PageConfig, ParseResult } from '@ijipu/engine'
 // adj647：宿主字体实测（打印与预览共用同一份；见 preview/fontMeta.ts）
 import { measureFontMeta } from '../preview/fontMeta'
-import { SAMPLES, defaultSample } from '../samples'
+import { defaultSample } from '../samples'
 import {
   recordEdit,
   undoHistory,
@@ -191,7 +191,8 @@ interface DocState {
   jumpCursor: (pos: number, end?: number) => void
   undo: () => void
   redo: () => void
-  loadSample: (id: string) => void
+  /** 载入线上示例/乐谱（列表与源码由 `samples/online.ts` 从官网获取） */
+  loadSample: (code: string, name: string) => void
   newDoc: () => void
   /**
    * adj963（**用户要求：规范新建/保存的行为**）：把"按运行环境选哪条保存路"收进 store **一处**。
@@ -702,8 +703,9 @@ export const useDocStore = create<DocState>()((set, get) => ({
     )
     if (restored) restoreEntry(restored, next, set, s)
   },
-  loadSample: (id) => {
-    const s = SAMPLES.find((x) => x.id === id) ?? defaultSample()
+  loadSample: (code, name) => {
+    // 线上数据直接带源码；不再从随包 SAMPLES 里按 id 查
+    const s = { code, name }
     localStorage.setItem(DRAFT_KEY, s.code)
     localStorage.setItem(DRAFT_NAME_KEY, s.name)
     // adj161：载入示例不是磁盘文件——清除文件句柄，避免误写回旧文件

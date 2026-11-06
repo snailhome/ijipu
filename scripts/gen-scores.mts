@@ -1484,6 +1484,38 @@ function redirectsFile(entries: Entry[]): string {
 /* 主流程                                                              */
 /* ------------------------------------------------------------------ */
 
+function readAppScores(): {
+  samples: Record<string, unknown>[]
+  library: Record<string, unknown>[]
+} {
+  const rows: Record<string, unknown>[] = []
+  for (const src of listLibrarySources()) {
+    try {
+      const meta = JSON.parse(readFileSync(join(src.dir, 'meta.json'), 'utf8')) as Record<string, unknown>
+      if ((meta.status ?? 'published') !== 'published') continue
+      const code = readFileSync(join(src.dir, 'score.jps'), 'utf8')
+      rows.push({
+        slug: String(meta.slug ?? ''),
+        short: typeof meta.short === 'string' ? meta.short : '',
+        title: String(meta.title ?? ''),
+        subtitle: typeof meta.subtitle === 'string' ? meta.subtitle : '',
+        composer: String(meta.composer ?? ''),
+        tags: Array.isArray(meta.tags) ? meta.tags : [],
+        updatedAt: typeof meta.updatedAt === 'string' ? meta.updatedAt : '',
+        code,
+      })
+    } catch {
+      /* 坏条目已由 readEntries 报错；这里不让应用数据再崩一次 */
+    }
+  }
+  const isSample = (row: Record<string, unknown>): boolean =>
+    Array.isArray(row.tags) && row.tags.includes('示例谱')
+  return {
+    samples: rows.filter(isSample),
+    library: rows.filter((row) => !isSample(row)),
+  }
+}
+
 function main(): void {
   mkdirSync(DIST, { recursive: true })
 
@@ -1540,6 +1572,7 @@ function main(): void {
   )
   writeFileSync(join(DIST, '_redirects'), redirectsFile(entries), 'utf8')
 
+  const appScores = readAppScores()
   const index = {
     version: 1,
     site: SITE,
@@ -1563,6 +1596,8 @@ function main(): void {
         publishedAt: e.meta.publishedAt,
         updatedAt: e.meta.updatedAt,
       })),
+    samples: appScores.samples,
+    library: appScores.library,
   }
   writeFileSync(join(DIST, 'scores', 'index.json'), JSON.stringify(index, null, 2) + '\n', 'utf8')
 

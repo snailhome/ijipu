@@ -38104,4 +38104,29 @@ function runAdj1189Tests(): void {
       '',
     )
   }
+  {
+    // adj1248：应用「打开示例」直接取线上 index.json，不再带内置示例
+    const dialog = readFileSync(join(root, 'src/dialogs/SamplesDialog.tsx'), 'utf8')
+    const online = readFileSync(join(root, 'src/samples/online.ts'), 'utf8')
+    const samplesIndex = readFileSync(join(root, 'src/samples/index.ts'), 'utf8')
+    check(
+      'adj1248 应用打开示例走线上，不再 import 内置 SAMPLES',
+      dialog.includes('loadOnlineScores') && !/from '\.\.\/samples'/.test(dialog) && !samplesIndex.includes('export const SAMPLES'),
+      '',
+    )
+    check(
+      'adj1248 线上数据缓存；无缓存时明确提示需要联网',
+      online.includes('ijipu.onlineScores.v1') &&
+        online.includes('/scores/index.json') &&
+        online.includes('需要联网获取示例谱和乐谱库') &&
+        online.includes('上次缓存'),
+      '',
+    )
+    const gen = readFileSync(join(root, 'scripts/gen-scores.mts'), 'utf8')
+    check(
+      'adj1248 官网 index.json 暴露 samples / library（含源码）',
+      gen.includes('samples: appScores.samples') && gen.includes('library: appScores.library'),
+      '',
+    )
+  }
 }

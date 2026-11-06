@@ -422,6 +422,7 @@ code {
 .playground { padding-bottom: 72px; }
 .playground h2 { text-align: center; margin-bottom: 12px; }
 .pg-lead { text-align: center; color: var(--site-text-2); font-size: 15px; margin: 0 0 18px; }
+.pg-online-note { min-height: 1.2em; margin: -8px 0 12px; text-align: center; color: var(--site-muted); font-size: 12px; }
 
 /* 示例按钮（一排，居中） */
 .pg-samples { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-bottom: 18px; }
