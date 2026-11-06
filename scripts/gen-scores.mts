@@ -441,6 +441,8 @@ function readEntries(): Entry[] {
     } else if (src.kind === 'library') {
       fail(`${slug}：scores-library 的条目必须有 tags（哪怕是空数组）`)
     }
+    // 示例谱只出现在首页示例区，不进入网站「乐谱库」列表/详情/短链
+    if (Array.isArray(tags) && tags.includes('示例谱')) continue
 
     const difficulty = obj.difficulty
     if (difficulty !== undefined && (!Number.isInteger(difficulty) || difficulty < 1 || difficulty > 5)) {
