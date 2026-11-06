@@ -21,6 +21,7 @@ import { parseJps, inferBpm, gmVoiceRef, type DynamicPresetId } from '@ijipu/eng
 import { playbackVoiceOptions } from '@ijipu/engine/playback/voiceOptions'
 import { useDocStore } from '../store/docStore'
 import { useUiStore, enabledVoicesOf, type DynamicAspect, type DynamicMode } from '../store/uiStore'
+import { brand } from '../brand/tokens'
 import { dynamicVideoCopy, syncCopy } from '../brand/copy'
 import { createDynamicSession, type DynamicSession } from '../export/video/renderer'
 import { CARD_TEMPLATES, resolveCardStyle, type CardStyle } from '../export/video/cardTemplates'
@@ -63,6 +64,18 @@ async function withResolvedCardImage(style: CardStyle): Promise<CardStyle> {
       ? { ...style.seal, image: await resolveCardImage(style.seal.image) }
       : style.seal,
   }
+}
+
+/** adj1246：片尾短链统一成完整链接；支持粘贴完整短链、/s/xxxx 或 4 位码 */
+function normalizeShortLink(value: string): string {
+  const raw = value.trim()
+  if (raw === '') return ''
+  // 从工具复制来的完整短链原样保留（含自定义域名），不要再改回固定站点域名
+  if (/^https?:\/\/[^/\s]+\/s\/[a-z0-9]{3,6}\/?$/i.test(raw)) return raw
+  const path = raw.match(/^(?:https?:\/\/[^/]+)?\/?s\/([a-z0-9]{3,6})\/?$/i)
+  if (path) return `${brand.siteUrl}/s/${path[1].toLowerCase()}`
+  if (/^[a-z0-9]{3,6}$/i.test(raw)) return `${brand.siteUrl}/s/${raw.toLowerCase()}`
+  return raw
 }
 
 const ASPECTS: { id: DynamicAspect; label: string; ratio: number }[] = [  { id: '9x16', label: '9:16', ratio: 9 / 16 },
@@ -882,16 +895,12 @@ export function DynamicFrameOverlay() {
             <input
               className="dyn-frame-short-input"
               value={shortCode}
-              maxLength={6}
+              maxLength={120}
               disabled={encoding || preparingAudio || !withCards}
-              placeholder="如 y805"
+              placeholder="https://ijipu.pages.dev/s/y805"
               aria-label={dynamicVideoCopy.shortHint}
-              onChange={(e) => {
-                const raw = e.target.value.trim()
-                const hit = raw.match(/\/s\/([a-z0-9]{3,6})\/?$/i)
-                const next = (hit ? hit[1] : raw).toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 6)
-                setShortCode(next)
-              }}
+              onChange={(e) => setShortCode(e.target.value)}
+              onBlur={(e) => setShortCode(normalizeShortLink(e.target.value))}
             />
           </label>
         </div>
