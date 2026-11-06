@@ -13,7 +13,7 @@
 import { BUILD_DATE, GIT_COMMIT } from '../gen/buildInfo'
 
 /** 当前版本（手动递增） */
-export const APP_VERSION = '0.77.1'
+export const APP_VERSION = '0.78.0'
 
 /** 完整版本串：v0.2.0 (2026-08-16 @a1b2c3d4) */
 export const APP_VERSION_FULL = `v${APP_VERSION} (${BUILD_DATE} @${GIT_COMMIT})`

@@ -33,7 +33,7 @@
 命令行入口是**控制台垫片** `bin\ijipu.cmd`（注册 PATH 之后就是一个 `ijipu`，见 §一之一/§二之二）：
 
 ```powershell
-ijipu cli --version                                  # iJipu 0.77.1
+ijipu cli --version                                  # iJipu 0.78.0
 ijipu cli --help                                     # 完整的命令/选项清单
 ijipu cli lint -i 我的谱.jps                         # 有错 ⇒ 退出码 3
 ijipu cli render -i 我的谱.jps -t svg -o 我的谱.svg

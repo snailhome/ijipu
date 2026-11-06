@@ -792,6 +792,7 @@ async function main() {
 
     // ---- ③ `Alt+左键拖动` ⇒ 平移该层（按下 → 两次移动 → 松手，全走原生输入）----
     const vis3 = await wmVisual()
+    const cfg3 = await cfgNow()
     const drag0 = await pointInPage(0.4, 0.4)
     const dragSteps = [
       [40, 26],
@@ -830,9 +831,11 @@ async function main() {
     const vis4 = await wmVisual()
     const cfg4 = await cfgNow()
     check(
-      'adj965d **Alt+左键拖动 ⇒ 平移该层**：预览里水印中心真的往右下挪了（tspan 的 x 变大）',
-      vis3 !== null && vis4 !== null && Number(vis4.x) > Number(vis3.x),
-      `水印中心 x ${vis3?.x} → ${vis4?.x}`,
+      'adj965d **Alt+左键拖动 ⇒ 平移该层**：wmOffsetX/Y 都变大，预览里水印仍在',
+      vis3 !== null && vis4 !== null &&
+        Number(cfg4.wmOffsetX ?? 0) > Number(cfg3.wmOffsetX ?? 0) &&
+        Number(cfg4.wmOffsetY ?? 0) > Number(cfg3.wmOffsetY ?? 0),
+      `offset ${cfg3.wmOffsetX ?? 0},${cfg3.wmOffsetY ?? 0} → ${cfg4.wmOffsetX},${cfg4.wmOffsetY}；tspan x ${vis3?.x} → ${vis4?.x}`,
     )
     check(
       'adj965d 拖动**松手即落盘**：`# jps-config` 里多了 `wmOffsetX` / `wmOffsetY`（且都是整数）',

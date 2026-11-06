@@ -1,15 +1,21 @@
 {
   "name": "@ijipu/engine",
-  "version": "0.45.2",
+  "version": "0.46.0",
   "description": "iJipu（爱记谱）简谱引擎：纯 TypeScript，零 React/DOM 依赖 —— .jps 解析 → 排版 → SVG 渲染 → 播放序列 / MIDI / WAV",
   "type": "module",
   "license": "AGPL-3.0",
   "main": "./dist/engine/index.js",
   "types": "./dist/engine/index.d.ts",
   "exports": {
-    ".": { "types": "./dist/engine/index.d.ts", "import": "./dist/engine/index.js" }
+    ".": {
+      "types": "./dist/engine/index.d.ts",
+      "import": "./dist/engine/index.js"
+    }
   },
-  "files": ["src", "dist"],
+  "files": [
+    "src",
+    "dist"
+  ],
   "scripts": {
     "build": "vite build --config vite.lib.config.ts && tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit"
