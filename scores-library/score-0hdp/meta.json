@@ -1,0 +1,59 @@
+{
+  "format": "ijipu-score-package",
+  "version": 1,
+  "title": "檐下声",
+  "subtitle": "",
+  "composer": "芜凩 词曲，蜗牛🐌 制谱",
+  "exportedAt": "2026-11-06",
+  "exportedBy": "iJipu 0.78.0",
+  "assets": [
+    {
+      "path": "assets/bg.jpg",
+      "role": "background"
+    }
+  ],
+  "overlay": {
+    "bg": {
+      "enabled": true,
+      "scale": 255,
+      "rotate": 0,
+      "opacity": 50,
+      "offsetX": -111,
+      "offsetY": -1
+    },
+    "wm": {
+      "enabled": true,
+      "type": "text",
+      "text": "爱记谱・iJipu",
+      "size": 22,
+      "scale": 100,
+      "rotate": -45,
+      "opacity": 15,
+      "repeat": true,
+      "repeatGap": 300,
+      "offsetX": 0,
+      "offsetY": 0
+    }
+  },
+  "slug": "score-0hdp",
+  "short": "0hdp",
+  "license": "CC",
+  "source": "无",
+  "tags": [],
+  "publishedAt": "2026-11-06",
+  "updatedAt": "2026-11-06",
+  "importedAt": "2026-11-06",
+  "status": "published",
+  "rights": {
+    "work": "CC",
+    "arrangement": "CC",
+    "notation": "CC-BY-NC-SA-4.0",
+    "ccLicense": "CC-BY-NC-SA-4.0",
+    "attribution": "无"
+  },
+  "videoUrl": "",
+  "videos": [],
+  "difficulty": 3,
+  "note": "",
+  "excerpt": ""
+}
