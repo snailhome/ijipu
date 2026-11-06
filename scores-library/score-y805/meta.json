@@ -43,7 +43,7 @@
     "古韵"
   ],
   "publishedAt": "2026-11-05",
-  "updatedAt": "2026-11-05",
+  "updatedAt": "2026-11-06",
   "importedAt": "2026-11-05",
   "status": "published",
   "rights": {
@@ -61,5 +61,6 @@
     }
   ],
   "note": "",
-  "excerpt": ""
+  "excerpt": "",
+  "difficulty": 3
 }

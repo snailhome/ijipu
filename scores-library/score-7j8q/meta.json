@@ -6,9 +6,7 @@
   "source": "词：李叔同（†1942）；曲：Auld Lang Syne（苏格兰民谣）；原文见 public/samples/送别.jps",
   "short": "7j8q",
   "tags": [
-    "完整",
-    "多段歌词",
-    "4/4"
+    "示例谱"
   ],
   "difficulty": 2,
   "order": 60,
@@ -16,6 +14,16 @@
   "card": "paper",
   "watermark": "corner",
   "publishedAt": "2026-11-03",
-  "updatedAt": "2026-11-03",
-  "note": "16 小节完整版，两段歌词（C1 / C2）。"
+  "updatedAt": "2026-11-06",
+  "note": "16 小节完整版，两段歌词（C1 / C2）。",
+  "videoUrl": "",
+  "videos": [],
+  "excerpt": "",
+  "rights": {
+    "work": "PD",
+    "arrangement": "CC",
+    "notation": "CC-BY-NC-SA-4.0",
+    "ccLicense": "CC-BY-NC-SA-4.0",
+    "attribution": "无"
+  }
 }

@@ -11,7 +11,7 @@
     "民谣"
   ],
   "publishedAt": "2026-11-04",
-  "updatedAt": "2026-11-04",
+  "updatedAt": "2026-11-06",
   "overlay": {
     "bg": {
       "enabled": false,
@@ -44,6 +44,8 @@
   },
   "note": "",
   "excerpt": "",
-  "difficulty": 3,
-  "status": "published"
+  "difficulty": 4,
+  "status": "published",
+  "videoUrl": "",
+  "videos": []
 }

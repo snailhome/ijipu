@@ -36,7 +36,7 @@
     "国风"
   ],
   "publishedAt": "2026-11-04",
-  "updatedAt": "2026-11-04",
+  "updatedAt": "2026-11-06",
   "importedAt": "2026-11-04",
   "status": "published",
   "rights": {
@@ -48,5 +48,8 @@
   },
   "note": "",
   "excerpt": "",
-  "subtitle": "演唱：唐富"
+  "subtitle": "演唱：唐富",
+  "videoUrl": "",
+  "videos": [],
+  "difficulty": 2
 }
