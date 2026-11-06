@@ -1,6 +1,6 @@
 {
   "slug": "score-qnhf",
-  "title": "铃儿响叮当",
+  "title": "铃儿响叮当(临时伴奏)",
   "composer": "J. L. Pierpont",
   "license": "PD",
   "source": "J. L. Pierpont（†1893）；记谱：爱记谱示例",
@@ -17,6 +17,16 @@
   "card": "paper",
   "watermark": "corner",
   "publishedAt": "2026-11-03",
-  "updatedAt": "2026-11-03",
-  "note": "演示临时伴奏 `{bz … }`：段内伴奏与段后等长主旋律同一拍位对齐。"
+  "updatedAt": "2026-11-06",
+  "note": "演示临时伴奏 `{bz … }`：段内伴奏与段后等长主旋律同一拍位对齐。",
+  "videoUrl": "",
+  "videos": [],
+  "excerpt": "",
+  "rights": {
+    "work": "PD",
+    "arrangement": "CC",
+    "notation": "CC-BY-NC-SA-4.0",
+    "ccLicense": "CC-BY-NC-SA-4.0",
+    "attribution": "无"
+  }
 }

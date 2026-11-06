@@ -1,6 +1,6 @@
 {
   "slug": "score-qqwd",
-  "title": "两只老虎",
+  "title": "两只老虎(跳房子)",
   "composer": "法国童谣",
   "license": "PD",
   "source": "法国童谣《Frère Jacques》；记谱：爱记谱示例",
@@ -17,6 +17,16 @@
   "card": "paper",
   "watermark": "corner",
   "publishedAt": "2026-11-03",
-  "updatedAt": "2026-11-03",
-  "note": "演示反复 `|: :|` 与两遍房子 `[\"1.\"` / `[\"2.\"`。"
+  "updatedAt": "2026-11-06",
+  "note": "演示反复 `|: :|` 与两遍房子 `[\"1.\"` / `[\"2.\"`。",
+  "videoUrl": "",
+  "videos": [],
+  "excerpt": "",
+  "rights": {
+    "work": "PD",
+    "arrangement": "CC",
+    "notation": "CC-BY-NC-SA-4.0",
+    "ccLicense": "CC-BY-NC-SA-4.0",
+    "attribution": "无"
+  }
 }
