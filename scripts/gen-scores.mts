@@ -794,6 +794,16 @@ function licenseBadge(meta: ScoreMeta): string {
   return `<span class="badge license">${esc(LICENSE_LABEL[meta.license])}</span>`
 }
 
+/** 卡片页脚的小图标：只占一个字符宽，文字提示放 title */
+function cardIcon(kind: 'excerpt' | 'video'): string {
+  const label = kind === 'excerpt' ? '片段' : '视频'
+  const path =
+    kind === 'excerpt'
+      ? '<path d="M2 3h12v2H2zm0 4h8v2H2zm0 4h10v2H2z"/>'
+      : '<path d="M4 2.5v11l9-5.5z"/>'
+  return `<span class="tag card-icon" title="${label}" aria-label="${label}"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">${path}</svg></span>`
+}
+
 function difficultyDots(value: number | undefined): string {
   const n = value ?? 1
   return '●'.repeat(n) + '○'.repeat(Math.max(0, 5 - n))
@@ -1114,13 +1124,15 @@ function listHTML(entries: Entry[]): string {
       const search =
         `${meta.title} ${meta.composer} ${(meta.tags ?? []).join(' ')} ${header.key ?? ''} ${header.meter ?? ''} ${header.tempoNum ?? ''}`.toLowerCase()
       const imported = timeOf(meta)
+      const updated = meta.updatedAt ?? ''
+      const updatedLabel = updated.length >= 10 ? updated.slice(5) : updated
       return `<a class="card" href="${esc(e.pageUrl)}" data-tags="${esc((meta.tags ?? []).join(' '))}" data-search="${esc(search)}" data-imported="${esc(imported)}" data-updated="${esc(meta.updatedAt)}" data-title="${esc(meta.title)}" data-composer="${esc(meta.composer)}" data-difficulty="${esc(String(meta.difficulty ?? ''))}">
   <div class="cover"><img src="${esc(e.coverUrl)}" alt="${esc(meta.title)} 的谱面缩略" loading="lazy" width="320" height="200" /></div>
   <div class="card-body">
     <h2 class="card-title">${esc(meta.title)}${titleMeta ? `<span class="card-title-meta">${esc(titleMeta)}</span>` : ''}</h2>
     <p class="card-sub">${esc(meta.composer)}</p>
     <div class="card-tags">${(meta.tags ?? []).slice(0, 3).map((t) => `<span class="tag">${esc(t)}</span>`).join('')}</div>
-    <div class="card-foot">${licenseBadge(meta)}${meta.short ? `<span class="tag card-short" role="button" tabindex="0" data-short="${esc(meta.short)}" title="点击复制短链链接">s/${esc(meta.short)}</span>` : ''}${meta.excerpt ? '<span class="tag">片段</span>' : ''}${videos.length > 0 ? '<span class="tag">视频</span>' : ''}<span>更新 ${esc(meta.updatedAt)}</span></div>
+    <div class="card-foot">${licenseBadge(meta)}${meta.short ? `<span class="tag card-short" role="button" tabindex="0" data-short="${esc(meta.short)}" title="点击复制短链链接">s/${esc(meta.short)}</span>` : ''}${meta.excerpt ? cardIcon('excerpt') : ''}${videos.length > 0 ? cardIcon('video') : ''}${updatedLabel ? `<span class="card-updated" title="更新 ${esc(updated)}">${esc(updatedLabel)}</span>` : ''}</div>
   </div>
 </a>`
     })
