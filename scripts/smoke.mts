@@ -29309,8 +29309,9 @@ C2: 歌，@那么我@是想要画你的手。@ {tp 1// 2/.} 你看我多么 {tp 
       readSrc('public/scores/scores.css').includes('.site-mark a'),
   )
   check(
-    'adj1191 详情页顶部是「乐谱 · 全部乐谱」（返回链接在 kicker 里，不在按钮排）',
-    genScoresSrc1191.includes('乐谱 · <a href="/scores/">全部乐谱</a>'),
+    'adj1250 乐谱库列表与详情页去掉冗余 kicker（列表「乐谱库」、详情「乐谱 · 全部乐谱」）',
+    !genScoresSrc1191.includes('乐谱 · <a href="/scores/">全部乐谱</a>') &&
+      !genScoresSrc1191.includes('<p class="kicker">乐谱库</p>'),
   )
   check(
     'adj1192 详情页源码用引擎高亮（highlightModel + hl-* 类），且带行号',

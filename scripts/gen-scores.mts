@@ -954,7 +954,6 @@ function detailHTML(rendered: Rendered): string {
 ${topbarHTML('scores')}
 <main class="wrap">
   <header class="page-head">
-    <p class="kicker">乐谱 · <a href="/scores/">全部乐谱</a></p>
     <h1>${esc(meta.title)}</h1>
     <p class="sub">${esc(meta.composer)}</p>
     <div class="meta-row">
@@ -1158,7 +1157,6 @@ function listHTML(entries: Entry[]): string {
 ${topbarHTML('scores')}
 <main class="wrap">
   <header class="page-head">
-    <p class="kicker">乐谱库</p>
     <h1>用脚本写的谱</h1>
     <p class="sub">每份都能看到完整的 .jps 源码和渲染效果；想改就点「在应用里编辑」，谱会带过去。</p>
   </header>
