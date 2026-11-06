@@ -1109,7 +1109,7 @@ function listHTML(entries: Entry[]): string {
     <h2 class="card-title">${esc(meta.title)}${titleMeta ? `<span class="card-title-meta">${esc(titleMeta)}</span>` : ''}</h2>
     <p class="card-sub">${esc(meta.composer)}</p>
     <div class="card-tags">${(meta.tags ?? []).slice(0, 3).map((t) => `<span class="tag">${esc(t)}</span>`).join('')}</div>
-    <div class="card-foot">${licenseBadge(meta)}${meta.excerpt ? '<span class="tag">片段</span>' : ''}${videos.length > 0 ? '<span class="tag">视频</span>' : ''}<span>更新 ${esc(meta.updatedAt)}</span></div>
+    <div class="card-foot">${licenseBadge(meta)}${meta.short ? `<span class="tag card-short">短链 ${esc(meta.short)}</span>` : ''}${meta.excerpt ? '<span class="tag">片段</span>' : ''}${videos.length > 0 ? '<span class="tag">视频</span>' : ''}<span>更新 ${esc(meta.updatedAt)}</span></div>
   </div>
 </a>`
     })
