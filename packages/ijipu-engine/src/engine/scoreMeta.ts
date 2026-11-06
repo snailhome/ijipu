@@ -115,7 +115,7 @@ export interface ScoreMetaDoc {
   assets?: ScoreMetaAsset[]
   overlay?: OverlayMeta
   rights?: ScoreRights
-  status?: 'published' | 'retired'
+  status?: 'draft' | 'published' | 'retired'
   retiredReason?: string
   retiredAt?: string
   publishedAt?: string
@@ -255,7 +255,7 @@ export function normalizeScoreMeta(raw: unknown): ScoreMetaDoc | null {
   }
   if (o.card === 'paper' || o.card === 'ink' || o.card === 'brand' || o.card === 'minimal') doc.card = o.card
   if (o.watermark === 'corner' || o.watermark === 'tile' || o.watermark === 'none') doc.watermark = o.watermark
-  if (o.status === 'published' || o.status === 'retired') doc.status = o.status
+  if (o.status === 'draft' || o.status === 'published' || o.status === 'retired') doc.status = o.status
   const assets = normalizeAssets(o.assets)
   if (assets) doc.assets = assets
   const videos = normalizeVideos(o.videos)
