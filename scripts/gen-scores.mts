@@ -1157,7 +1157,7 @@ function listHTML(entries: Entry[]): string {
 ${topbarHTML('scores')}
 <main class="wrap">
   <header class="page-head">
-    <h1>用脚本写的谱</h1>
+    <h1>码即成，谱自现</h1>
     <p class="sub">每份都能看到完整的 .jps 源码和渲染效果；想改就点「在应用里编辑」，谱会带过去。</p>
   </header>
 
