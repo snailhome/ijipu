@@ -894,6 +894,7 @@ document.addEventListener('DOMContentLoaded', function () {
 </script>
 <link rel="stylesheet" href="/scores/scores.css" />
 ${extra}
+<script defer src="/analytics.js"></script>
 </head>`
 }
 

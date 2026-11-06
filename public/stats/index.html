@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="zh-CN" data-site-mode="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex" />
+  <title>访问统计 · 爱记谱</title>
+  <style>
+    :root { color-scheme: dark; --bg:#0d1322; --panel:#151d33; --border:#2a3657; --text:#e8edf9; --muted:#95a2c6; --accent:#22d3ee; }
+    * { box-sizing: border-box; }
+    body { margin:0; min-height:100vh; background:var(--bg); color:var(--text); font:14px/1.6 system-ui, "Microsoft YaHei", sans-serif; }
+    main { max-width:980px; margin:0 auto; padding:32px 20px 60px; }
+    h1 { margin:0 0 6px; font-size:24px; }
+    .muted { color:var(--muted); }
+    .bar { display:flex; gap:8px; flex-wrap:wrap; margin:20px 0; }
+    input, button, select { font:inherit; border:1px solid var(--border); border-radius:8px; background:var(--panel); color:var(--text); padding:7px 10px; }
+    input { flex:1 1 280px; }
+    button { cursor:pointer; color:var(--accent); }
+    .cards { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px,1fr)); gap:10px; margin:16px 0 24px; }
+    .card { padding:14px; border:1px solid var(--border); border-radius:10px; background:var(--panel); }
+    .card b { display:block; font-size:22px; color:var(--accent); }
+    .section-head { display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+    .legend { color:var(--muted); font-size:12px; display:flex; align-items:center; gap:6px; }
+    .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-left:8px; }
+    .dot.pv { background:var(--accent); }
+    .dot.uv { background:#c084fc; }
+    .chart-wrap { margin:10px 0 26px; padding:10px 8px 4px; border:1px solid var(--border); border-radius:12px; background:var(--panel); }
+    #chart { display:block; width:100%; height:auto; overflow:visible; }
+    .rank-table .rank-col { width:44px; }
+    .rank-table .bar-col { width:160px; }
+    .rank-table .rank { color:var(--muted); font-variant-numeric:tabular-nums; }
+    .score-name { font-weight:500; }
+    .score-slug { display:block; color:var(--muted); font-size:12px; }
+    .bar-cell { min-width:120px; }
+    .bar-track { height:7px; border-radius:999px; background:var(--border); overflow:hidden; }
+    .bar-fill { height:100%; border-radius:999px; background:var(--accent); }
+    .chart-empty { color:var(--muted); padding:30px 10px; text-align:center; }
+    table { width:100%; border-collapse:collapse; margin-top:10px; }
+    th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--border); }
+    th { color:var(--muted); font-weight:500; }
+    td.num { text-align:right; font-variant-numeric:tabular-nums; }
+    .row { display:flex; gap:8px; align-items:center; }
+    .status { min-height:1.6em; color:var(--muted); margin:8px 0; }
+    .status.err { color:#ff8a95; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>访问统计</h1>
+  <p class="muted">需要统计令牌；令牌只保存在本机浏览器，不会出现在网址里。</p>
+  <div class="bar">
+    <input id="token" type="password" autocomplete="off" placeholder="STATS_TOKEN" />
+    <select id="days" aria-label="统计范围">
+      <option value="7">最近 7 天</option>
+      <option value="30" selected>最近 30 天</option>
+      <option value="90">最近 90 天</option>
+      <option value="365">最近 365 天</option>
+    </select>
+    <button id="load" type="button">查询</button>
+  </div>
+  <p id="status" class="status" role="status"></p>
+  <div id="summary" class="cards" hidden></div>
+  <section id="trend" hidden>
+    <div class="section-head">
+      <h2>访问趋势</h2>
+      <span class="legend"><i class="dot pv"></i>PV <i class="dot uv"></i>UV</span>
+    </div>
+    <div class="chart-wrap">
+      <svg id="chart" viewBox="0 0 800 250" role="img" aria-label="每日访问趋势"></svg>
+    </div>
+  </section>
+  <section id="pages" hidden>
+    <h2>页面</h2>
+    <table>
+      <thead><tr><th>页面</th><th class="num">PV</th><th class="num">UV</th></tr></thead>
+      <tbody id="page-body"></tbody>
+    </table>
+  </section>
+  <section id="scores" hidden>
+    <h2>乐谱点击排名</h2>
+    <table class="rank-table">
+      <thead><tr><th class="rank-col">#</th><th>乐谱</th><th class="num">PV</th><th class="num">UV</th><th class="bar-col">占比</th></tr></thead>
+      <tbody id="score-body"></tbody>
+    </table>
+  </section>
+</main>
+<script>
+(function () {
+  var tokenEl = document.getElementById('token')
+  var daysEl = document.getElementById('days')
+  var statusEl = document.getElementById('status')
+  var summaryEl = document.getElementById('summary')
+  var trendEl = document.getElementById('trend')
+  var chartEl = document.getElementById('chart')
+  var pagesEl = document.getElementById('pages')
+  var pageBody = document.getElementById('page-body')
+  var scoresEl = document.getElementById('scores')
+  var scoreBody = document.getElementById('score-body')
+  var scoreTitles = {}
+  var titlesLoaded = false
+  var lastScores = null
+  try { tokenEl.value = localStorage.getItem('ijipu.statsToken') || '' } catch (e) {}
+
+  var NS = 'http://www.w3.org/2000/svg'
+  function el(tag, text, className) {
+    var e = document.createElement(tag)
+    if (text !== undefined) e.textContent = text
+    if (className) e.className = className
+    return e
+  }
+  function svg(tag, attrs) {
+    var e = document.createElementNS(NS, tag)
+    Object.keys(attrs || {}).forEach(function (k) { e.setAttribute(k, attrs[k]) })
+    return e
+  }
+  function num(n) { return Number(n || 0).toLocaleString('zh-CN') }
+  function row(a, b, c) {
+    var tr = document.createElement('tr')
+    tr.append(el('td', a), el('td', num(b), 'num'), el('td', num(c), 'num'))
+    return tr
+  }
+
+  function drawTrend(daily) {
+    chartEl.replaceChildren()
+    trendEl.hidden = false
+    var data = daily || []
+    if (data.length === 0) {
+      var empty = svg('text', { x: 400, y: 120, 'text-anchor': 'middle', fill: '#95a2c6', 'font-size': 14 })
+      empty.textContent = '暂无访问数据'
+      chartEl.appendChild(empty)
+      return
+    }
+    var W = 800, H = 250, left = 52, right = 18, top = 18, bottom = 38
+    var plotW = W - left - right
+    var plotH = H - top - bottom
+    var max = 1
+    data.forEach(function (d) {
+      max = Math.max(max, Number(d.pv) || 0, Number(d.uv) || 0)
+    })
+    var niceMax = Math.ceil(max / 5) * 5
+    if (niceMax <= 0) niceMax = 5
+
+    for (var i = 0; i <= 5; i += 1) {
+      var y = top + (plotH * i) / 5
+      chartEl.appendChild(svg('line', { x1: left, y1: y, x2: W - right, y2: y, stroke: '#2a3657', 'stroke-width': 1 }))
+      var label = svg('text', { x: left - 8, y: y + 4, 'text-anchor': 'end', fill: '#95a2c6', 'font-size': 11 })
+      label.textContent = num(Math.round(niceMax * (1 - i / 5)))
+      chartEl.appendChild(label)
+    }
+
+    function pointAt(d, index, key) {
+      var value = Math.max(0, Number(d[key]) || 0)
+      var x = data.length === 1 ? left + plotW / 2 : left + (plotW * index) / (data.length - 1)
+      var y = top + plotH - (value / niceMax) * plotH
+      return { x: x, y: y, value: value }
+    }
+    function linePath(key) {
+      return data.map(function (d, index) {
+        var p = pointAt(d, index, key)
+        return (index === 0 ? 'M' : 'L') + p.x.toFixed(1) + ' ' + p.y.toFixed(1)
+      }).join(' ')
+    }
+
+    chartEl.appendChild(svg('path', { d: linePath('pv'), fill: 'none', stroke: '#22d3ee', 'stroke-width': 2.2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }))
+    chartEl.appendChild(svg('path', { d: linePath('uv'), fill: 'none', stroke: '#c084fc', 'stroke-width': 1.8, 'stroke-dasharray': '5 4', 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }))
+
+    data.forEach(function (d, index) {
+      ;['pv', 'uv'].forEach(function (key) {
+        var p = pointAt(d, index, key)
+        var dot = svg('circle', { cx: p.x, cy: p.y, r: 3, fill: key === 'pv' ? '#22d3ee' : '#c084fc' })
+        var title = svg('title', {})
+        title.textContent = d.day + ' · ' + key.toUpperCase() + ' ' + num(p.value)
+        dot.appendChild(title)
+        chartEl.appendChild(dot)
+      })
+    })
+
+    var labelEvery = Math.max(1, Math.ceil(data.length / 6))
+    data.forEach(function (d, index) {
+      if (index !== 0 && index !== data.length - 1 && index % labelEvery !== 0) return
+      var p = pointAt(d, index, 'pv')
+      var label = svg('text', { x: p.x, y: H - 14, 'text-anchor': 'middle', fill: '#95a2c6', 'font-size': 11 })
+      label.textContent = String(d.day || '').slice(5)
+      chartEl.appendChild(label)
+    })
+  }
+
+  function fetchTitles() {
+    if (titlesLoaded) return
+    titlesLoaded = true
+    fetch('/scores/index.json', { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null })
+      .then(function (data) {
+        if (!data) return
+        ;[].concat(data.library || [], data.samples || []).forEach(function (s) {
+          if (s && s.slug && s.title) scoreTitles[s.slug] = s.title
+        })
+        if (lastScores) renderScores(lastScores)
+      })
+      .catch(function () {})
+  }
+
+  function renderScores(scores) {
+    lastScores = scores || {}
+    var entries = Object.keys(lastScores).map(function (slug) {
+      return [slug, Number(lastScores[slug].pv) || 0, Number(lastScores[slug].uv) || 0]
+    }).sort(function (a, b) { return b[1] - a[1] })
+    scoreBody.replaceChildren()
+    if (entries.length === 0) {
+      var tr = el('tr')
+      var td = el('td', '暂无数据', 'muted')
+      td.colSpan = 5
+      tr.appendChild(td)
+      scoreBody.appendChild(tr)
+    } else {
+      var max = Math.max(1, entries[0][1])
+      entries.forEach(function (x, index) {
+        var tr = document.createElement('tr')
+        tr.appendChild(el('td', String(index + 1), 'rank'))
+
+        var name = document.createElement('td')
+        name.appendChild(el('span', scoreTitles[x[0]] || x[0], 'score-name'))
+        name.appendChild(el('span', x[0], 'score-slug'))
+        tr.appendChild(name)
+
+        tr.appendChild(el('td', num(x[1]), 'num'))
+        tr.appendChild(el('td', num(x[2]), 'num'))
+
+        var bar = document.createElement('td')
+        bar.className = 'bar-cell'
+        var track = el('div', null, 'bar-track')
+        var fill = el('div', null, 'bar-fill')
+        fill.style.width = Math.max(2, Math.round((x[1] / max) * 100)) + '%'
+        track.appendChild(fill)
+        bar.appendChild(track)
+        tr.appendChild(bar)
+        scoreBody.appendChild(tr)
+      })
+    }
+    scoresEl.hidden = false
+    fetchTitles()
+  }
+
+  function render(data) {
+    summaryEl.replaceChildren()
+    summaryEl.hidden = false
+    var totals = [
+      ['总 PV', data.totals.pv],
+      ['总 UV', data.totals.uv],
+      ['首页 PV', data.pages.home.pv],
+      ['应用 PV', data.pages.app.pv],
+      ['乐谱库 PV', data.pages.library.pv],
+    ]
+    totals.forEach(function (x) {
+      var c = el('div', null, 'card')
+      c.append(el('span', x[0], 'muted'), el('b', num(x[1])))
+      summaryEl.appendChild(c)
+    })
+
+    drawTrend(data.daily)
+
+    pageBody.replaceChildren()
+    pageBody.append(
+      row('首页', data.pages.home.pv, data.pages.home.uv),
+      row('应用 /app/', data.pages.app.pv, data.pages.app.uv),
+      row('乐谱库 /scores/', data.pages.library.pv, data.pages.library.uv),
+    )
+    pagesEl.hidden = false
+    renderScores(data.scores || {})
+  }
+  async function load() {
+    var token = tokenEl.value.trim()
+    if (!token) { statusEl.textContent = '请先填 STATS_TOKEN'; statusEl.className = 'status err'; return }
+    statusEl.textContent = '查询中…'
+    statusEl.className = 'status'
+    try {
+      localStorage.setItem('ijipu.statsToken', token)
+    } catch (e) {}
+    try {
+      var res = await fetch('/api/stats?days=' + encodeURIComponent(daysEl.value), {
+        headers: { authorization: 'Bearer ' + token },
+        cache: 'no-store',
+      })
+      var data = await res.json().catch(function () { return {} })
+      if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status))
+      render(data)
+      statusEl.textContent = '统计范围：最近 ' + data.days + ' 天（从 ' + data.since + ' 起）'
+    } catch (e) {
+      statusEl.textContent = '查询失败：' + (e && e.message ? e.message : e)
+      statusEl.className = 'status err'
+    }
+  }
+  document.getElementById('load').addEventListener('click', load)
+  tokenEl.addEventListener('keydown', function (e) { if (e.key === 'Enter') load() })
+  if (tokenEl.value) load()
+})()
+</script>
+</body>
+</html>

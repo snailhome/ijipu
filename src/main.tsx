@@ -1,5 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { trackAppVisit } from './analytics/trackVisit'
 import './index.css'
 /**
  * adj810（方案 B / B3）：**嵌入版侧的入站 RPC** —— 只被 Obsidian 嵌入时生效（`window.parent !== window` ✓）。
@@ -218,6 +219,7 @@ void (async () => {
       <App />
     </StrictMode>,
   )
+  trackAppVisit()
 
   /**
    * adj1010：音色库注册表的**一次性迁移**（v1 的"只有字节" → v2 的元数据表）。

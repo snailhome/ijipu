@@ -38171,4 +38171,42 @@ function runAdj1189Tests(): void {
       '',
     )
   }
+  {
+    // adj1252：访问统计（Cloudflare Pages Functions + D1 + 管理页曲线/排名）
+    const visitFn = readFileSync(join(root, 'functions/api/visit.js'), 'utf8')
+    const statsFn = readFileSync(join(root, 'functions/api/stats.js'), 'utf8')
+    const analyticsJs = readFileSync(join(root, 'public/analytics.js'), 'utf8')
+    const statsHtml = readFileSync(join(root, 'public/stats/index.html'), 'utf8')
+    const mainTsx = readFileSync(join(root, 'src/main.tsx'), 'utf8')
+    check(
+      'adj1252 访问上报只收四个页面，按 path/day/visitor/channel 去重累加',
+      visitFn.includes('ON CONFLICT(path, day, visitor, channel)') &&
+        visitFn.includes('views = views + 1') &&
+        visitFn.includes('PATH_RE'),
+      '',
+    )
+    check(
+      'adj1252 统计接口返回页面 PV/UV、每日曲线、乐谱排名数据',
+      statsFn.includes('GROUP BY day') &&
+        statsFn.includes('daily') &&
+        statsFn.includes('scores') &&
+        statsFn.includes('STATS_TOKEN'),
+      '',
+    )
+    check(
+      'adj1252 网站与应用的访问上报都接好',
+      analyticsJs.includes('/api/visit') &&
+        analyticsJs.includes('ijipu.visitor') &&
+        mainTsx.includes('trackAppVisit'),
+      '',
+    )
+    check(
+      'adj1252 管理页有趋势曲线和乐谱点击排名',
+      statsHtml.includes('访问趋势') &&
+        statsHtml.includes('乐谱点击排名') &&
+        statsHtml.includes('drawTrend') &&
+        statsHtml.includes('daily'),
+      '',
+    )
+  }
 }
