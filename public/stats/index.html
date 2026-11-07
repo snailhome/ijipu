@@ -24,24 +24,29 @@
     :root[data-site-mode="light"] { color-scheme: light; --bg:#f2f5fb; --panel:#ffffff; --border:#dbe3f3; --text:#1c2540; --muted:#65739a; --accent:#0891a6; --uv:#7c3aed; }
     * { box-sizing: border-box; }
     body { margin:0; min-height:100vh; background:var(--bg); color:var(--text); font:14px/1.6 system-ui, "Microsoft YaHei", sans-serif; }
-    main { max-width:980px; margin:0 auto; padding:32px 20px 60px; }
-    .head { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; }
-    h1 { margin:0 0 6px; font-size:24px; }
+    main { max-width:980px; margin:0 auto; padding:24px 20px 40px; }
+    .head { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+    h1 { margin:0; font-size:24px; }
+    h2 { margin:18px 0 6px; font-size:18px; }
+    .head-tools { display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end; flex:1 1 auto; }
+    #token { flex:0 0 260px; width:260px; }
+    #load { min-width:84px; padding-left:20px; padding-right:20px; }
     .theme-toggle { border:1px solid var(--border); border-radius:999px; width:38px; height:38px; padding:0; font-size:17px; line-height:1; background:var(--panel); color:var(--text); flex:0 0 auto; }
     .muted { color:var(--muted); }
     .bar { display:flex; gap:8px; flex-wrap:wrap; margin:20px 0; }
     input, button, select { font:inherit; border:1px solid var(--border); border-radius:8px; background:var(--panel); color:var(--text); padding:7px 10px; }
     input { flex:1 1 280px; }
     button { cursor:pointer; color:var(--accent); }
-    .cards { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px,1fr)); gap:10px; margin:16px 0 24px; }
-    .card { padding:14px; border:1px solid var(--border); border-radius:10px; background:var(--panel); }
-    .card b { display:block; font-size:22px; color:var(--accent); }
+    .cards { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px,1fr)); gap:8px; margin:10px 0 16px; }
+    .card { padding:10px 12px; border:1px solid var(--border); border-radius:10px; background:var(--panel); }
+    .card b { display:block; font-size:20px; color:var(--accent); }
     .section-head { display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+    .section-head h2 { margin:0; }
     .legend { color:var(--muted); font-size:12px; display:flex; align-items:center; gap:6px; }
     .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-left:8px; }
     .dot.pv { background:var(--accent); }
     .dot.uv { background:var(--uv); }
-    .chart-wrap { margin:10px 0 26px; padding:10px 8px 4px; border:1px solid var(--border); border-radius:12px; background:var(--panel); }
+    .chart-wrap { margin:8px 0 16px; padding:8px 8px 2px; border:1px solid var(--border); border-radius:12px; background:var(--panel); }
     #chart { display:block; width:100%; height:auto; overflow:visible; }
     .chart-grid { stroke:var(--border); }
     .chart-label { fill:var(--muted); }
@@ -58,33 +63,41 @@
     .bar-track { height:7px; border-radius:999px; background:var(--border); overflow:hidden; }
     .bar-fill { height:100%; border-radius:999px; background:var(--accent); }
     .chart-empty { color:var(--muted); padding:30px 10px; text-align:center; }
-    table { width:100%; border-collapse:collapse; margin-top:10px; }
-    th, td { text-align:center; padding:8px 10px; border-bottom:1px solid var(--border); }
+    table { width:100%; border-collapse:collapse; margin-top:4px; }
+    th, td { text-align:center; padding:6px 8px; border-bottom:1px solid var(--border); }
     th { color:var(--muted); font-weight:500; }
     td.num { text-align:center; font-variant-numeric:tabular-nums; }
     .row { display:flex; gap:8px; align-items:center; }
-    .status { min-height:1.6em; color:var(--muted); margin:8px 0; }
+    .status { min-height:1.2em; color:var(--muted); margin:4px 0 8px; }
     .status.err { color:#ff8a95; }
+    @media (max-width: 720px) {
+      .head { align-items:flex-start; }
+      .head-tools { width:100%; justify-content:flex-start; }
+      #token { flex:1 1 180px; width:auto; }
+    }
   </style>
 </head>
 <body>
 <main>
   <div class="head">
-    <div>
-      <h1>访问统计</h1>
-      <p class="muted">需要统计令牌；令牌只保存在本机浏览器，不会出现在网址里。</p>
+    <h1>访问统计</h1>
+    <div class="head-tools">
+      <input
+        id="token"
+        type="password"
+        autocomplete="off"
+        placeholder="统计令牌（只保存在本机）"
+        title="令牌只保存在本机浏览器，不会出现在网址里"
+      />
+      <select id="days" aria-label="统计范围">
+        <option value="7">最近 7 天</option>
+        <option value="30" selected>最近 30 天</option>
+        <option value="90">最近 90 天</option>
+        <option value="365">最近 365 天</option>
+      </select>
+      <button id="load" type="button">查询</button>
+      <button id="theme" class="theme-toggle" type="button" title="切换深浅主题" aria-label="切换深浅主题">☀️</button>
     </div>
-    <button id="theme" class="theme-toggle" type="button" title="切换深浅主题" aria-label="切换深浅主题">☀️</button>
-  </div>
-  <div class="bar">
-    <input id="token" type="password" autocomplete="off" placeholder="STATS_TOKEN" />
-    <select id="days" aria-label="统计范围">
-      <option value="7">最近 7 天</option>
-      <option value="30" selected>最近 30 天</option>
-      <option value="90">最近 90 天</option>
-      <option value="365">最近 365 天</option>
-    </select>
-    <button id="load" type="button">查询</button>
   </div>
   <p id="status" class="status" role="status"></p>
   <div id="summary" class="cards" hidden></div>
