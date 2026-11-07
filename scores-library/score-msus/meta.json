@@ -4,14 +4,20 @@
   "title": "春庭雪",
   "subtitle": "",
   "composer": "清彦 词，爆款 曲，蜗牛🐌 制谱",
-  "exportedAt": "2026-11-06",
+  "exportedAt": "2026-11-07",
   "exportedBy": "iJipu 0.78.0",
+  "assets": [
+    {
+      "path": "assets/bg.jpg",
+      "role": "background"
+    }
+  ],
   "overlay": {
     "bg": {
-      "enabled": false,
+      "enabled": true,
       "scale": 100,
       "rotate": 0,
-      "opacity": 100,
+      "opacity": 30,
       "offsetX": 0,
       "offsetY": 0
     },
@@ -37,9 +43,9 @@
     "国风",
     "古韵"
   ],
-  "publishedAt": "2026-11-06",
-  "updatedAt": "2026-11-06",
-  "importedAt": "2026-11-06",
+  "publishedAt": "2026-11-07",
+  "updatedAt": "2026-11-07",
+  "importedAt": "2026-11-07",
   "status": "published",
   "rights": {
     "work": "CC",
@@ -48,9 +54,14 @@
     "ccLicense": "CC-BY-NC-SA-4.0",
     "attribution": "无"
   },
-  "videoUrl": "",
-  "videos": [],
-  "difficulty": 2,
+  "videoUrl": "https://v.douyin.com/WlTpzigwl0o/",
+  "videos": [
+    {
+      "platform": "douyin",
+      "url": "https://v.douyin.com/WlTpzigwl0o/"
+    }
+  ],
   "note": "",
-  "excerpt": ""
+  "excerpt": "",
+  "difficulty": 2
 }

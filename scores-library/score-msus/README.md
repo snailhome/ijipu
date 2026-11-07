@@ -9,4 +9,4 @@
 short / slug 也由工具按「主标题，副标题」自动生成。
 
 资源：
-- 无
+- assets/bg.jpg（background）

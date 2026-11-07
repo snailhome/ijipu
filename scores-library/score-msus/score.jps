@@ -31,4 +31,4 @@ C: @@庭@解。@这一@解，@春欲晚梨花谢又一年。
 
 
 #===以下为页面设置，请勿手动修改===
-# jps-config:{"wmEnabled":true}
+# jps-config:{"wmEnabled":true,"bgEnabled":true,"bgImage":"春庭雪背景.jpg","bgOpacity":30}
