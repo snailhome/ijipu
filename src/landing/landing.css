@@ -340,6 +340,7 @@ code {
 .footer-slogan { color: var(--site-accent); font-size: 15.5px; margin: 0 0 10px; letter-spacing: 0.04em; }
 .footer-meta { color: var(--site-text-2); font-size: 13.5px; margin: 0 0 10px; }
 .footer-thanks { color: var(--site-muted); font-size: 12.5px; margin: 0; }
+.footer-pv { margin: 8px 0 0; font-size: 12.5px; }
 
 /* ---------- 「以前用过」提示条 ---------- */
 .tip {

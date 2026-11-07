@@ -81,6 +81,13 @@ export async function onRequestGet({ request, env }) {
     app: { pv: 0, uv: 0 },
     library: { pv: 0, uv: 0 },
   }
+  const docs = {
+    '/manual/': { pv: 0, uv: 0 },
+    '/syntax/': { pv: 0, uv: 0 },
+    '/plugin/': { pv: 0, uv: 0 },
+    '/cli/': { pv: 0, uv: 0 },
+    '/soundfonts/': { pv: 0, uv: 0 },
+  }
   const scores = {}
   let totalPv = 0
   let totalUv = 0
@@ -96,6 +103,8 @@ export async function onRequestGet({ request, env }) {
       pages.app = { pv, uv }
     } else if (row.path === '/scores/') {
       pages.library = { pv, uv }
+    } else if (Object.prototype.hasOwnProperty.call(docs, row.path)) {
+      docs[row.path] = { pv, uv }
     } else {
       const m = /^\/scores\/([a-z0-9-]+)\/$/.exec(row.path)
       if (m) scores[m[1]] = { pv, uv }
@@ -108,6 +117,7 @@ export async function onRequestGet({ request, env }) {
     since,
     totals: { pv: totalPv, uv: totalUv },
     pages,
+    docs,
     scores,
     daily,
   })

@@ -16,7 +16,7 @@ const CORS = {
 }
 
 
-const PATH_RE = /^\/(?:app\/|scores\/(?:[a-z0-9-]+\/)?)?$/
+const PATH_RE = /^\/(?:app\/|scores\/(?:[a-z0-9-]+\/)?|manual\/|syntax\/|plugin\/|cli\/|soundfonts\/)?$/
 const CHANNELS = new Set(['web', 'pwa', 'desktop'])
 
 function json(status, body) {

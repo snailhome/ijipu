@@ -38210,4 +38210,28 @@ function runAdj1189Tests(): void {
       '',
     )
   }
+  {
+    // adj1253：文档页计入访问统计 + 首页页脚总 PV
+    const docs = ['manual', 'syntax', 'plugin', 'cli', 'soundfonts']
+    const docsTracked = docs.every((d) =>
+      readFileSync(join(root, `${d}/index.html`), 'utf8').includes('/analytics.js'),
+    )
+    const homeHtml = readFileSync(join(root, 'index.html'), 'utf8')
+    const pvFn = readFileSync(join(root, 'functions/api/pv.js'), 'utf8')
+    const landingTs = readFileSync(join(root, 'src/landing/main.ts'), 'utf8')
+    const docsPathOk = readFileSync(join(root, 'public/analytics.js'), 'utf8').includes('manual\\/|syntax\\/|plugin\\/|cli\\/|soundfonts\\/')
+    check(
+      'adj1253 五个文档页都接入访问统计',
+      docsTracked && docsPathOk,
+      '',
+    )
+    check(
+      'adj1253 首页页脚显示 项目建于 / DSH / DS / PV，并从 /api/pv 取总数',
+      homeHtml.includes('项目建于 2026-08-16，DSH 100%，DS 99+%，PV') &&
+        homeHtml.includes('id="site-pv"') &&
+        pvFn.includes('SUM(views)') &&
+        landingTs.includes('fillVisitPV'),
+      '',
+    )
+  }
 }

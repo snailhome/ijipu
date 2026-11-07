@@ -8,6 +8,13 @@
 | 应用 | `/app/` |
 | 乐谱库 | `/scores/` |
 | 单首乐谱 | `/scores/<slug>/` |
+| 操作手册 | `/manual/` |
+| 脚本语法说明 | `/syntax/` |
+| 插件手册 | `/plugin/` |
+| 命令行手册 | `/cli/` |
+| 音色库推荐 | `/soundfonts/` |
+
+首页页脚的 PV 读公开接口 `/api/pv`（只返回总 PV）；页面明细仍走 `/api/stats`。
 
 并按 `web` / `pwa` / `desktop` 区分来源。
 

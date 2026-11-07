@@ -14,7 +14,7 @@
     if (path === '/scores') path = '/scores/'
     if (path === '/app') path = '/app/'
     if (path !== '/' && !path.endsWith('/')) path += '/'
-    if (!/^\/(?:app\/|scores\/(?:[a-z0-9-]+\/)?)?$/.test(path)) return
+    if (!/^\/(?:app\/|scores\/(?:[a-z0-9-]+\/)?|manual\/|syntax\/|plugin\/|cli\/|soundfonts\/)?$/.test(path)) return
 
     var id = ''
     try {

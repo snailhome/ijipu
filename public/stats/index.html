@@ -76,6 +76,13 @@
       <tbody id="page-body"></tbody>
     </table>
   </section>
+  <section id="docs" hidden>
+    <h2>文档</h2>
+    <table>
+      <thead><tr><th>文档</th><th class="num">PV</th><th class="num">UV</th></tr></thead>
+      <tbody id="doc-body"></tbody>
+    </table>
+  </section>
   <section id="scores" hidden>
     <h2>乐谱点击排名</h2>
     <table class="rank-table">
@@ -94,6 +101,8 @@
   var chartEl = document.getElementById('chart')
   var pagesEl = document.getElementById('pages')
   var pageBody = document.getElementById('page-body')
+  var docsEl = document.getElementById('docs')
+  var docBody = document.getElementById('doc-body')
   var scoresEl = document.getElementById('scores')
   var scoreBody = document.getElementById('score-body')
   var scoreTitles = {}
@@ -266,6 +275,19 @@
       row('乐谱库 /scores/', data.pages.library.pv, data.pages.library.uv),
     )
     pagesEl.hidden = false
+    var docNames = {
+      '/manual/': '操作手册',
+      '/syntax/': '脚本语法说明',
+      '/plugin/': '插件手册',
+      '/cli/': '命令行手册',
+      '/soundfonts/': '音色库推荐',
+    }
+    docBody.replaceChildren()
+    Object.keys(docNames).forEach(function (path) {
+      var d = (data.docs && data.docs[path]) || { pv: 0, uv: 0 }
+      docBody.appendChild(row(docNames[path], d.pv, d.uv))
+    })
+    docsEl.hidden = false
     renderScores(data.scores || {})
   }
   async function load() {

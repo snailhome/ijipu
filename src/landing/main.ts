@@ -160,6 +160,21 @@ function bindReturningTip(): void {
   })
 }
 
+/** 页脚总 PV：只读统计接口的公开总数；失败保留「—」，不显示假数据 */
+async function fillVisitPV(): Promise<void> {
+  const el = document.getElementById('site-pv')
+  if (!el) return
+  try {
+    const r = await fetch('/api/pv', { cache: 'no-store' })
+    if (!r.ok) return
+    const data = (await r.json()) as { pv?: unknown }
+    const pv = Number(data.pv)
+    if (Number.isFinite(pv)) el.textContent = pv.toLocaleString('zh-CN')
+  } catch {
+    /* 统计不可用不影响首页 */
+  }
+}
+
 /**
  * adj930：**第一件事**就是接管启动层（不是最后）。
  *
@@ -183,3 +198,4 @@ bindBurger()
 bindDonate()
 bindReturningTip()
 mountPlayground()
+void fillVisitPV()
