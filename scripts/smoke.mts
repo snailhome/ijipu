@@ -38227,7 +38227,8 @@ function runAdj1189Tests(): void {
     )
     check(
       'adj1253 首页页脚显示 项目建于 / DSH / DS / PV，并从 /api/pv 取总数',
-      homeHtml.includes('项目建于 2026-08-16，DSH 100%，DS 99+%，PV') &&
+      homeHtml.includes('项目建于 2026-08-16，DSH 100%，DS 99+%') &&
+        homeHtml.includes('href="/stats/"') &&
         homeHtml.includes('id="site-pv"') &&
         pvFn.includes('SUM(views)') &&
         landingTs.includes('fillVisitPV'),
