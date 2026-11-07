@@ -1,0 +1,66 @@
+{
+  "format": "ijipu-score-package",
+  "version": 1,
+  "title": "慌啥子嘛",
+  "subtitle": "",
+  "composer": "困困羊 词曲，蜗牛🐌 制谱",
+  "exportedAt": "2026-11-07",
+  "exportedBy": "iJipu 0.78.0",
+  "assets": [
+    {
+      "path": "assets/bg.jpg",
+      "role": "background"
+    }
+  ],
+  "overlay": {
+    "bg": {
+      "enabled": true,
+      "scale": 250,
+      "rotate": 0,
+      "opacity": 25,
+      "offsetX": 0,
+      "offsetY": 0
+    },
+    "wm": {
+      "enabled": true,
+      "type": "text",
+      "text": "爱记谱・iJipu",
+      "size": 22,
+      "scale": 100,
+      "rotate": -45,
+      "opacity": 15,
+      "repeat": true,
+      "repeatGap": 300,
+      "offsetX": 0,
+      "offsetY": 0
+    }
+  },
+  "slug": "score-q4w7",
+  "short": "q4w7",
+  "license": "CC",
+  "source": "无",
+  "tags": [
+    "民乐"
+  ],
+  "publishedAt": "2026-11-07",
+  "updatedAt": "2026-11-07",
+  "importedAt": "2026-11-07",
+  "status": "published",
+  "rights": {
+    "work": "CC",
+    "arrangement": "CC",
+    "notation": "CC-BY-NC-SA-4.0",
+    "ccLicense": "CC-BY-NC-SA-4.0",
+    "attribution": "无"
+  },
+  "videoUrl": "https://v.douyin.com/IhsppfHlLLc/",
+  "videos": [
+    {
+      "platform": "douyin",
+      "url": "https://v.douyin.com/IhsppfHlLLc/"
+    }
+  ],
+  "difficulty": 3,
+  "note": "",
+  "excerpt": ""
+}
