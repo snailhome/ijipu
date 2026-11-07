@@ -38234,5 +38234,14 @@ function runAdj1189Tests(): void {
         landingTs.includes('fillVisitPV'),
       '',
     )
+    const adjSrc = readFileSync(join(root, 'src/brand/adj.ts'), 'utf8')
+    check(
+      'adj1257 首页页脚「调优 N」来自 LATEST_ADJ，不写死在 HTML 脚本里',
+      homeHtml.includes('data-adj') &&
+        adjSrc.includes('LATEST_ADJ') &&
+        landingTs.includes('fillAdj') &&
+        landingTs.includes('LATEST_ADJ'),
+      '',
+    )
   }
 }

@@ -19,6 +19,7 @@ import { fillExternalLinks } from '../brand/siteLinks'
 // 接管的时机与兜底见该文件头说明 —— 它等外链样式表 + 字体就绪后**只淡出透明度**再移除。
 import { revealSiteBoot } from '../brand/siteBoot'
 import { APP_VERSION } from '../brand/version'
+import { LATEST_ADJ } from '../brand/adj'
 import './landing.css'
 // adj877：首页「自己改一段试试」区块（引擎按需加载，见该文件头说明）
 import { mountPlayground } from './playground'
@@ -38,6 +39,13 @@ const TIP_DISMISSED_KEY = `${SITE_KEY_PREFIX}tipDismissed`
 function fillVersion(): void {
   document.querySelectorAll('[data-app-version]').forEach((el) => {
     el.textContent = `v${APP_VERSION}`
+  })
+}
+
+/** 页脚「调优 N」：数字只来自 brand/adj.ts 的 LATEST_ADJ */
+function fillAdj(): void {
+  document.querySelectorAll('[data-adj]').forEach((el) => {
+    el.textContent = String(LATEST_ADJ)
   })
 }
 
@@ -193,6 +201,7 @@ applyShots(currentSiteMode())
 bindThemeToggle()
 fillExternalLinks()
 fillVersion()
+fillAdj()
 bindTopbar()
 bindBurger()
 bindDonate()
