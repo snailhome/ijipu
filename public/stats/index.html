@@ -5,12 +5,29 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="robots" content="noindex" />
   <title>访问统计 · 爱记谱</title>
+  <meta name="theme-color" content="#0d1322" />
+  <script>
+    // 与网站/工具共用主题键；没有保存过时跟随系统深浅色
+    ;(function () {
+      var m
+      try { m = localStorage.getItem('ijipu.site.theme') } catch (e) {}
+      if (m !== 'light' && m !== 'dark') {
+        try { m = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light' } catch (e) { m = 'dark' }
+      }
+      document.documentElement.dataset.siteMode = m
+      var meta = document.querySelector('meta[name="theme-color"]')
+      if (meta) meta.setAttribute('content', m === 'light' ? '#f2f5fb' : '#0d1322')
+    })()
+  </script>
   <style>
-    :root { color-scheme: dark; --bg:#0d1322; --panel:#151d33; --border:#2a3657; --text:#e8edf9; --muted:#95a2c6; --accent:#22d3ee; }
+    :root { color-scheme: dark; --bg:#0d1322; --panel:#151d33; --border:#2a3657; --text:#e8edf9; --muted:#95a2c6; --accent:#22d3ee; --uv:#c084fc; }
+    :root[data-site-mode="light"] { color-scheme: light; --bg:#f2f5fb; --panel:#ffffff; --border:#dbe3f3; --text:#1c2540; --muted:#65739a; --accent:#0891a6; --uv:#7c3aed; }
     * { box-sizing: border-box; }
     body { margin:0; min-height:100vh; background:var(--bg); color:var(--text); font:14px/1.6 system-ui, "Microsoft YaHei", sans-serif; }
     main { max-width:980px; margin:0 auto; padding:32px 20px 60px; }
+    .head { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; }
     h1 { margin:0 0 6px; font-size:24px; }
+    .theme-toggle { border:1px solid var(--border); border-radius:999px; width:38px; height:38px; padding:0; font-size:17px; line-height:1; background:var(--panel); color:var(--text); flex:0 0 auto; }
     .muted { color:var(--muted); }
     .bar { display:flex; gap:8px; flex-wrap:wrap; margin:20px 0; }
     input, button, select { font:inherit; border:1px solid var(--border); border-radius:8px; background:var(--panel); color:var(--text); padding:7px 10px; }
@@ -23,9 +40,15 @@
     .legend { color:var(--muted); font-size:12px; display:flex; align-items:center; gap:6px; }
     .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-left:8px; }
     .dot.pv { background:var(--accent); }
-    .dot.uv { background:#c084fc; }
+    .dot.uv { background:var(--uv); }
     .chart-wrap { margin:10px 0 26px; padding:10px 8px 4px; border:1px solid var(--border); border-radius:12px; background:var(--panel); }
     #chart { display:block; width:100%; height:auto; overflow:visible; }
+    .chart-grid { stroke:var(--border); }
+    .chart-label { fill:var(--muted); }
+    .chart-pv { stroke:var(--accent); }
+    .chart-uv { stroke:var(--uv); }
+    .chart-dot-pv { fill:var(--accent); }
+    .chart-dot-uv { fill:var(--uv); }
     .rank-table .rank-col { width:44px; }
     .rank-table .bar-col { width:160px; }
     .rank-table .rank { color:var(--muted); font-variant-numeric:tabular-nums; }
@@ -46,8 +69,13 @@
 </head>
 <body>
 <main>
-  <h1>访问统计</h1>
-  <p class="muted">需要统计令牌；令牌只保存在本机浏览器，不会出现在网址里。</p>
+  <div class="head">
+    <div>
+      <h1>访问统计</h1>
+      <p class="muted">需要统计令牌；令牌只保存在本机浏览器，不会出现在网址里。</p>
+    </div>
+    <button id="theme" class="theme-toggle" type="button" title="切换深浅主题" aria-label="切换深浅主题">☀️</button>
+  </div>
   <div class="bar">
     <input id="token" type="password" autocomplete="off" placeholder="STATS_TOKEN" />
     <select id="days" aria-label="统计范围">
@@ -108,7 +136,31 @@
   var scoreTitles = {}
   var titlesLoaded = false
   var lastScores = null
+  var themeBtn = document.getElementById('theme')
   try { tokenEl.value = localStorage.getItem('ijipu.statsToken') || '' } catch (e) {}
+
+  function applyTheme(mode, persist) {
+    document.documentElement.dataset.siteMode = mode
+    if (persist) {
+      try { localStorage.setItem('ijipu.site.theme', mode) } catch (e) {}
+    }
+    var meta = document.querySelector('meta[name="theme-color"]')
+    if (meta) meta.setAttribute('content', mode === 'light' ? '#f2f5fb' : '#0d1322')
+    if (themeBtn) {
+      themeBtn.textContent = mode === 'light' ? '🌙' : '☀️'
+      themeBtn.setAttribute('aria-pressed', mode === 'light' ? 'true' : 'false')
+      themeBtn.title = mode === 'light' ? '切换到深色' : '切换到浅色'
+    }
+  }
+  applyTheme(document.documentElement.dataset.siteMode === 'light' ? 'light' : 'dark', false)
+  if (themeBtn) themeBtn.addEventListener('click', function () {
+    applyTheme(document.documentElement.dataset.siteMode === 'light' ? 'dark' : 'light', true)
+  })
+  window.addEventListener('storage', function (e) {
+    if (e.key === 'ijipu.site.theme' && (e.newValue === 'light' || e.newValue === 'dark')) {
+      applyTheme(e.newValue, false)
+    }
+  })
 
   var NS = 'http://www.w3.org/2000/svg'
   function el(tag, text, className) {
@@ -134,7 +186,7 @@
     trendEl.hidden = false
     var data = daily || []
     if (data.length === 0) {
-      var empty = svg('text', { x: 400, y: 120, 'text-anchor': 'middle', fill: '#95a2c6', 'font-size': 14 })
+      var empty = svg('text', { x: 400, y: 120, 'text-anchor': 'middle', class: 'chart-label', 'font-size': 14 })
       empty.textContent = '暂无访问数据'
       chartEl.appendChild(empty)
       return
@@ -151,8 +203,8 @@
 
     for (var i = 0; i <= 5; i += 1) {
       var y = top + (plotH * i) / 5
-      chartEl.appendChild(svg('line', { x1: left, y1: y, x2: W - right, y2: y, stroke: '#2a3657', 'stroke-width': 1 }))
-      var label = svg('text', { x: left - 8, y: y + 4, 'text-anchor': 'end', fill: '#95a2c6', 'font-size': 11 })
+      chartEl.appendChild(svg('line', { x1: left, y1: y, x2: W - right, y2: y, class: 'chart-grid', 'stroke-width': 1 }))
+      var label = svg('text', { x: left - 8, y: y + 4, 'text-anchor': 'end', class: 'chart-label', 'font-size': 11 })
       label.textContent = num(Math.round(niceMax * (1 - i / 5)))
       chartEl.appendChild(label)
     }
@@ -170,13 +222,13 @@
       }).join(' ')
     }
 
-    chartEl.appendChild(svg('path', { d: linePath('pv'), fill: 'none', stroke: '#22d3ee', 'stroke-width': 2.2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }))
-    chartEl.appendChild(svg('path', { d: linePath('uv'), fill: 'none', stroke: '#c084fc', 'stroke-width': 1.8, 'stroke-dasharray': '5 4', 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }))
+    chartEl.appendChild(svg('path', { d: linePath('pv'), fill: 'none', class: 'chart-pv', 'stroke-width': 2.2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }))
+    chartEl.appendChild(svg('path', { d: linePath('uv'), fill: 'none', class: 'chart-uv', 'stroke-width': 1.8, 'stroke-dasharray': '5 4', 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }))
 
     data.forEach(function (d, index) {
       ;['pv', 'uv'].forEach(function (key) {
         var p = pointAt(d, index, key)
-        var dot = svg('circle', { cx: p.x, cy: p.y, r: 3, fill: key === 'pv' ? '#22d3ee' : '#c084fc' })
+        var dot = svg('circle', { cx: p.x, cy: p.y, r: 3, class: key === 'pv' ? 'chart-dot-pv' : 'chart-dot-uv' })
         var title = svg('title', {})
         title.textContent = d.day + ' · ' + key.toUpperCase() + ' ' + num(p.value)
         dot.appendChild(title)
@@ -188,7 +240,7 @@
     data.forEach(function (d, index) {
       if (index !== 0 && index !== data.length - 1 && index % labelEvery !== 0) return
       var p = pointAt(d, index, 'pv')
-      var label = svg('text', { x: p.x, y: H - 14, 'text-anchor': 'middle', fill: '#95a2c6', 'font-size': 11 })
+      var label = svg('text', { x: p.x, y: H - 14, 'text-anchor': 'middle', class: 'chart-label', 'font-size': 11 })
       label.textContent = String(d.day || '').slice(5)
       chartEl.appendChild(label)
     })
