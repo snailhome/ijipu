@@ -202,8 +202,15 @@ export class LinearVideoSource {
   ): boolean {
     const sample = this.nearest(tMs)
     if (sample === null) return false
-    const sw = sample.squarePixelWidth || this.info.width
-    const sh = sample.squarePixelHeight || this.info.height
+    /**
+     * adj1265（手机竖屏素材回归）：**必须用 `displayWidth/displayHeight`**（已含旋转）。
+     *
+     * 手机拍的竖屏视频常见"1920×1080 + 旋转 90°"：`squarePixelWidth/Height` 是**旋转前**的，
+     * 拿它算 cover 会得到 3413×1920 的绘制尺寸（画面被放大 3 倍、横向裁掉一大块），
+     * 而 `sample.draw` 自己会按旋转画——尺寸与内容就对不上。`display*` 才是"眼睛看到的多宽多高"。
+     */
+    const sw = sample.displayWidth || this.info.width
+    const sh = sample.displayHeight || this.info.height
     const scale = Math.max(width / Math.max(1, sw), height / Math.max(1, sh))
     const dw = sw * scale
     const dh = sh * scale

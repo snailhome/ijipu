@@ -1614,7 +1614,29 @@ export const linearSyncCopy = {
   theme: '配色',
   bandTop: '谱带位置',
   bandScale: '谱带大小',
+  /**
+   * adj1265（M4 主题编辑器）：四套预设之外的颜色/描边/阴影自定义。
+   * 这些字符串只做标签；真正的取值一律走 `stripTheme.ts` 的钳制。
+   */
+  styleEdit: '自定义…',
+  styleHide: '收起自定义',
+  styleReset: '恢复预设',
+  styleHint: '只记你改过的那几项（跟着这首歌的 sidecar 走）；「恢复预设」清掉全部自定义',
+  styleInk: '墨色',
+  styleHalo: '描边色',
+  styleHaloWidth: '描边粗细',
+  styleShadow: '阴影色',
+  styleShadowBlur: '阴影模糊',
+  styleBlock: '色块色',
+  styleBlockAlpha: '色块浓淡',
+  styleBall: '球色',
+  /** adj1265：片头/片尾卡适配（卡片与相机位共用模板库，尺寸按视频宽高） */
+  cards: '带片头片尾',
+  cardsHint: '片头卡用第 1 页的描述头（标题/作者/调号/拍速）；片尾卡是品牌落版；横屏/竖屏/方图都按比例排版',
+  cardTemplate: '卡片模板',
+  cardsOnHint: (intro: string, end: string, w: number, h: number) => `片头 ${intro} + 片尾 ${end}（${w}×${h}）`,
   noWebCodecs: '当前环境不支持 WebCodecs，不能出片（请更新 WebView2 / 换 Chrome）',
+  notReady: '台面还在准备（谱带/片头卡生成中），稍等一下再点出片',
   noSuchBar: (bar: number) => `谱面没有第 ${bar} 小节`,
   dupAnchor: '这个谱位已有锚点，先删掉旧的再加',
   exportCanceled: '已取消导出',

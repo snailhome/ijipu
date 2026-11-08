@@ -177,7 +177,7 @@ import { buildLinearStrip, stripXAt, stripEndMs, stripBallAt } from '@ijipu/engi
 import { chunkPlanOf, stripSvgOf, stripLayoutOf, STRIP_INK_COLORS } from '../src/export/video/stripSvg'
 // adj1260：一帧的几何（定位块/球/滚动）与主题钳制——都是纯函数
 import { stripFrameAt, bandTopOf } from '../src/export/video/stripFrame'
-import { normalizeStripStyle, stripThemeOf, STRIP_THEMES } from '../src/export/video/stripTheme'
+import { normalizeStripStyle, stripThemeOf, stripStyleOf, stripStyleOverrideOf, colorSwatchOf, hasStripStyleOverride, STRIP_THEMES } from '../src/export/video/stripTheme'
 // adj1264：连续动态谱对拍台的纯口径（时钟映射 / 混音三档 / 偶数化 / 一个音符宽的色块）
 import {
   evenSizeOf,
@@ -187,6 +187,14 @@ import {
   locatorBlockWidthOf,
   mediaMsAt,
   scoreMsAt,
+  // adj1265：卡片时间轴（会话时刻 ⇄ 媒体时刻、片头淡入、片尾淡入、音频补静音）
+  DEFAULT_LINEAR_CARDS,
+  linearAudioPadOf,
+  linearCardFrameAt,
+  linearCardTimelineOf,
+  linearCardsOf,
+  mediaMsOfSession,
+  sessionMsOfMedia,
 } from '../src/export/video/linearSync'
 import { audioTracksOf, playbackWindowsOf } from '../src/export/video/linearExport'
 import { codePosToNoteId, noteIdToCodePos } from '@ijipu/engine/cursorMap.ts'
@@ -35331,12 +35339,14 @@ function runDynamicCameraTests(): void {
    * 观众照抄可能打不开。判据：渲染用的是完整 `brand.siteUrl`，且**不许**再剥协议。
    */
   {
+    /** adj1265：片尾画笔画在 `cardPainter.ts`（相机位与连续谱共用），断言看整条链路 */
     const rendererSrc = readFileSync(join(root, 'src/export/video/renderer.ts'), 'utf8')
+    const painterSrc = readFileSync(join(root, 'src/export/video/cardPainter.ts'), 'utf8')
     const okFullUrl = (s: string): boolean =>
       /ctx\.fillText\(brand\.siteUrl,/.test(s) && !/brand\.siteUrl\.replace\(/.test(s)
     check(
       'adj1112 片尾落款写完整地址：直接用 brand.siteUrl（含 https://），不再剥协议',
-      okFullUrl(rendererSrc) && brand.siteUrl.startsWith('https://'),
+      okFullUrl(`${rendererSrc}\n${painterSrc}`) && brand.siteUrl.startsWith('https://'),
       brand.siteUrl,
     )
     check(
@@ -37482,6 +37492,13 @@ function runAdj1176Tests(): void {
   const overlaySrc = readFileSync(join(root, 'src/preview/DynamicFrameOverlay.tsx'), 'utf8')
   const dialogSrc = readFileSync(join(root, 'src/dialogs/CardStyleDialog.tsx'), 'utf8')
   const renderSrc = readFileSync(join(root, 'src/export/video/renderer.ts'), 'utf8')
+  /**
+   * adj1265：卡片的画笔从 `renderer.ts` 抽到了 `cardPainter.ts`（连续动态谱复用同一份）。
+   * 下面这几条"渲染接线"断言原来只看 renderer，现在看**整条链路**（两个文件拼起来），
+   * 判据一个字没放宽；并且额外钉住"画笔只有一份"（renderer 里不许再出现自带的实现）。
+   */
+  const cardPainterSrc = readFileSync(join(root, 'src/export/video/cardPainter.ts'), 'utf8')
+  const cardChainSrc = `${renderSrc}\n${cardPainterSrc}`
   check(
     'adj1176 模板库是 L1 的公共一份（`ijipu.cardTemplates`），旧的单槽自定义会迁移进来',
     /const CARD_TEMPLATES_KEY = 'ijipu\.cardTemplates'/.test(uiSrc) &&
@@ -37521,10 +37538,20 @@ function runAdj1176Tests(): void {
   )
   check(
     'adj1176 出片渲染：背景图走同一套 `cardImageRect`，水印/印章用 `cardFontStack` 与多字排版',
-    /cardImageRect\(iw, ih, W, H, card\.backgroundImagePos, card\.backgroundImageZoom\)/.test(renderSrc) &&
-      /cardFontStack\(card\.watermark\.font, pageConfig\.biaoti_font, card\.watermark\.fontFamily\)/.test(renderSrc) &&
-      /sealLayoutOf\(card\.seal\.text, size,/.test(renderSrc) &&
-      /fitFontSize\(/.test(renderSrc),
+    /cardImageRect\(iw, ih, W, H, card\.backgroundImagePos, card\.backgroundImageZoom\)/.test(cardChainSrc) &&
+      /cardFontStack\(card\.watermark\.font, opts\.titleFont, card\.watermark\.fontFamily\)/.test(cardChainSrc) &&
+      /sealLayoutOf\(card\.seal\.text, size,/.test(cardChainSrc) &&
+      /fitFontSize\(/.test(cardChainSrc),
+    '',
+  )
+  check(
+    'adj1265 卡片画笔只有一份：renderer 只调 `cardPainter`，不再自带 backdrop/brackets/seal 实现',
+    /createCardPainter\(/.test(renderSrc) &&
+      /cardPainter\.intro\(ctx, W, H, t, alpha, introMeta, beat\)/.test(renderSrc) &&
+      /cardPainter\.end\(ctx, camera\.viewW, camera\.viewH, t, alpha/.test(renderSrc) &&
+      !/const paintCardBackdrop = \(ctx/.test(renderSrc) &&
+      !/const paintCardSeal = \(ctx/.test(renderSrc) &&
+      /const backdrop = \(ctx/.test(cardPainterSrc),
     '',
   )
 
@@ -37592,8 +37619,12 @@ function runAdj1177Tests(): void {
     '',
   )
 
-  const renderSrc = readFileSync(join(root, 'src/export/video/renderer.ts'), 'utf8')
-  const sealSrc = renderSrc.slice(renderSrc.indexOf('const paintCardSeal'), renderSrc.indexOf('const cardReveal'))
+  /**
+   * adj1265：印章画笔在 `cardPainter.ts`（renderer 只负责时间轴/内容）。
+   * 取"这一段的源码"改成从新文件里取，判据（沿 `sealFramePoints` 画弧线、不用 strokeRect）不变。
+   */
+  const cardPainterSrc = readFileSync(join(root, 'src/export/video/cardPainter.ts'), 'utf8')
+  const sealSrc = cardPainterSrc.slice(cardPainterSrc.indexOf('const seal ='), cardPainterSrc.indexOf('const intro ='))
   const copySrc = readFileSync(join(root, 'src/brand/copy.ts'), 'utf8')
   check(
     'adj1181 渲染接线：沿 `sealFramePoints` 画闭合弧线、不再 `strokeRect`；提示文案写明"弧线"',
@@ -37684,6 +37715,8 @@ function runAdj1178Tests(): void {
   )
 
   const renderSrc = readFileSync(join(root, 'src/export/video/renderer.ts'), 'utf8')
+  /** adj1265：印章图解码仍在 renderer（一次性解码后交给画笔），画图在 `cardPainter.ts` */
+  const cardPainterSrc = readFileSync(join(root, 'src/export/video/cardPainter.ts'), 'utf8')
   const overlaySrc = readFileSync(join(root, 'src/preview/DynamicFrameOverlay.tsx'), 'utf8')
   const dialogSrc = readFileSync(join(root, 'src/dialogs/CardStyleDialog.tsx'), 'utf8')
   const archiveSrc = readFileSync(join(root, 'src/store/settingsArchive.ts'), 'utf8')
@@ -37691,8 +37724,8 @@ function runAdj1178Tests(): void {
   check(
     'adj1178 渲染接线：先解码印章图，再按 `sealImageRectOf` 画 `drawImage`',
     /let sealImage: HTMLImageElement \| null = null/.test(renderSrc) &&
-      /sealImageRectOf\(/.test(renderSrc) &&
-      /ctx\.drawImage\(sealImage, rect\.x, rect\.y, rect\.w, rect\.h\)/.test(renderSrc),
+      /sealImageRectOf\(/.test(cardPainterSrc) &&
+      /ctx\.drawImage\(sealImage, rect\.x, rect\.y, rect\.w, rect\.h\)/.test(cardPainterSrc),
     '',
   )
   check(
@@ -37774,15 +37807,21 @@ function runAdj1179Tests(): void {
   )
 
   const renderSrc = readFileSync(join(root, 'src/export/video/renderer.ts'), 'utf8')
+  /** adj1265：标题/水印/印章四处字体接线在 `cardPainter.ts`（标题字体只算一次，片头片尾共用） */
+  const cardPainterSrc = readFileSync(join(root, 'src/export/video/cardPainter.ts'), 'utf8')
   const dialogSrc = readFileSync(join(root, 'src/dialogs/CardStyleDialog.tsx'), 'utf8')
   const topbarSrc = readFileSync(join(root, 'src/ui/TopBar.tsx'), 'utf8')
   const localSrc = readFileSync(join(root, 'src/export/video/localFonts.ts'), 'utf8')
   const copySrc = readFileSync(join(root, 'src/brand/copy.ts'), 'utf8')
   check(
     'adj1179 渲染接线：标题（片头/片尾）/水印/印章四处都把本机字体传给 `cardFontStack`',
-    (renderSrc.match(/cardFontStack\(card\.title\.font, pageConfig\.biaoti_font, card\.title\.fontFamily\)/g) ?? []).length === 2 &&
-      /cardFontStack\(card\.watermark\.font, pageConfig\.biaoti_font, card\.watermark\.fontFamily\)/.test(renderSrc) &&
-      /cardFontStack\(card\.seal\.font, pageConfig\.biaoti_font, card\.seal\.fontFamily\)/.test(renderSrc),
+    /const titleFamily = cardFontStack\(card\.title\.font, opts\.titleFont, card\.title\.fontFamily\)/.test(cardPainterSrc) &&
+      // 片头与片尾都吃同一个 `titleFamily`（算一次、用两处 —— 比原来各算一次更不容易漂）
+      /const endTitleFont = titleFamily/.test(cardPainterSrc) &&
+      /bold \$\{titleSize\}px \$\{titleFamily\}/.test(cardPainterSrc) &&
+      /cardFontStack\(card\.watermark\.font, opts\.titleFont, card\.watermark\.fontFamily\)/.test(cardPainterSrc) &&
+      /cardFontStack\(card\.seal\.font, opts\.titleFont, card\.seal\.fontFamily\)/.test(cardPainterSrc) &&
+      /titleFont: pageConfig\.biaoti_font/.test(renderSrc),
     '',
   )
   check(
@@ -38117,11 +38156,12 @@ function runAdj1189Tests(): void {
         /\[a-z0-9\]\{3,6\}/.test(overlaySrc),
       '',
     )
-    const rendererSrc = readFileSync(join(root, 'src/export/video/renderer.ts'), 'utf8')
+    /** adj1265：片尾短链的解析与渲染在 `cardPainter.ts`（两个入口共用） */
+    const cardPainterSrc = readFileSync(join(root, 'src/export/video/cardPainter.ts'), 'utf8')
     check(
       'adj1246 片尾短链渲染接受完整 URL / 4 位码（/s/y805 这类）',
-      /\^https\?:\\\/\\\/\\S\+\$\/i\.test\(rawShort\)/.test(rendererSrc) &&
-        /\[a-z0-9\]\{3,6\}/.test(rendererSrc),
+      /\^https\?:\\\/\\\/\\S\+\$\/i\.test\(rawShort\)/.test(cardPainterSrc) &&
+        /\[a-z0-9\]\{3,6\}/.test(cardPainterSrc),
       '',
     )
   }
@@ -38695,5 +38735,198 @@ Q: 1 2 3 4 | 5 6 7 1' |: 2 3 4 5 :|
     'adj1264 旧 sidecar 不凭空写出 video/linear 字段（保持旧文件形状），视频音量按 1',
     legacy !== null && legacy.video === undefined && legacy.linear === undefined && legacy.mix.video === 1,
     '',
+  )
+}
+
+/**
+ * adj1265：M4 打磨的两条 —— **主题编辑器**（颜色/描边/阴影可调）与**片头片尾卡适配**。
+ *
+ * 两条都先把"算出来的数"钉死，再让界面去吃同一个函数：
+ *  ① 自定义配色 = 预设 + 覆盖项；覆盖项非法/越界要**逐项**回退，且只把"真改了"的项写进 sidecar；
+ *  ② 卡片时间轴 = `[片头][导出段][片尾]`，会话时刻 ⇄ 媒体时刻、淡入进度、音频补静音都是纯函数；
+ *  ③ 卡片版式按**视频宽高**排版（竖屏手机 / 横屏 / 方图各一套比例），不另做一套"竖屏卡"。
+ */
+console.log('[adj1265] M4：主题编辑器（预设 + 覆盖）与片头片尾卡（会话时间轴 / 宽高适配）')
+{
+  /* ---- ① 主题编辑器：预设 + 覆盖，逐项钳制 ---- */
+  const night = stripThemeOf('night')
+  const custom = stripStyleOf('night', { ink: '#00ff00' })
+  check(
+    'adj1265 自定义配色 = 预设 + 覆盖：只改墨色，描边/色块仍跟随预设',
+    custom.ink === '#00ff00' && custom.haloWidth === night.haloWidth && custom.blockColor === night.blockColor,
+    JSON.stringify(custom),
+  )
+  const badColor = stripStyleOf('night', { ink: 'not-a-color' })
+  check('adj1265 非法色串逐项回退到预设色（不会把坏色写进 canvas）', badColor.ink === night.ink, badColor.ink)
+  const tooWide = stripStyleOf('night', { haloWidth: 99, shadowBlur: -5, blockAlpha: 9 })
+  check(
+    'adj1265 越界数值逐项夹紧（描边 0~12 / 模糊 0~24 / 不透明度 0~1）',
+    tooWide.haloWidth === 12 && tooWide.shadowBlur === 0 && tooWide.blockAlpha === 1,
+    JSON.stringify(tooWide),
+  )
+  const diffFull = stripStyleOverrideOf(stripStyleOf('gold'), stripThemeOf('gold'))
+  check(
+    'adj1265 没改过的主题 ⇒ 覆盖为空（"恢复预设"能清干净，sidecar 不留脏项）',
+    Object.keys(diffFull).length === 0 && !hasStripStyleOverride({}) && !hasStripStyleOverride(null),
+    JSON.stringify(diffFull),
+  )
+  const diffOne = stripStyleOverrideOf(stripStyleOf('gold', { ink: '#123456' }), stripThemeOf('gold'))
+  check(
+    'adj1265 只改一项 ⇒ 覆盖里也只有那一项（不是整份样式冻进 sidecar）',
+    Object.keys(diffOne).length === 1 && diffOne.ink === '#123456' && hasStripStyleOverride(diffOne),
+    JSON.stringify(diffOne),
+  )
+  check(
+    'adj1265 取色器转换：`#fff` 补全、`rgba(...)` 取 RGB、认不出的给白色（不动真实色串）',
+    colorSwatchOf('#fff') === '#ffffff' &&
+      colorSwatchOf('rgba(255, 0, 0, 0.5)') === '#ff0000' &&
+      colorSwatchOf('garbage') === '#ffffff',
+    `${colorSwatchOf('#fff')}/${colorSwatchOf('rgba(255, 0, 0, 0.5)')}/${colorSwatchOf('garbage')}`,
+  )
+
+  /* ---- ② 卡片时间轴（纯函数） ---- */
+  check(
+    'adj1265 关掉卡片 ⇒ 两段都是 0（行为与 adj1264 一致）',
+    linearCardsOf(false).introMs === 0 && linearCardsOf(false).endMs === 0,
+    JSON.stringify(linearCardsOf(false)),
+  )
+  const cardsOn = linearCardsOf(true)
+  check(
+    'adj1265 打开卡片 ⇒ 默认片头 2s / 片尾 2.5s（与相机位同一套时长）',
+    cardsOn.introMs === DEFAULT_LINEAR_CARDS.introMs && cardsOn.endMs === DEFAULT_LINEAR_CARDS.endMs,
+    JSON.stringify(cardsOn),
+  )
+  const cardsBad = linearCardsOf(true, { introMs: Number.NaN, endMs: 99999 })
+  check(
+    'adj1265 卡片时长非法值回默认、超长夹到 10s（免得误拖出几分钟黑屏）',
+    cardsBad.introMs === DEFAULT_LINEAR_CARDS.introMs && cardsBad.endMs === 10_000,
+    JSON.stringify(cardsBad),
+  )
+  const range = { startMs: 5000, endMs: 65_000, durationMs: 60_000 }
+  const tl = linearCardTimelineOf(range, cardsOn)
+  check(
+    'adj1265 会话总长 = 片头 + 导出段 + 片尾（出片按它编帧）',
+    tl.totalMs === 2000 + 60_000 + 2500 && tl.musicMs === 60_000,
+    JSON.stringify(tl),
+  )
+  const f0 = linearCardFrameAt(0, tl)
+  const fMidIntro = linearCardFrameAt(1000, tl)
+  const fMusic = linearCardFrameAt(2000 + 1000, tl)
+  const fEndStart = linearCardFrameAt(2000 + 60_000, tl)
+  const fEnd = linearCardFrameAt(tl.totalMs, tl)
+  check(
+    'adj1265 片头段：画面停在导出段第一帧（不往前倒推成负时刻），淡入从 0 起',
+    f0.phase === 'intro' && f0.mediaMs === 5000 && f0.introFade === 0 && fMidIntro.introFade === 0,
+    JSON.stringify(f0),
+  )
+  check(
+    'adj1265 音乐段：会话时刻 − 片头 = 媒体时刻（导出段内一一对应）',
+    fMusic.phase === 'music' && fMusic.mediaMs === 6000 && fMusic.introFade === 1,
+    JSON.stringify(fMusic),
+  )
+  check(
+    'adj1265 片尾段：画面停在导出段最后一帧，落版从 0 淡入到 1',
+    fEndStart.phase === 'end' && fEndStart.mediaMs === 65_000 && fEndStart.endFade === 0 && fEnd.endFade === 1,
+    `${JSON.stringify(fEndStart)} / ${JSON.stringify(fEnd)}`,
+  )
+  check(
+    'adj1265 片头最后 700ms 交叉淡化：中点 ≈ 0.5（smoothstep）',
+    Math.abs(linearCardFrameAt(2000 - 350, tl).introFade - 0.5) < 1e-6,
+    String(linearCardFrameAt(2000 - 350, tl).introFade),
+  )
+  check(
+    'adj1265 同一个会话时刻两次取帧完全一致（draw(t) 纯函数的前提）',
+    JSON.stringify(linearCardFrameAt(1234.5, tl)) === JSON.stringify(linearCardFrameAt(1234.5, tl)),
+    '',
+  )
+  check(
+    'adj1265 会话时刻 ⇄ 媒体时刻往返一致（片头/片尾段夹在两端）',
+    sessionMsOfMedia(tl, 30_000) === 2000 + 25_000 &&
+      mediaMsOfSession(tl, sessionMsOfMedia(tl, 30_000)) === 30_000 &&
+      mediaMsOfSession(tl, 0) === 5000 &&
+      mediaMsOfSession(tl, tl.totalMs) === 65_000,
+    `${sessionMsOfMedia(tl, 30_000)}/${mediaMsOfSession(tl, 1000)}`,
+  )
+  const pad = linearAudioPadOf(tl)
+  check(
+    'adj1265 音频补静音 = 片头 / 片尾两段（不补的话播放器会把视频时长算短）',
+    pad.headMs === 2000 && pad.tailMs === 2500,
+    JSON.stringify(pad),
+  )
+  const tlNoCards = linearCardTimelineOf(range, linearCardsOf(false))
+  check(
+    'adj1265 不带卡片 ⇒ 时间轴恒等（会话时刻就是媒体时刻，旧行为不变）',
+    tlNoCards.totalMs === 60_000 && mediaMsOfSession(tlNoCards, 1234) === 5000 + 1234 && linearAudioPadOf(tlNoCards).headMs === 0,
+    JSON.stringify(tlNoCards),
+  )
+
+  /* ---- ③ 卡片版式按**视频宽高**适配（竖屏手机 / 横屏 / 方图） ---- */
+  const portrait = endCardLayout(1080, 1920)
+  const landscape = endCardLayout(1920, 1080)
+  const square = endCardLayout(1080, 1080)
+  const within = (L: ReturnType<typeof endCardLayout>, W: number, H: number): boolean =>
+    L.titleY > 0 && L.titleY < H && L.accentY > L.titleY && L.accentY < L.sloganY && L.sloganY < L.urlY && L.urlY < H && L.maxW <= W
+  check(
+    'adj1265 片尾卡在竖屏手机 1080×1920 上排得下（标题 < 线 < 标语 < 网址）',
+    within(portrait, 1080, 1920),
+    JSON.stringify({ titleY: portrait.titleY, sloganY: portrait.sloganY, urlY: portrait.urlY }),
+  )
+  check(
+    'adj1265 片尾卡在横屏 1920×1080 上也排得下（视频宽高变了不挤不越界）',
+    within(landscape, 1920, 1080) && within(square, 1080, 1080),
+    JSON.stringify({ landscape: landscape.urlY, square: square.urlY }),
+  )
+  check(
+    'adj1265 竖屏/横屏字号按短边算、比例各有各的系数（横屏标题更大，不共用一套）',
+    portrait.titleSize < landscape.titleSize && portrait.titleSize === Math.round(1080 * 0.1),
+    `${portrait.titleSize}/${landscape.titleSize}`,
+  )
+
+  /* ---- ④ sidecar：自定义配色与卡片开关跟着这首歌走 ---- */
+  const themed = makeSyncDoc({
+    audio: '',
+    audioDurationMs: 60000,
+    anchors: [],
+    video: '手机竖屏.mp4',
+    linear: { theme: 'gold', style: { ink: '#123456', haloWidth: 99 }, cards: true },
+    code: `V: 1.0
+B: 卡片
+Q: 1 2 3 4 |
+`,
+  })
+  const themedRt = parseSyncDoc(serializeSyncDoc(themed)).doc
+  check(
+    'adj1265 sidecar 记住自定义配色（越界值读回来被夹紧）与卡片开关',
+    themedRt?.linear?.style?.ink === '#123456' &&
+      themedRt?.linear?.style?.haloWidth === 12 &&
+      themedRt?.linear?.cards === true &&
+      Object.keys(themedRt?.linear?.style ?? {}).length === 2,
+    JSON.stringify(themedRt?.linear),
+  )
+  const presetSame = parseSyncDoc(
+    JSON.stringify({
+      version: 1,
+      audio: '',
+      linear: { theme: 'night', style: { ink: stripThemeOf('night').ink, haloWidth: stripThemeOf('night').haloWidth, bad: 'x' } },
+    }),
+  ).doc
+  check(
+    'adj1265 与预设相同的"自定义"读回来丢弃（不写脏项、也认不出未登记字段）',
+    presetSame?.linear?.style === undefined,
+    JSON.stringify(presetSame?.linear),
+  )
+  const badStyle = parseSyncDoc(
+    JSON.stringify({ version: 1, audio: '', linear: { style: { ink: 'rgb(1,2)', blockAlpha: -2 } } }),
+  ).doc
+  check(
+    'adj1265 坏色串/越界值读回来逐项回退或夹紧（不把非法色送进渲染）',
+    badStyle?.linear?.style?.ink === undefined && badStyle?.linear?.style?.blockAlpha === 0,
+    JSON.stringify(badStyle?.linear),
+  )
+  const noCardsField = parseSyncDoc(JSON.stringify({ version: 1, audio: '', linear: { theme: 'paper' } })).doc
+  check(
+    'adj1265 没开卡片的老 sidecar 不凭空写出 cards（保持旧文件形状）',
+    noCardsField?.linear?.cards === undefined && noCardsField?.linear?.style === undefined,
+    JSON.stringify(noCardsField?.linear),
   )
 }

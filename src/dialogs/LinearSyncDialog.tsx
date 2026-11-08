@@ -42,8 +42,10 @@ import { decodeAccompaniment, waveformPeaks } from '../export/video/accompanimen
 import { DEFAULT_SYNC_MIX, syncDocStale, audioRefOf, effectiveSyncFitOf } from '../export/video/syncDoc'
 import { pickAudioFileNative, readSidecarAudio } from '../export/video/syncIo'
 import { loadSidecarAudioFor } from '../store/syncSidecar'
-import { stripThemeOf, STRIP_THEMES, type StripThemeId } from '../export/video/stripTheme'
+import { stripStyleOf, stripPresetStyleOf, stripStyleOverrideOf, colorSwatchOf, STRIP_THEMES, type StripThemeId, type StripStyle } from '../export/video/stripTheme'
 import { createLinearSession, type LinearSession } from '../export/video/linearSession'
+import { CARD_TEMPLATES, resolveCardStyle } from '../export/video/cardTemplates'
+import { recordCardTemplate } from '../store/syncExtras'
 import {
   audioTracksOf,
   encodeLinearMp4,
@@ -54,10 +56,16 @@ import {
 import {
   evenSizeOf,
   exportRangeOf,
+  linearAudioPadOf,
+  linearCardTimelineOf,
+  linearCardsOf,
   linearClockOf,
+  LINEAR_INTRO_FADE_MS,
   linearMixPlanOf,
   mediaMsAt,
+  mediaMsOfSession,
   scoreMsAt,
+  sessionMsOfMedia,
 } from '../export/video/linearSync'
 import { LinearVideoSource } from '../export/video/videoSource'
 import { canUseDynamicVideo } from '../export/video/capability'
@@ -113,6 +121,9 @@ export function LinearSyncDialog() {
   const setTrim = useSyncStore((s) => s.setTrim)
   const setMix = useSyncStore((s) => s.setMix)
   const setExtras = useSyncStore((s) => s.setExtras)
+  /** adj1265：卡片模板库（与相机位共用一份；片头片尾卡跟着这套样式走） */
+  const cardTemplates = useUiStore((s) => s.cardTemplates)
+  const dynamicCardStyle = useUiStore((s) => s.dynamicCardStyle)
 
   const available = canUseDynamicVideo()
 
@@ -125,10 +136,11 @@ export function LinearSyncDialog() {
   }, [parseResult, pageConfig, scoreBpm])
   /** 条带的排版配置：字号固定（出片分辨率与字号无关，字号只影响"一屏几拍"） */
   const stripCfg = useMemo<PageConfig>(() => ({ ...pageConfig, note_size: STRIP_NOTE_SIZE }), [pageConfig])
+  /** adj1265：排版结果留着算片头卡的文字（标题/作者/调号/拍速） */
+  const scoreLayout = useMemo(() => layoutScore(parseResult, stripCfg), [parseResult, stripCfg])
   const strip: LinearStrip = useMemo(() => {
-    const lay = layoutScore(parseResult, stripCfg)
-    return buildLinearStrip(lay, scoreSeq, stripCfg, { pxPerBeat: Math.round(STRIP_NOTE_SIZE * 1.6) })
-  }, [parseResult, stripCfg, scoreSeq])
+    return buildLinearStrip(scoreLayout, scoreSeq, stripCfg, { pxPerBeat: Math.round(STRIP_NOTE_SIZE * 1.6) })
+  }, [scoreLayout, stripCfg, scoreSeq])
   const scoreEndMs = useMemo(() => stripEndMs(strip), [strip])
   const barStartBeats = useMemo(() => (scoreSeq.barStartsMs ?? []).map((ms) => ms / scoreBeatMs), [scoreSeq, scoreBeatMs])
   const barNoOf = useCallback((i: number): number => scoreSeq.barNos?.[i] ?? i + 1, [scoreSeq])
@@ -146,7 +158,33 @@ export function LinearSyncDialog() {
   )
   const trim = useMemo(() => doc?.trim ?? { startMs: 0, endMs: mediaMs }, [doc?.trim, mediaMs])
   const range = useMemo(() => exportRangeOf(clock, trim), [clock, trim])
-  const linearStyle = doc?.linear ?? {}
+  const linearStyle = useMemo(() => doc?.linear ?? {}, [doc?.linear])
+  const themeId = (linearStyle.theme ?? 'night') as StripThemeId
+  const topRatio = linearStyle.topRatio ?? 0.25
+  const blockRatio = linearStyle.blockRatio ?? 1 / 3
+  const bandScale = linearStyle.bandScale ?? 1
+  /**
+   * adj1265：主题 + 自定义覆盖 ⇒ 实际样式。**这是唯一入口**（预览/出片/卡片都读它），
+   * 等价于"用户改一笔颜色，下一次重建会话就按新颜色走"。
+   */
+  const styleOverride = linearStyle.style
+  const linearStripStyle = useMemo(() => stripStyleOf(themeId, styleOverride), [styleOverride, themeId])
+  /** 编辑器的"恢复预设"要能拿到该主题的标准样式 */
+  const presetStyle = useMemo(() => stripPresetStyleOf(themeId), [themeId])
+  /** 片头/片尾卡（跟着这首歌走：存 sidecar 的 `linear.cards`） */
+  const cardsOn = linearStyle.cards === true
+  const cards = useMemo(() => linearCardsOf(cardsOn), [cardsOn])
+  const cardTimeline = useMemo(() => linearCardTimelineOf(range, cards), [cards, range])
+  /** 会话总长（带卡片 = 片头 + 导出段 + 片尾；不带 = 媒体总长） */
+  const sessionTotalMs = cardsOn ? cardTimeline.totalMs : clock.totalMs
+  /** 卡片样式与相机位共用模板库（sidecar 记的模板优先，没有就用当前选中的） */
+  const effectiveCardStyle = useMemo(
+    () => resolveCardStyle(doc?.card?.template ?? dynamicCardStyle, cardTemplates),
+    [cardTemplates, doc?.card?.template, dynamicCardStyle],
+  )
+  /** 片头卡上的文字（第 1 页描述头） */
+  const cardMeta = scoreLayout.pages[0]?.meta ?? null
+  const cardBpm = fit !== null ? 60000 / fit.beatMs : scoreBpm
 
   // ---------- 媒体（视频 / 背景图 / 纯色） ----------
   const [video, setVideo] = useState<LinearVideoSource | null>(null)
@@ -229,19 +267,14 @@ export function LinearSyncDialog() {
     return waveformPeaks(chans, 1200)
   }, [soundtrack])
 
-  // ---------- 会话（一帧合成：背景 → 谱带 → 色块 → 球） ----------
+  // ---------- 会话（一帧合成：背景 → 谱带 → 色块 → 球；带卡片时两端各加一段） ----------
   const sessionRef = useRef<LinearSession | null>(null)
   const stageRef = useRef<HTMLCanvasElement | null>(null)
   const waveRef = useRef<HTMLCanvasElement | null>(null)
-  const themeId = (linearStyle.theme ?? 'night') as StripThemeId
-  const topRatio = linearStyle.topRatio ?? 0.25
-  const blockRatio = linearStyle.blockRatio ?? 1 / 3
-  const bandScale = linearStyle.bandScale ?? 1
   const [sessionReady, setSessionReady] = useState(false)
 
   useEffect(() => {
     let alive = true
-    const style = stripThemeOf(themeId)
     const background =
       video !== null
         ? {
@@ -262,10 +295,23 @@ export function LinearSyncDialog() {
       cfg: stripCfg,
       width: out.width,
       height: out.height,
-      style,
+      style: linearStripStyle,
       background,
       lay: { topRatio, blockRatio },
       bandScale,
+      mediaTotalMs: clock.totalMs,
+      ...(cardsOn
+        ? {
+            cards: {
+              cards,
+              range: { startMs: range.startMs, endMs: range.endMs },
+              cardStyle: effectiveCardStyle,
+              meta: cardMeta,
+              bpm: cardBpm,
+              shortCode: '',
+            },
+          }
+        : {}),
     }).then((s) => {
       if (!alive) return
       sessionRef.current = s
@@ -276,9 +322,23 @@ export function LinearSyncDialog() {
       sessionRef.current = null
       setSessionReady(false)
     }
-  }, [bgColor, bgImage, bandScale, blockRatio, out.height, out.width, strip, stripCfg, themeId, topRatio, video])
+  }, [bgColor, bgImage, bandScale, blockRatio, cardBpm, cardMeta, cards, cardsOn, clock.totalMs, effectiveCardStyle, linearStripStyle, out.height, out.width, range.endMs, range.startMs, strip, stripCfg, topRatio, video])
 
   // ---------- 绘制 ----------
+  /**
+   * adj1265：**会话时刻 ⇄ 媒体时刻**。
+   *
+   * 带卡片时会话时间轴是 `[片头][导出段][片尾]`；不带卡片时两者恒等（adj1264 行为不变）。
+   * 播放头一律存**会话时刻**（屏幕上看到的是哪一帧，就按它算），波形/打点/保留段仍用媒体时刻。
+   */
+  const mediaOfSession = useCallback(
+    (tMs: number): number => (cardsOn ? mediaMsOfSession(cardTimeline, tMs) : tMs),
+    [cardTimeline, cardsOn],
+  )
+  const sessionOfMedia = useCallback(
+    (mediaMs: number): number => (cardsOn ? sessionMsOfMedia(cardTimeline, mediaMs) : mediaMs),
+    [cardTimeline, cardsOn],
+  )
   const playheadRef = useRef(0)
   const [, forcePaint] = useState(0)
   const drawingRef = useRef(false)
@@ -339,8 +399,8 @@ export function LinearSyncDialog() {
       ctx.lineTo(x, WAVE_H)
     }
     ctx.stroke()
-    // ⑤ 播放头
-    const px = xOf(Math.max(0, Math.min(total, playheadRef.current)))
+    // ⑤ 播放头（媒体时间轴；会话时刻要换算，带卡片时播放头会先停在片头那一段）
+    const px = xOf(Math.max(0, Math.min(total, mediaOfSession(playheadRef.current))))
     ctx.strokeStyle = 'var(--jp-danger, #ff5d6c)'
     ctx.lineWidth = 2
     ctx.beginPath()
@@ -348,7 +408,7 @@ export function LinearSyncDialog() {
     ctx.lineTo(px, WAVE_H)
     ctx.stroke()
     ctx.lineWidth = 1
-  }, [clock.totalMs, doc?.anchors, peaks, range.endMs, range.startMs])
+  }, [clock.totalMs, doc?.anchors, mediaOfSession, peaks, range.endMs, range.startMs])
 
   const paintStage = useCallback(
     (tMs: number) => {
@@ -370,7 +430,8 @@ export function LinearSyncDialog() {
       drawingRef.current = true
       void (async () => {
         try {
-          await videoRef.current?.warm(tMs)
+          // 视频帧按**媒体时刻**解（片头/片尾段停在两端的定格帧）
+          await videoRef.current?.warm(mediaOfSession(tMs))
           await sessionRef.current?.warm(tMs)
           paintStage(tMs)
           paintWave()
@@ -379,7 +440,7 @@ export function LinearSyncDialog() {
         }
       })()
     },
-    [paintStage, paintWave],
+    [mediaOfSession, paintStage, paintWave],
   )
 
   // 没在播（改设置、拖播放头）时也要重画
@@ -440,11 +501,16 @@ export function LinearSyncDialog() {
       }
       const ctx = ensureCtx()
       void ctx.resume()
-      const from = Math.max(0, Math.min(fromMs, clock.totalMs))
+      const from = Math.max(0, Math.min(fromMs, sessionTotalMs))
+      /** 片头卡里还没走完的那一段：音频要晚这么久才响（等价于相机位的 leadIn 静音） */
+      const introLeadMs = cardsOn ? Math.max(0, cardTimeline.introMs - from) : 0
+      const fromMedia = mediaOfSession(from)
       const at = ctx.currentTime
-      const windows = playbackWindowsOf(usable, from)
+      const windows = playbackWindowsOf(usable, fromMedia)
       const beatMs = fit?.beatMs ?? scoreBeatMs
-      const fadeStart = Math.max(from, range.endMs - beatMs)
+      /** 收尾淡出在**会话时间轴**上的两刻（= 保留段末一拍 → 保留段末） */
+      const fadeStartSession = sessionOfMedia(Math.max(range.startMs, range.endMs - beatMs))
+      const endSession = sessionOfMedia(range.endMs)
       for (let i = 0; i < usable.length; i++) {
         const t = usable[i]
         const w = windows[i]
@@ -454,13 +520,13 @@ export function LinearSyncDialog() {
         const gain = ctx.createGain()
         gain.gain.value = t.gain
         // 收尾淡出（与出片音轨同一口径：最后一拍线性到 0）
-        if (range.endMs - fadeStart > 20) {
-          gain.gain.setValueAtTime(t.gain, at + Math.max(0, (fadeStart - from) / 1000))
-          gain.gain.linearRampToValueAtTime(0, at + Math.max(0, (range.endMs - from) / 1000))
+        if (endSession - fadeStartSession > 20) {
+          gain.gain.setValueAtTime(t.gain, at + Math.max(0, (fadeStartSession - from) / 1000))
+          gain.gain.linearRampToValueAtTime(0, at + Math.max(0, (endSession - from) / 1000))
         }
         src.connect(gain)
         gain.connect(ctx.destination)
-        src.start(at + w.whenSec, w.skipSec)
+        src.start(at + (introLeadMs + w.whenSec * 1000) / 1000, w.skipSec)
         sourcesRef.current.push(src)
         gainsRef.current.push(gain)
       }
@@ -475,26 +541,36 @@ export function LinearSyncDialog() {
         playheadRef.current = t
         if (posRef.current !== null) posRef.current.textContent = audioClockOf(t)
         paintAt(t)
-        if (t >= range.endMs) {
+        // 播到**会话末尾**（含片尾卡）：卡要放完，不能到音乐结束就停
+        if (t >= sessionTotalMs) {
           stopPlayback()
-          paintAt(range.endMs)
+          paintAt(sessionTotalMs)
           return
         }
         rafRef.current = requestAnimationFrame(tick)
       }
       rafRef.current = requestAnimationFrame(tick)
     },
-    [clock.totalMs, currentMs, ensureCtx, fit?.beatMs, paintAt, plan.silent, range.endMs, scoreBeatMs, stopPlayback, tracks],
+    [cardsOn, cardTimeline.introMs, currentMs, ensureCtx, fit?.beatMs, mediaOfSession, paintAt, plan.silent, range.endMs, range.startMs, scoreBeatMs, sessionOfMedia, sessionTotalMs, stopPlayback, tracks],
   )
 
   const seekTo = useCallback(
-    (ms: number) => {
+    (mediaMs: number) => {
       stopPlayback()
-      paintAt(Math.max(0, Math.min(clock.totalMs, ms)))
+      paintAt(Math.max(0, Math.min(sessionTotalMs, sessionOfMedia(mediaMs))))
       if (posRef.current !== null) posRef.current.textContent = audioClockOf(playheadRef.current)
     },
-    [clock.totalMs, paintAt, stopPlayback],
+    [paintAt, sessionOfMedia, sessionTotalMs, stopPlayback],
   )
+
+  /** 保留段 / 卡片一改，总长可能变短：把播放头夹回去，别停在一条不存在的时间轴上 */
+  useEffect(() => {
+    const t = Math.max(0, Math.min(sessionTotalMs, playheadRef.current))
+    if (t !== playheadRef.current) {
+      playheadRef.current = t
+      paintAt(t)
+    }
+  }, [paintAt, sessionTotalMs])
 
   // 播放中改音量要立刻听到
   useEffect(() => {
@@ -642,6 +718,34 @@ export function LinearSyncDialog() {
   const [bar, setBar] = useState(1)
   const [beat, setBeat] = useState(1)
 
+  // ---------- 主题编辑器（adj1265） ----------
+  const [styleOpen, setStyleOpen] = useState(false)
+  const [styleDraft, setStyleDraft] = useState<Record<string, string>>({})
+
+  /**
+   * 写一笔自定义配色：先把"实际样式"合并出来，再只把**与预设不同**的项写进 sidecar。
+   * 这样用户在编辑器里改回预设值时，那一项会自动消失（不会留下"看起来改过、其实一样"的脏项）。
+   */
+  const writeStyle = useCallback(
+    (patch: Partial<StripStyle>) => {
+      const next: StripStyle = { ...linearStripStyle, ...patch }
+      setExtras({ linear: { ...linearStyle, style: stripStyleOverrideOf(next, presetStyle) } })
+    },
+    [linearStripStyle, linearStyle, presetStyle, setExtras],
+  )
+  /** 文字输入框：敲的时候用本地草稿，失焦/回车才落盘（否则输入 `#ff` 会被钳制回旧值，光标跳） */
+  const commitStyleText = useCallback(
+    (key: keyof StripStyle) => {
+      const raw = styleDraft[key]
+      if (raw === undefined) return
+      const next = { ...styleDraft }
+      delete next[key]
+      setStyleDraft(next)
+      writeStyle({ [key]: raw } as Partial<StripStyle>)
+    },
+    [styleDraft, writeStyle],
+  )
+
   const barBeatLabel = useCallback(
     (b: number): string => {
       for (let i = barStartBeats.length - 1; i >= 0; i--) {
@@ -665,9 +769,10 @@ export function LinearSyncDialog() {
       setNotice(linearSyncCopy.noMedia)
       return
     }
-    const ms = currentMs()
+    const sessionMs = currentMs()
+    const ms = mediaOfSession(sessionMs)
     stopPlayback()
-    playheadRef.current = Math.max(0, Math.min(ms, clock.totalMs))
+    playheadRef.current = Math.max(0, Math.min(sessionMs, sessionTotalMs))
     paintAt(playheadRef.current)
     setPending({ mediaMs: Math.round(ms) })
     // 默认谱位：当前位置对应的拍（取整，避免造出"第 1.33 拍"的半拍锚点）
@@ -677,7 +782,7 @@ export function LinearSyncDialog() {
     const [b, k] = label.split(':').map(Number)
     if (Number.isFinite(b)) setBar(b)
     if (Number.isFinite(k)) setBeat(Math.max(1, Math.round(k)))
-  }, [barBeatLabel, clock, currentMs, paintAt, scoreBeatMs, stopPlayback])
+  }, [barBeatLabel, clock, currentMs, mediaOfSession, paintAt, scoreBeatMs, sessionTotalMs, stopPlayback])
 
   const confirmTap = useCallback(() => {
     if (pending === null) return
@@ -752,8 +857,21 @@ export function LinearSyncDialog() {
   const abortRef = useRef<AbortController | null>(null)
 
   const onExport = useCallback(async () => {
-    const s = sessionRef.current
-    if (s === null || exporting) return
+    /**
+     * 会话是异步建的（谱带光栅 / 卡片图解码）。按钮虽然会禁用，但"刚好在重建"
+     * 那一瞬点下去会**静默什么都不发生**（用户只会觉得点了没反应）——
+     * 所以这里等一小会儿；等不到就明说，别假装成功。
+     */
+    let s = sessionRef.current
+    for (let i = 0; s === null && i < 30; i++) {
+      await new Promise((r) => setTimeout(r, 100))
+      s = sessionRef.current
+    }
+    if (s === null) {
+      setNotice(linearSyncCopy.notReady)
+      return
+    }
+    if (exporting) return
     if (typeof VideoEncoder === 'undefined') {
       setNotice(linearSyncCopy.noWebCodecs)
       return
@@ -764,22 +882,32 @@ export function LinearSyncDialog() {
     const ac = new AbortController()
     abortRef.current = ac
     try {
-      const mixed = await mixLinearAudio(tracks, range)
+      /**
+       * adj1265：带卡片时音轨两端各补一段静音（片头/片尾），
+       * 画面总长也变成"片头 + 导出段 + 片尾"——不补的话播放器会把视频时长算短。
+       */
+      const pad = cardsOn ? linearAudioPadOf(cardTimeline) : { headMs: 0, tailMs: 0 }
+      const mixed = await mixLinearAudio(tracks, range, pad)
       const outSession = {
         width: out.width,
         height: out.height,
-        totalMs: range.durationMs,
+        totalMs: sessionTotalMs,
         draw: (ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D, t: number): void => {
-          s.draw(ctx, range.startMs + t)
+          s.draw(ctx, t)
         },
         warm: async (t: number): Promise<void> => {
-          await videoRef.current?.warm(range.startMs + t)
-          await s.warm(range.startMs + t)
+          await videoRef.current?.warm(s.mediaMsOf(t))
+          await s.warm(t)
         },
       }
       const blob = await encodeLinearMp4(outSession, {
         fps: FPS,
         audio: mixed,
+        // 带片头卡时封面取"卡片最完整"的那一刻（淡出开始前；与相机位同一个口径）
+        coverMs:
+          cardsOn && cardTimeline.introMs > 0
+            ? Math.max(0, cardTimeline.introMs - LINEAR_INTRO_FADE_MS)
+            : 0,
         onProgress: (p) => setProgress(p),
         signal: ac.signal,
       })
@@ -802,7 +930,13 @@ export function LinearSyncDialog() {
       const a = document.createElement('a')
       a.href = url
       a.download = name
+      /**
+       * adj1265：**挂到 DOM 再点**。原来是不挂 DOM 直接 `a.click()`（浏览器多数情况也认），
+       * 但无头 Chrome 下实测"第二次同名下载"会被静默丢掉；挂上 DOM 是各处都稳的写法。
+       */
+      document.body.appendChild(a)
       a.click()
+      a.remove()
       setTimeout(() => URL.revokeObjectURL(url), 10_000)
       showNotice(linearSyncCopy.exportedWeb, 'ok')
     } catch (e) {
@@ -812,7 +946,7 @@ export function LinearSyncDialog() {
       abortRef.current = null
       setExporting(false)
     }
-  }, [exporting, fileName, out.height, out.width, range, showNotice, tracks])
+  }, [cardTimeline, cardsOn, exporting, fileName, out.height, out.width, range, sessionTotalMs, showNotice, tracks])
 
   // ---------- 键盘 ----------
   useEffect(() => {
@@ -888,8 +1022,8 @@ export function LinearSyncDialog() {
               title={linearSyncCopy.stageHint}
             />
             <div className="linear-stage-info">
-              <span className="sync-meta">
-                {audioClockOf(playheadRef.current)} / {audioClockOf(clock.totalMs)}
+              <span className="sync-meta" data-role="linear-total">
+                {audioClockOf(playheadRef.current)} / {audioClockOf(sessionTotalMs)}
               </span>
               <span className="sync-dim">
                 {out.width}×{out.height} · {FPS}fps
@@ -963,10 +1097,10 @@ export function LinearSyncDialog() {
             <span className="sync-meta">
               {audioClockOf(range.startMs)} → {audioClockOf(range.endMs)}（{audioClockOf(range.durationMs)}）
             </span>
-            <button type="button" className="btn sync-mini" onClick={() => setTrim({ startMs: playheadRef.current, endMs: Math.max(playheadRef.current + 34, range.endMs) })}>
+            <button type="button" className="btn sync-mini" onClick={() => setTrim({ startMs: mediaOfSession(playheadRef.current), endMs: Math.max(mediaOfSession(playheadRef.current) + 34, range.endMs) })}>
               {syncCopy.trimStartNow}
             </button>
-            <button type="button" className="btn sync-mini" onClick={() => setTrim({ startMs: Math.min(range.startMs, playheadRef.current), endMs: playheadRef.current })}>
+            <button type="button" className="btn sync-mini" onClick={() => setTrim({ startMs: Math.min(range.startMs, mediaOfSession(playheadRef.current)), endMs: mediaOfSession(playheadRef.current) })}>
               {syncCopy.trimEndNow}
             </button>
             <button type="button" className="btn sync-mini" onClick={() => setTrim({ startMs: 0, endMs: clock.totalMs })}>
@@ -1078,6 +1212,25 @@ export function LinearSyncDialog() {
                 </option>
               ))}
             </select>
+            <button
+              type="button"
+              className="btn sync-mini"
+              data-role="linear-style-toggle"
+              aria-expanded={styleOpen}
+              onClick={() => setStyleOpen((v) => !v)}
+              title={linearSyncCopy.styleHint}
+            >
+              {styleOpen ? linearSyncCopy.styleHide : linearSyncCopy.styleEdit}
+            </button>
+            <button
+              type="button"
+              className="btn sync-mini"
+              disabled={styleOverride === undefined || Object.keys(styleOverride).length === 0}
+              onClick={() => setExtras({ linear: { ...linearStyle, style: {} } })}
+              title={linearSyncCopy.styleHint}
+            >
+              {linearSyncCopy.styleReset}
+            </button>
             <span className="sync-label">{linearSyncCopy.bandTop}</span>
             <input
               className="sync-mix-range"
@@ -1100,6 +1253,133 @@ export function LinearSyncDialog() {
               aria-label={linearSyncCopy.bandScale}
               onChange={(e) => setExtras({ linear: { ...linearStyle, bandScale: Number(e.target.value) } })}
             />
+            <span className="sync-grow" />
+            <label className="sync-label" title={linearSyncCopy.cardsHint}>
+              <input
+                type="checkbox"
+                checked={cardsOn}
+                data-role="linear-cards"
+                aria-label={linearSyncCopy.cards}
+                onChange={(e) => setExtras({ linear: { ...linearStyle, cards: e.target.checked } })}
+              />
+              {linearSyncCopy.cards}
+            </label>
+            {cardsOn && (
+              <>
+                <span className="sync-label">{linearSyncCopy.cardTemplate}</span>
+                <select
+                  className="sync-select"
+                  value={effectiveCardStyle.id}
+                  aria-label={linearSyncCopy.cardTemplate}
+                  onChange={(e) => recordCardTemplate(e.target.value)}
+                >
+                  {[...CARD_TEMPLATES, ...cardTemplates].map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+                <span className="sync-dim">
+                  {linearSyncCopy.cardsOnHint(
+                    `${(cardTimeline.introMs / 1000).toFixed(1)}s`,
+                    `${(cardTimeline.endMs / 1000).toFixed(1)}s`,
+                    out.width,
+                    out.height,
+                  )}
+                </span>
+              </>
+            )}
+          </div>
+
+          {styleOpen && (
+            <div className="sync-row linear-style-row" data-role="linear-style">
+              <StyleColorField
+                label={linearSyncCopy.styleInk}
+                value={linearStripStyle.ink}
+                text={styleDraft.ink}
+                onText={(v) => setStyleDraft((d) => ({ ...d, ink: v }))}
+                onCommit={() => commitStyleText('ink')}
+                onPick={(v) => writeStyle({ ink: v })}
+              />
+              <StyleColorField
+                label={linearSyncCopy.styleHalo}
+                value={linearStripStyle.halo}
+                text={styleDraft.halo}
+                onText={(v) => setStyleDraft((d) => ({ ...d, halo: v }))}
+                onCommit={() => commitStyleText('halo')}
+                onPick={(v) => writeStyle({ halo: v })}
+              />
+              <StyleColorField
+                label={linearSyncCopy.styleShadow}
+                value={linearStripStyle.shadow}
+                text={styleDraft.shadow}
+                onText={(v) => setStyleDraft((d) => ({ ...d, shadow: v }))}
+                onCommit={() => commitStyleText('shadow')}
+                onPick={(v) => writeStyle({ shadow: v })}
+              />
+              <StyleColorField
+                label={linearSyncCopy.styleBlock}
+                value={linearStripStyle.blockColor}
+                text={styleDraft.blockColor}
+                onText={(v) => setStyleDraft((d) => ({ ...d, blockColor: v }))}
+                onCommit={() => commitStyleText('blockColor')}
+                onPick={(v) => writeStyle({ blockColor: v })}
+              />
+              <StyleColorField
+                label={linearSyncCopy.styleBall}
+                value={linearStripStyle.ballColor}
+                text={styleDraft.ballColor}
+                onText={(v) => setStyleDraft((d) => ({ ...d, ballColor: v }))}
+                onCommit={() => commitStyleText('ballColor')}
+                onPick={(v) => writeStyle({ ballColor: v })}
+              />
+              <label className="sync-label" title={linearSyncCopy.styleHaloWidth}>
+                {linearSyncCopy.styleHaloWidth}
+                <input
+                  className="sync-mix-range"
+                  type="range"
+                  min={0}
+                  max={12}
+                  step={0.5}
+                  value={linearStripStyle.haloWidth}
+                  aria-label={linearSyncCopy.styleHaloWidth}
+                  onChange={(e) => writeStyle({ haloWidth: Number(e.target.value) })}
+                />
+                <span className="sync-meta">{linearStripStyle.haloWidth}</span>
+              </label>
+              <label className="sync-label" title={linearSyncCopy.styleShadowBlur}>
+                {linearSyncCopy.styleShadowBlur}
+                <input
+                  className="sync-mix-range"
+                  type="range"
+                  min={0}
+                  max={24}
+                  step={1}
+                  value={linearStripStyle.shadowBlur}
+                  aria-label={linearSyncCopy.styleShadowBlur}
+                  onChange={(e) => writeStyle({ shadowBlur: Number(e.target.value) })}
+                />
+                <span className="sync-meta">{linearStripStyle.shadowBlur}</span>
+              </label>
+              <label className="sync-label" title={linearSyncCopy.styleBlockAlpha}>
+                {linearSyncCopy.styleBlockAlpha}
+                <input
+                  className="sync-mix-range"
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={linearStripStyle.blockAlpha}
+                  aria-label={linearSyncCopy.styleBlockAlpha}
+                  onChange={(e) => writeStyle({ blockAlpha: Number(e.target.value) })}
+                />
+                <span className="sync-meta">{Math.round(linearStripStyle.blockAlpha * 100)}%</span>
+              </label>
+              <span className="sync-dim linear-style-hint">{linearSyncCopy.styleHint}</span>
+            </div>
+          )}
+
+          <div className="sync-row">
             <span className="sync-grow" />
             <span className="sync-label">{syncCopy.bpm}</span>
             <span className="sync-meta">♩={fit !== null ? Math.round(60000 / fit.beatMs) : '—'}（{Math.round(scoreBpm)}）</span>
@@ -1139,5 +1419,45 @@ export function LinearSyncDialog() {
         </div>
       </div>
     </div>
+  )
+}
+
+/**
+ * adj1265：主题编辑器里的一格颜色。
+ *
+ * 为什么是两个输入框：原生取色器只认 `#rrggbb`（半透明色要走 `colorSwatchOf` 换算，
+ * 否则一碰就变成纯黑），而 `rgba(0,0,0,0.85)` 这类色串得能原样手改、也得能看见当前值。
+ * 文本框用"敲的时候存草稿、失焦/回车才落盘"，否则输入 `#ff` 会被钳制回旧值、光标乱跳。
+ */
+function StyleColorField(props: {
+  label: string
+  /** 实际生效的色串（编辑器显示用） */
+  value: string
+  /** 本地草稿（没在编辑时是 undefined） */
+  text: string | undefined
+  onText: (v: string) => void
+  onCommit: () => void
+  onPick: (v: string) => void
+}): React.JSX.Element {
+  return (
+    <label className="sync-label linear-style-cell" title={props.label}>
+      {props.label}
+      <input
+        type="color"
+        value={colorSwatchOf(props.value)}
+        onChange={(e) => props.onPick(e.target.value)}
+        aria-label={`${props.label}（取色）`}
+      />
+      <input
+        className="sync-text linear-style-text"
+        value={props.text ?? props.value}
+        onChange={(e) => props.onText(e.target.value)}
+        onBlur={props.onCommit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') props.onCommit()
+        }}
+        aria-label={props.label}
+      />
+    </label>
   )
 }

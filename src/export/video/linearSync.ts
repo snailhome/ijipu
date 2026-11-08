@@ -111,6 +111,141 @@ export function exportRangeOf(clock: LinearClock, trim: { startMs: number; endMs
   return { startMs: Math.round(start), endMs: Math.round(end), durationMs: Math.round(end - start) }
 }
 
+/* ============================================================
+ * adj1265：片头 / 片尾卡的时间轴（M4「卡片适配」）
+ *
+ * 连续谱的音乐段是 `[range.startMs, range.endMs]`（媒体时间轴），卡片在它**两头**：
+ *   `[片头 intro] [音乐 range] [片尾 end]`
+ * 于是"会话时刻"（出片/预览用的那条时间轴）与"媒体时刻"差一个 `intro`：
+ *   `会话时刻 = intro + (媒体时刻 − range.startMs)`
+ *
+ * 为什么把这段映射抽成纯函数：预览的播放头、出片的帧时刻、混音的前置静音
+ * 三处都要用它；各算一套必然错位（本项目已踩过多次）。这里给一份、Node 里能断言。
+ * ============================================================ */
+
+/** 卡片时长（ms）；缺省与相机位一致：片头 2s、片尾 2.5s */
+export interface LinearCards {
+  introMs: number
+  endMs: number
+}
+
+export const DEFAULT_LINEAR_CARDS: LinearCards = { introMs: 2000, endMs: 2500 }
+
+/** 片头最后这段把卡片淡入到谱面第一帧（与相机位 `INTRO_PAN_MS` 同一个节奏） */
+export const LINEAR_INTRO_FADE_MS = 700
+/** 片尾从最后一帧淡入品牌落版（与相机位 300ms 一致） */
+export const LINEAR_END_FADE_MS = 300
+/** 卡片时长上限（ms）：再长就不像片头片尾了，也免得用户误拖出几分钟的黑屏 */
+const CARD_MAX_MS = 10_000
+
+/** 把 sidecar / 界面给的卡片开关与时长夹到合法值（关掉 ⇒ 两段都是 0） */
+export function linearCardsOf(
+  on: boolean,
+  input?: { introMs?: number; endMs?: number } | null,
+): LinearCards {
+  if (!on) return { introMs: 0, endMs: 0 }
+  const intro = finite(input?.introMs ?? DEFAULT_LINEAR_CARDS.introMs, DEFAULT_LINEAR_CARDS.introMs)
+  const end = finite(input?.endMs ?? DEFAULT_LINEAR_CARDS.endMs, DEFAULT_LINEAR_CARDS.endMs)
+  const clamp = (v: number): number => Math.round(Math.min(CARD_MAX_MS, Math.max(0, v)))
+  return { introMs: clamp(intro), endMs: clamp(end) }
+}
+
+/** 卡片时间轴：三段的长度 + 会话总长（媒体时刻 ↔ 会话时刻的换算表） */
+export interface LinearCardTimeline {
+  introMs: number
+  musicMs: number
+  endMs: number
+  /** 会话总长 = intro + music + end（出片编这么长） */
+  totalMs: number
+  rangeStartMs: number
+  rangeEndMs: number
+}
+
+export function linearCardTimelineOf(range: LinearRange, cards: LinearCards): LinearCardTimeline {
+  const intro = Math.max(0, Math.round(finite(cards.introMs, 0)))
+  const end = Math.max(0, Math.round(finite(cards.endMs, 0)))
+  const music = Math.max(0, Math.round(finite(range.durationMs, 0)))
+  return {
+    introMs: intro,
+    musicMs: music,
+    endMs: end,
+    totalMs: intro + music + end,
+    rangeStartMs: Math.round(finite(range.startMs, 0)),
+    rangeEndMs: Math.round(finite(range.endMs, 0)),
+  }
+}
+
+/** 媒体时刻 → 会话时刻（夹进会话总长；用于"把播放头对齐到某个媒体时刻"） */
+export function sessionMsOfMedia(tl: LinearCardTimeline, mediaMs: number): number {
+  const s = tl.introMs + (finite(mediaMs, 0) - tl.rangeStartMs)
+  return Math.max(0, Math.min(tl.totalMs, s))
+}
+
+/** 会话时刻 → 媒体时刻（片头段停在 `rangeStartMs`、片尾段停在 `rangeEndMs`） */
+export function mediaMsOfSession(tl: LinearCardTimeline, sessionMs: number): number {
+  const t = Math.max(0, Math.min(tl.totalMs, finite(sessionMs, 0)))
+  if (tl.introMs > 0 && t < tl.introMs) return tl.rangeStartMs
+  if (t >= tl.introMs + tl.musicMs) return tl.rangeEndMs
+  return Math.max(0, tl.rangeStartMs + (t - tl.introMs))
+}
+
+/** 这一刻在放哪一段 */
+export type LinearCardPhase = 'intro' | 'music' | 'end'
+
+export interface LinearCardFrame {
+  phase: LinearCardPhase
+  /** 这一刻对应的媒体时刻（音乐段内是真实值；片头/片尾段是被夹在两端） */
+  mediaMs: number
+  /**
+   * 卡片 → 谱面的交叉淡化进度（0 = 只有卡；1 = 谱面完全出来）。
+   * 只在片头最后 `LINEAR_INTRO_FADE_MS` 里从 0 涨到 1；音乐段恒为 1。
+   */
+  introFade: number
+  /** 片尾卡淡入进度（0 = 只有最后那一帧；1 = 落版完整） */
+  endFade: number
+}
+
+const smoothstep = (v: number): number => {
+  const k = Math.min(1, Math.max(0, v))
+  return k * k * (3 - 2 * k)
+}
+
+/**
+ * 某一"会话时刻"画什么。**纯函数**：同一个 t 一定得到同一组数。
+ *
+ * `tl.totalMs === 0`（没有卡片也没有音乐）时退化成"音乐段第一帧"，不产生 NaN。
+ */
+export function linearCardFrameAt(tSession: number, tl: LinearCardTimeline): LinearCardFrame {
+  const t = Math.max(0, Math.min(Math.max(0, tl.totalMs), finite(tSession, 0)))
+  if (tl.introMs > 0 && t < tl.introMs) {
+    const fade = tl.introMs >= LINEAR_INTRO_FADE_MS ? LINEAR_INTRO_FADE_MS : tl.introMs
+    const start = tl.introMs - fade
+    return {
+      phase: 'intro',
+      mediaMs: tl.rangeStartMs,
+      introFade: fade <= 0 ? 1 : smoothstep((t - start) / fade),
+      endFade: 0,
+    }
+  }
+  if (t < tl.introMs + tl.musicMs) {
+    return { phase: 'music', mediaMs: tl.rangeStartMs + (t - tl.introMs), introFade: 1, endFade: 0 }
+  }
+  return {
+    phase: 'end',
+    mediaMs: tl.rangeEndMs,
+    introFade: 1,
+    endFade: smoothstep((t - (tl.introMs + tl.musicMs)) / LINEAR_END_FADE_MS),
+  }
+}
+
+/**
+ * 出片/试听时音频要往前补多少毫秒静音（片头段没有音乐，但时间轴有它）。
+ * @returns `{ headMs, tailMs }`：混音后的音轨按它在最前面/最后面各补一段静音
+ */
+export function linearAudioPadOf(tl: LinearCardTimeline): { headMs: number; tailMs: number } {
+  return { headMs: tl.introMs, tailMs: tl.endMs }
+}
+
 /** 混音输入：三路"有没有料"与三条音量 */
 export interface LinearMixInput {
   /** 视频自带音轨（解码成功才算） */

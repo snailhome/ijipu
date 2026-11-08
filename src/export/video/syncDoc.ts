@@ -18,6 +18,13 @@
  */
 import { fitSync, bpmOfFit, effectiveFitOf } from '@ijipu/engine'
 import type { SyncAnchor, SyncSegmentStat, SyncTrim } from '@ijipu/engine'
+import {
+  STRIP_STYLE_KEYS,
+  normalizeStripStyle,
+  stripThemeOf,
+  type StripStyle,
+  type StripStyleOverride,
+} from './stripTheme'
 
 /** sidecar 后缀：`赤伶.jps` → `赤伶.jps.sync.json` */
 export const SYNC_SUFFIX = '.sync.json'
@@ -57,6 +64,15 @@ export interface SyncLinear {
   blockRatio?: number
   /** 谱带缩放（0.3~3，1 = 按字号） */
   bandScale?: number
+  /**
+   * adj1265（M4 主题编辑器）：**用户改过的那几项配色**。
+   *
+   * 只记覆盖项（缺省 / 某键不存在 = 跟随主题预设），理由见 `stripTheme.ts`
+   * 的 `StripStyleOverride`。`theme` 决定基准，这一份只记"哪几笔不一样"。
+   */
+  style?: StripStyleOverride
+  /** adj1265：出片带片头/片尾卡（默认不带；卡片样式复用 `card.template`） */
+  cards?: boolean
 }
 
 export interface SyncDoc {
@@ -392,6 +408,34 @@ export function parseSyncDoc(text: string): { doc: SyncDoc | null; error?: strin
     if (topRatio !== undefined) out.topRatio = topRatio
     if (blockRatio !== undefined) out.blockRatio = blockRatio
     if (bandScale !== undefined) out.bandScale = bandScale
+    /**
+     * adj1265：自定义配色的**逐项钳制**。
+     *
+     * 只保留"真与预设不同"的项：色串写坏了会被 `normalizeStripStyle` 回退成预设色，
+     * 那就等于没改，不写进 sidecar（否则看起来像"用户改过"，其实画出来一模一样）。
+     */
+    const styleRaw = l.style
+    if (styleRaw !== null && typeof styleRaw === 'object' && !Array.isArray(styleRaw)) {
+      const sIn = styleRaw as Record<string, unknown>
+      const base = stripThemeOf(out.theme)
+      const partial: Partial<StripStyle> = {}
+      const keys: string[] = []
+      for (const k of STRIP_STYLE_KEYS) {
+        if (sIn[k] === undefined || sIn[k] === null) continue
+        ;(partial as Record<string, unknown>)[k] = sIn[k]
+        keys.push(k)
+      }
+      if (keys.length > 0) {
+        const norm = normalizeStripStyle(partial, base)
+        const keep: StripStyleOverride = {}
+        for (const k of STRIP_STYLE_KEYS) {
+          if (!keys.includes(k)) continue
+          if (norm[k] !== base[k]) (keep as Record<string, unknown>)[k] = norm[k]
+        }
+        if (Object.keys(keep).length > 0) out.style = keep
+      }
+    }
+    if (typeof l.cards === 'boolean') out.cards = l.cards
     if (Object.keys(out).length > 0) linear = out
   }
   const doc: SyncDoc = {

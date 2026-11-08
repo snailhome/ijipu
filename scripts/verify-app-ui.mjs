@@ -3416,6 +3416,112 @@ async function main() {
           await evalJs(c, `document.body.innerText.includes('没有视频：用纯色背景')`),
           '',
         )
+        /**
+         * adj1265（M4）：主题编辑器与片头片尾卡——真浏览器里点一遍。
+         * 纯函数/带 sidecar 的判据在 smoke 里；这里只验"界面真的接上了、改动真的进了画布"。
+         */
+        const styleToggle = await evalJs(
+          c,
+          `(() => {
+            const b = document.querySelector('[data-role="linear-style-toggle"]')
+            if (!b) return 'no-btn'
+            b.click()
+            return 'ok'
+          })()`,
+        )
+        await sleep(350)
+        const styleUi = await evalJs(
+          c,
+          `(() => {
+            const row = document.querySelector('[data-role="linear-style"]')
+            return {
+              open: !!row,
+              colors: row ? row.querySelectorAll('input[type="color"]').length : 0,
+              sliders: row ? row.querySelectorAll('input[type="range"]').length : 0,
+            }
+          })()`,
+        )
+        check(
+          'adj1265 主题编辑器能打开：5 个取色器 + 3 条滑条（描边粗细/阴影模糊/色块浓淡）',
+          styleToggle === 'ok' && styleUi.open && styleUi.colors === 5 && styleUi.sliders === 3,
+          JSON.stringify(styleUi),
+        )
+        // 改「墨色」为纯绿：画布上的谱带字应当真的变绿（不是只改了输入框）
+        const whiteBefore = await evalJs(
+          c,
+          `(() => {
+            const cv = document.querySelector('[data-role="linear-stage"]')
+            const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data
+            let n = 0
+            for (let i = 0; i < d.length; i += 4) if (d[i] > 200 && d[i + 1] > 200 && d[i + 2] > 200) n++
+            return n
+          })()`,
+        )
+        await evalJs(
+          c,
+          `(() => {
+            const input = document.querySelectorAll('[data-role="linear-style"] input[type="color"]')[0]
+            const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set
+            setter.call(input, '#00ff00')
+            input.dispatchEvent(new Event('input', { bubbles: true }))
+            input.dispatchEvent(new Event('change', { bubbles: true }))
+            return true
+          })()`,
+        )
+        await sleep(1600)
+        const greenAfter = await evalJs(
+          c,
+          `(() => {
+            const cv = document.querySelector('[data-role="linear-stage"]')
+            const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data
+            let n = 0
+            for (let i = 0; i < d.length; i += 4) if (d[i] < 110 && d[i + 1] > 190 && d[i + 2] < 110) n++
+            return n
+          })()`,
+        )
+        check(
+          'adj1265 改「墨色」后画布上的字真的变绿（预览与编辑器同一个样式入口）',
+          greenAfter > 100 && whiteBefore > 100,
+          `白 ${whiteBefore} → 绿 ${greenAfter}`,
+        )
+        // 恢复预设：自定义项清掉，按钮自己变灰
+        await evalJs(
+          c,
+          `[...document.querySelectorAll('.linear-panel .btn')].find((b) => (b.textContent || '').includes('恢复预设'))?.click(), true`,
+        )
+        await sleep(1200)
+        check(
+          'adj1265 「恢复预设」清掉自定义（按钮随即不可点）',
+          await evalJs(
+            c,
+            `(() => {
+              const b = [...document.querySelectorAll('.linear-panel .btn')].find((el) => (el.textContent || '').includes('恢复预设'))
+              return !!b && b.disabled
+            })()`,
+          ),
+          '',
+        )
+        // 片头片尾卡：勾上后总长 +4.5s、并写出卡片模板与时长
+        const totalBefore = await evalJs(c, `document.querySelector('[data-role="linear-total"]')?.textContent ?? ''`)
+        await evalJs(c, `document.querySelector('[data-role="linear-cards"]')?.click(), true`)
+        await sleep(1500)
+        const cardsUi = await evalJs(
+          c,
+          `(() => ({
+            total: document.querySelector('[data-role="linear-total"]')?.textContent ?? '',
+            hint: document.body.innerText.includes('片头 2.0s + 片尾 2.5s'),
+            template: !!document.querySelector('.linear-panel select[aria-label="卡片模板"]'),
+          }))()`,
+        )
+        check(
+          'adj1265 勾「带片头片尾」后总长变长、写出片头/片尾时长与卡片模板下拉',
+          cardsUi.total !== totalBefore && cardsUi.hint && cardsUi.template,
+          `${totalBefore} → ${cardsUi.total}`,
+        )
+        await evalJs(c, `document.querySelector('[data-role="linear-cards"]')?.click(), true`)
+        await sleep(500)
+        await evalJs(c, `document.querySelector('[data-role="linear-style-toggle"]')?.click(), true`)
+        await sleep(300)
         // ③ 喂一个假视频：解码失败必须明确提示，画布与对拍不受影响
         const fakeMp4 = path.join(DL, 'fake-video.mp4')
         writeFileSync(fakeMp4, Buffer.from('this is not a video file at all'))

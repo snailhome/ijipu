@@ -6863,3 +6863,34 @@ span.ws-check {
   touch-action: none;
 }
 
+/* ---- adj1265：主题编辑器（自定义墨色/描边/阴影/色块/球） ----
+   一行铺开、可换行：颜色项是「取色器 + 色串文本框」两格，数值项是「滑条 + 读数」。
+   面板宽度有限（1240px），窄屏时最后一格自己折行，不做横向滚动。 */
+.linear-style-row {
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  padding: 6px 8px;
+  border: 1px solid var(--jp-border);
+  border-radius: 8px;
+  background: rgb(0 0 0 / 12%);
+}
+
+.linear-style-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* 色串文本框要能看清 `rgba(0,0,0,0.85)` 这种长值，又要省地方 */
+.linear-style-text {
+  width: 150px;
+  padding: 2px 4px;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 11px;
+}
+
+.linear-style-hint {
+  flex-basis: 100%;
+  font-size: 11px;
+}
+

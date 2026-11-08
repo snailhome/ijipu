@@ -183,11 +183,16 @@ async function flushSidecarSave(): Promise<void> {
   if (latest === null) return
   // 没有伴奏时也可以只为 marks/range/card 写 sidecar（adj1167：打开 .jps 要恢复标记段；
   // adj1176：只记了卡片模板的 sidecar 同样有意义；三者都没有的空文件没有意义，不写）
+  // adj1265：连续谱的 `video` / `linear` 也**必须**能单独落盘 ——
+  // 只导了视频、没加伴奏时，台面的主题/谱带位置/片头片尾都记在这两个字段里，
+  // 漏掉它们就等于"改了半天，重开全没了"（adj1264 起就存在，本轮补上）。
   if (
     latest.audio === '' &&
     latest.marks === undefined &&
     latest.range === undefined &&
-    latest.card === undefined
+    latest.card === undefined &&
+    latest.video === undefined &&
+    latest.linear === undefined
   ) {
     return
   }
