@@ -172,7 +172,7 @@ import { splitTempo } from '@ijipu/engine/parser/parser.ts'
 import { parseKey } from '@ijipu/engine/layout/index.ts'
 import { buildPlaySequence, inferBpm, schedulePlay, matchInstrument, resolveInstrument, eventsToMidi, pitchToMidiNote, instrumentToProgram, pcmToWav, SAMPLER_LIBRARIES, getSamplerLibrary, classifyNetwork, GmChannelAllocator, GM_MELODIC_CHANNELS, GM_VOICES, gmVoiceRef, gmVoiceProgram, countScoreInstrumentSwitches, noteIdStringOf, slicePlaySequenceByNoteRange, resolvePracticeRange, slicePlaySequenceByRange, extendRangeEndToSlurEnd } from '@ijipu/engine/playback/index.ts'
 // adj1258：连续动态谱（单行滚动谱）——"排版 → 源小节表 → 按演奏顺序拼成一条线"
-import { buildLinearStrip, stripXAt, stripEndMs } from '@ijipu/engine/index.ts'
+import { buildLinearStrip, stripXAt, stripEndMs, stripBallAt } from '@ijipu/engine/index.ts'
 import { codePosToNoteId, noteIdToCodePos } from '@ijipu/engine/cursorMap.ts'
 // M1-1 动态谱时间轴：把拍段收成"定时矩形"，供视频逐帧取"此刻哪几块在亮"
 import { buildRectTrack, rectsActiveAt } from '@ijipu/engine/index.ts'
@@ -38331,4 +38331,21 @@ Q: 1 2 3 4 | 5 6 7 1' | 2 3 4 5 | 6 7 1' 2' | 3 4 5 6 | 7 1' 2' 3' | 4 5 6 7 | 1
     b.strip.runs.length > 0 && Math.max(...b.strip.runs.map((r) => r.sourceBar)) === 16,
     `max=${Math.max(...b.strip.runs.map((r) => r.sourceBar))}`,
   )
+
+  /**
+   * 跳跳球（固定点在定位色块上弹）：
+   *  · 落地那一刻压扁最大、且停在块上；
+   *  · 一拍中间飞到最高；
+   *  · 整条曲线按拍周期重复（否则越走越偏）。
+   */
+  const BALL = { beatMs: 500, blockTop: 100, radius: 10 }
+  const landMs = (1 / 20) * 500 // 第一次落地 = 拍点 + 1/20 拍
+  const atLand = stripBallAt(landMs, BALL)
+  check('adj1258 球在落地那一刻压到最大且停在色块上（dwelling）', atLand.squash > 0.95 && atLand.dwelling, `squash=${atLand.squash}`)
+  const midAir = stripBallAt(landMs + 500 / 2, BALL)
+  check('adj1258 一拍中间球在半空（明显高于色块上沿）', midAir.y < BALL.blockTop - 10 && !midAir.dwelling, `y=${midAir.y}`)
+  const periodic = [0, 120, 240, 360].every(
+    (dt) => Math.abs(stripBallAt(landMs + dt, BALL).y - stripBallAt(landMs + dt + 500, BALL).y) < 0.5,
+  )
+  check('adj1258 球的曲线按拍周期重复（预览与出片同一套，不累积漂移）', periodic, '')
 }

@@ -7,5 +7,7 @@
 export { buildLinearStrip, stripBarlineTypeOf } from './strip'
 export { extractMeasures } from './measures'
 export { stripXAt, stripRunAt, stripEndMs } from './xmap'
+export { stripBallAt } from './ball'
+export type { StripBall, StripBallOptions } from './ball'
 export type { LinearStrip, LinearStripOptions, StripRun, StripNote, StripDropped } from './types'
 export type { SrcMeasure } from './measures'
