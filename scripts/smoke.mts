@@ -173,6 +173,8 @@ import { parseKey } from '@ijipu/engine/layout/index.ts'
 import { buildPlaySequence, inferBpm, schedulePlay, matchInstrument, resolveInstrument, eventsToMidi, pitchToMidiNote, instrumentToProgram, pcmToWav, SAMPLER_LIBRARIES, getSamplerLibrary, classifyNetwork, GmChannelAllocator, GM_MELODIC_CHANNELS, GM_VOICES, gmVoiceRef, gmVoiceProgram, countScoreInstrumentSwitches, noteIdStringOf, slicePlaySequenceByNoteRange, resolvePracticeRange, slicePlaySequenceByRange, extendRangeEndToSlurEnd } from '@ijipu/engine/playback/index.ts'
 // adj1258：连续动态谱（单行滚动谱）——"排版 → 源小节表 → 按演奏顺序拼成一条线"
 import { buildLinearStrip, stripXAt, stripEndMs, stripBallAt } from '@ijipu/engine/index.ts'
+// adj1259：单行谱出 SVG + 配色替换 + 分块规划（纯函数，Node 里可直接断言）
+import { chunkPlanOf, stripSvgOf, STRIP_INK_COLORS } from '../src/export/video/stripSvg'
 import { codePosToNoteId, noteIdToCodePos } from '@ijipu/engine/cursorMap.ts'
 // M1-1 动态谱时间轴：把拍段收成"定时矩形"，供视频逐帧取"此刻哪几块在亮"
 import { buildRectTrack, rectsActiveAt } from '@ijipu/engine/index.ts'
@@ -38348,4 +38350,22 @@ Q: 1 2 3 4 | 5 6 7 1' | 2 3 4 5 | 6 7 1' 2' | 3 4 5 6 | 7 1' 2' 3' | 4 5 6 7 | 1
     (dt) => Math.abs(stripBallAt(landMs + dt, BALL).y - stripBallAt(landMs + dt + 500, BALL).y) < 0.5,
   )
   check('adj1258 球的曲线按拍周期重复（预览与出片同一套，不累积漂移）', periodic, '')
+
+  /* ---- adj1259：单行谱出 SVG / 配色替换 / 分块 ---- */
+  const svg = stripSvgOf(a.strip, defaultPageConfig)
+  check('adj1259 合成页能出 SVG（一条，宽 = 条带宽）', svg.startsWith('<svg') && svg.includes(`width="${a.strip.width}"`), svg.slice(0, 80))
+  check('adj1259 SVG 里确实画了数字（<text 有内容，不是空页）', /<text[^>]*>\d/.test(svg), '')
+  const tinted = stripSvgOf(a.strip, defaultPageConfig, '#ffffff')
+  const left = STRIP_INK_COLORS.some((c) => tinted.includes(`fill="${c}"`))
+  check('adj1259 换色后写死的墨色一个不剩，且新色真的写进去了', !left && tinted.includes('fill="#ffffff"'), '')
+  check('adj1259 换色不碰别的颜色（高亮/水印色原样）', tinted.includes('fill="#1b1b1b"') === false, '')
+
+  const plan = chunkPlanOf(a.strip.width, 1200)
+  const cover =
+    plan.length > 0 &&
+    plan[0].x === 0 &&
+    plan.every((c, i) => c.w > 0 && (i === 0 || c.x === plan[i - 1].x + plan[i - 1].w)) &&
+    plan[plan.length - 1].x + plan[plan.length - 1].w === a.strip.width
+  check('adj1259 分块首尾相接、不重叠不漏（末块按剩余宽裁）', cover, `chunks=${plan.length}`)
+  check('adj1259 块宽不被钳到 0 以下（极小条带也有 1 块）', chunkPlanOf(1, 1200).length === 1, '')
 }
