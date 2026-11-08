@@ -6798,3 +6798,68 @@ span.ws-check {
   color: var(--jp-accent);
   font-variant-numeric: tabular-nums;
 }
+
+/* ---- adj1264：连续动态谱（单行横滚）对拍台 ----
+   画面 = 成片的画布（背景视频/背景图/纯色 + 谱带 + 色块 + 球），所以它按"出片分辨率"渲染，
+   这里只把它缩到面板里（`max-height` 让竖屏视频也能整块看到，不裁切）。 */
+.linear-panel {
+  width: min(1240px, 100%);
+}
+
+.linear-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow: auto;
+  padding-bottom: 2px;
+}
+
+.linear-stage {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* 画布像素尺寸 = 出片尺寸；这里只做等比缩放（宽/高都不许超） */
+.linear-stage-canvas {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 46vh;
+  object-fit: contain;
+}
+
+/* 画面左下角那排读数压一层阴影，浅色视频上也读得清 */
+.linear-stage-info {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 12px;
+  color: #fff;
+  text-shadow: 0 1px 3px rgb(0 0 0 / 80%);
+  pointer-events: none;
+}
+
+.linear-notice {
+  color: #ffd36b;
+}
+
+/* 波形：整条时间轴（点/拖定位），下侧一条标尺 */
+.linear-wave {
+  display: block;
+  width: 100%;
+  border-radius: 6px;
+  background: rgb(0 0 0 / 18%);
+  cursor: pointer;
+  touch-action: none;
+}
+

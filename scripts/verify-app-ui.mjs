@@ -53,7 +53,7 @@
  * ② 两边改**同一块** ⇒ 确认条应走"要你决定"、差异框里标"冲突"，选「用右」+ 应用后**外部那一版进文件、本地那版被换掉**。
  */
 import { createServer } from 'node:http'
-import { readFileSync, existsSync, statSync, mkdirSync, rmSync } from 'node:fs'
+import { readFileSync, existsSync, statSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { spawn } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { readdir, readFile, rm } from 'node:fs/promises'
@@ -3329,6 +3329,127 @@ async function main() {
           !desk.title.includes('爱记谱 iJipu'),
         JSON.stringify({ 桌面: desk, PWA: pwa }),
       )
+    }
+
+    /**
+     * adj1264（M3）：连续动态谱**对拍台**（横滚）。
+     *
+     * 源码级断言拦不住的三件事，这里真点一遍：
+     *  ① 入口在试听栏点得开、台面真的渲染（面板/预览画布都在，不是白屏）；
+     *  ② 没有视频时**纯色兜底**，画布上真的有谱带墨迹（不是一片黑）——负向判据；
+     *  ③ **视频解码失败必须有明确提示**（喂一个假 mp4），不许静默黑屏。
+     */
+    console.log('[verify-app-ui] adj1264：连续动态谱对拍台（横滚）')
+    {
+      const syncCode = `V: 1.0\nB: 连续谱\nQ: 1 2 3 4 | 5 6 7 1' | 2 3 4 5 |\n`
+      await c.send('Page.navigate', { url: `${origin}/app/?jps=${encodeURIComponent(syncCode)}` })
+      await waitFor(c, `!!document.querySelector('.app')`, '应用首屏（连续谱用例）')
+      await sleep(800)
+      const linearTab = await evalJs(
+        c,
+        `(() => {
+          const b = [...document.querySelectorAll('.topbar-btn')].find((el) => (el.textContent || '').includes('试听'))
+          if (!b) return 'no-tab'
+          b.click()
+          return 'ok'
+        })()`,
+      )
+      check('adj1264 顶栏「试听」点得开（连续谱用例）', linearTab === 'ok', linearTab)
+      await waitFor(c, `!!document.querySelector('.playback-actions')`, '试听面板（连续谱用例）')
+      const linearClicked = await evalJs(
+        c,
+        `(() => {
+          const b = [...document.querySelectorAll('.playback-actions .btn')].find((el) => (el.textContent || '').includes('连续动态谱'))
+          if (!b) return 'no-btn'
+          b.click()
+          return 'ok'
+        })()`,
+      )
+      check('adj1264 试听栏里有「连续动态谱（横滚）」入口（桌面/开发态）', linearClicked === 'ok', linearClicked)
+      if (linearClicked === 'ok') {
+        await waitFor(c, `!!document.querySelector('.linear-panel')`, '连续谱台面出现')
+        const linearUi = await evalJs(
+          c,
+          `(() => {
+            const p = document.querySelector('.linear-panel')
+            const r = p ? p.getBoundingClientRect() : null
+            const cv = document.querySelector('[data-role="linear-stage"]')
+            return {
+              panel: !!p,
+              w: r ? Math.round(r.width) : 0,
+              h: r ? Math.round(r.height) : 0,
+              canvas: !!cv,
+              cw: cv ? cv.width : 0,
+              ch: cv ? cv.height : 0,
+              wave: !!document.querySelector('[data-role="linear-wave"]'),
+            }
+          })()`,
+        )
+        check(
+          'adj1264 台面真的渲染出来（面板有尺寸、预览画布 + 波形画布都在；不是白屏）',
+          linearUi.panel && linearUi.w > 600 && linearUi.h > 300 && linearUi.canvas && linearUi.cw >= 100 && linearUi.ch >= 100 && linearUi.wave,
+          JSON.stringify(linearUi),
+        )
+        // 谱带是异步光栅的（SVG → 位图块），等它出来再数墨迹像素
+        await sleep(1800)
+        const ink = await evalJs(
+          c,
+          `(() => {
+            const cv = document.querySelector('[data-role="linear-stage"]')
+            if (!cv) return -1
+            const g = cv.getContext('2d')
+            const d = g.getImageData(0, 0, cv.width, cv.height).data
+            let bright = 0
+            for (let i = 0; i < d.length; i += 4) {
+              if (d[i] > 200 && d[i + 1] > 200 && d[i + 2] > 200) bright++
+            }
+            return bright
+          })()`,
+        )
+        check(
+          'adj1264 没有视频 ⇒ 纯色兜底，画布上真有谱带墨迹（负向判据：不是一片黑）',
+          ink > 200,
+          `亮像素 ${ink}`,
+        )
+        check(
+          'adj1264 台面写明"没有视频：用纯色背景"（兜底不是静默的）',
+          await evalJs(c, `document.body.innerText.includes('没有视频：用纯色背景')`),
+          '',
+        )
+        // ③ 喂一个假视频：解码失败必须明确提示，画布与对拍不受影响
+        const fakeMp4 = path.join(DL, 'fake-video.mp4')
+        writeFileSync(fakeMp4, Buffer.from('this is not a video file at all'))
+        await c.send('DOM.enable')
+        const domRoot = await c.send('DOM.getDocument', { depth: -1 })
+        const inputNode = await c.send('DOM.querySelector', {
+          nodeId: domRoot.root.nodeId,
+          selector: 'input[accept="video/*"]',
+        })
+        check('adj1264 台面里有视频导入框（隐藏的 file input）', inputNode.nodeId > 0, String(inputNode.nodeId))
+        if (inputNode.nodeId > 0) {
+          await c.send('DOM.setFileInputFiles', { nodeId: inputNode.nodeId, files: [fakeMp4] })
+          await waitFor(c, `document.body.innerText.includes('打不开这个视频')`, '视频解码失败的明确提示', 80)
+          const msg = await evalJs(c, `(document.body.innerText.match(/打不开这个视频[^\\n]*/) ?? [''])[0]`)
+          check('adj1264 视频解码失败有明确提示（不许静默黑屏）', msg.includes('打不开这个视频'), msg)
+          check(
+            'adj1264 解码失败不连累谱面（台面还在，还能继续对拍/选段）',
+            await evalJs(c, `!!document.querySelector('[data-role="linear-stage"]') && !!document.querySelector('.linear-panel')`),
+            '',
+          )
+        }
+        // 关掉（Esc）——App 的全局 ESC 在捕获阶段收口，这里验"层真的没了"
+        for (const type of ['keyDown', 'keyUp']) {
+          await c.send('Input.dispatchKeyEvent', {
+            type,
+            key: 'Escape',
+            code: 'Escape',
+            windowsVirtualKeyCode: 27,
+            nativeVirtualKeyCode: 27,
+          })
+        }
+        await waitFor(c, `!document.querySelector('.linear-panel')`, '连续谱台面关闭')
+        check('adj1264 台面关得掉（Esc），底下的应用还在', true)
+      }
     }
 
     c.close()

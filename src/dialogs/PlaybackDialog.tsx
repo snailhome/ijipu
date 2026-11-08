@@ -43,7 +43,7 @@ import { useDocStore } from '../store/docStore'
 import { useUiStore, enabledVoicesOf } from '../store/uiStore'
 // adj729：嵌入版里音源优先取**插件目录**那份（宿主给的 URL；随文库一起走）
 import { hostBankUrl } from '../store/hostBridge'
-import { playbackCopy, syncCopy } from '../brand/copy'
+import { linearSyncCopy, playbackCopy, syncCopy } from '../brand/copy'
 // adj1121：试听栏的「对拍…」入口走与动态谱视频同一个能力闸门（桌面专属 / dev 放开）
 import { canUseDynamicVideo } from '../export/video/capability'
 import { createHqCache, prefetchHqLibraryProgress, resolveHqBank } from '../playback/spessaCache'
@@ -921,6 +921,17 @@ export function PlaybackDialog({ inline = false }: { inline?: boolean } = {}) {
                 {/* 没有"节拍器/对拍"这类图标（`public/icons/` 里没有），宁可不放图标，
                     也不借用齿轮（`settings`）——那会让人以为点开的是设置 */}
                 {syncCopy.syncOpen}
+              </button>
+            )}
+            {/* adj1264：连续动态谱（单行横滚）对拍台——与动态谱视频同一道桌面闸门；
+                方案 §八 P8：入口放试听栏 + 导出面板各一条 */}
+            {canUseDynamicVideo() && (
+              <button
+                className="btn playback-btn"
+                onClick={() => openModal('linearSync')}
+                title={linearSyncCopy.title}
+              >
+                {linearSyncCopy.title}
               </button>
             )}
           </div>

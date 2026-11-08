@@ -10,6 +10,7 @@
  *  · 球在**色块的固定位置**弹。
  */
 import { stripBallAt, stripXAt, type LinearStrip, type StripBall } from '@ijipu/engine'
+import { locatorBlockWidthOf } from './linearSync'
 
 export interface StripLayOptions {
   /** 画布宽 */
@@ -33,6 +34,11 @@ export interface StripFrameGeom {
   scrollX: number
   /** 定位色块中心 x */
   blockX: number
+  /**
+   * 定位色块宽（adj1264：**一个音符宽、固定**，不再按谱带高算）。
+   * 放在几何里是因为"预览/出片/断言"要用同一个值（AGENTS「数值口径同源」）。
+   */
+  blockW: number
   /** 色块上下沿 */
   blockTop: number
   blockBottom: number
@@ -63,6 +69,13 @@ export function stripFrameAt(tMs: number, strip: LinearStrip, o: StripLayOptions
   const scrollX = stripXAt(strip, tMs + (o.leadMs ?? 0)) - blockX
   const blockTop = bandTop
   const blockBottom = bandTop + o.stripH
+  /**
+   * adj1264（用户 2026-11-09「定位色块以一个音符宽度，固定宽度即可」）：
+   * `o.stripH` 是**画布上的**谱带高（已乘 `bandScale`），而 `strip.height` 是排版高 ⇒
+   * 两者之比就是缩放系数，用 `strip.noteSize × 缩放 × 0.62` 得到"一个数字"的宽。
+   */
+  const scale = o.stripH / Math.max(1, strip.height)
+  const blockW = locatorBlockWidthOf(strip.noteSize, scale)
   const ball: StripBall = stripBallAt(tMs, {
     beatMs: strip.beatMs,
     blockTop,
@@ -73,6 +86,7 @@ export function stripFrameAt(tMs: number, strip: LinearStrip, o: StripLayOptions
     bandTop,
     scrollX: Math.round(scrollX * 10) / 10,
     blockX: Math.round(blockX * 10) / 10,
+    blockW,
     blockTop: Math.round(blockTop * 10) / 10,
     blockBottom: Math.round(blockBottom * 10) / 10,
     ballX: Math.round(blockX * 10) / 10,

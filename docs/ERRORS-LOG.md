@@ -41,6 +41,20 @@
 - **解决**：卸载 tsx；改用**已装好的 Vite（rolldown，无 spawn）** 把测试打包为 CJS 再 `node` 运行（`vite.smoke.config.ts` + `npm run smoke`）；安装 esbuild 类包用 `--ignore-scripts` 规避 postinstall（但运行时仍受限，慎用）
 - **预防**：沙箱内优先选无 spawn 工具链（vite/rolldown/node 直跑）；新工具先确认不 spawn 子进程
 
+### E-2026-561 「ijipu 目录整个不能写」：目录缺了工作区根的完整性标签（adj1264 开工时）
+- **场景**：新一轮会话开工，先跑基线 `npm run smoke`
+- **现象**：`vite build` 报 `EPERM ... node_modules\.vite-temp\vite.config.ts.timestamp-….mjs`；
+  同一会话里连 `dist-smoke\probe.txt` 都写不进去；而**工作区根** `D:\Coding\JianpuScript\probe.txt` 写得进去
+- **根因**：这个会话的 shell 跑在 Windows「低完整性」（Low，`S-1-16-4096`）级别。
+  工作区根、`.coord`、`.git` 等目录带 `Mandatory Label\Low … (NW)` 标签 ⇒ 低完整性进程可写；
+  `ijipu`（与 `obsidian-ijipu`）**没有这条标签** = 隐式 Medium ⇒ 低完整性进程写它一律"拒绝访问"。
+  与代码无关，也不是 ACL 里少了授权（`icacls` 显示两个沙箱 SID 都有 `W`）
+- **解决**：`icacls <目录> /setintegritylevel "(OI)(CI)Low" /T` 给两个仓库目录补上标签（只改标签，不动内容/所有者）。
+  之后 `npm run smoke` 立刻全绿
+- **预防**：① 换会话时若出现"**同一个盘、根目录能写、仓库目录不能写**"，先怀疑这条标签，别去翻代码/依赖；
+  ② 判断命令：`icacls <目录> | findstr "Mandatory Label"` —— 根有、仓库没有，就是它；
+  ③ 不要在**不受限**会话里创建/搬动仓库目录（新对象会落成 Medium，之后的沙箱会话又写不动）。
+
 ---
 
 ## 二、网络抓取类

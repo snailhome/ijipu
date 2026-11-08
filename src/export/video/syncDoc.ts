@@ -32,6 +32,31 @@ export interface SyncMix {
   accomp: number
   /** 合成音音量（0~2，缺省 0.5） */
   synth: number
+  /**
+   * adj1264：**视频原声音量**（0~2，缺省 1）。
+   *
+   * 连续动态谱的"单独音频"是**视频自带音轨**（用户 2026-11-08 口径：没加外部伴奏 ⇒ 用视频的音频）；
+   * 它也要有音量，所以与伴奏/合成音并列。旧 sidecar 没有这个字段 ⇒ 按 1 处理（不是 0，
+   * 否则老文件一打开就"没声音"）。
+   */
+  video?: number
+}
+
+/**
+ * adj1264：连续动态谱台面的外观（**跟着这首歌走** ⇒ 存 sidecar）。
+ *
+ * 为什么不放 L1：条带位置/主题是"这首曲子配这个背景视频好看"的决定，
+ * 换首歌应当各自不同（与卡片模板引用同一层）。
+ */
+export interface SyncLinear {
+  /** 主题 id（`stripTheme.ts` 的四套之一） */
+  theme?: string
+  /** 谱带纵向位置（0~1，默认 0.25 = 上 1/4） */
+  topRatio?: number
+  /** 定位色块中心（0.1~0.9，默认 1/3） */
+  blockRatio?: number
+  /** 谱带缩放（0.3~3，1 = 按字号） */
+  bandScale?: number
 }
 
 export interface SyncDoc {
@@ -76,6 +101,15 @@ export interface SyncDoc {
    * 缺字段 = 这份 sidecar 还没记过（打开时沿用上次选的模板）。
    */
   card?: SyncCard
+  /**
+   * adj1264：**背景视频文件名**（只记名字，不复制文件）。
+   *
+   * 为什么不存路径/不复制文件：视频几十上百 MB，与伴奏同一口径 —— 记名字，
+   * 下次打开时提示"上次用的视频：xxx，请重新选择"；换台机器/挪目录也不会写出死路径。
+   */
+  video?: string
+  /** adj1264：连续谱台面的外观（主题/谱带位置/色块位置） */
+  linear?: SyncLinear
   /** 存盘时谱面的 FNV-1a 指纹（改了谱 ⇒ 提示"锚点请复核"） */
   codeHash: string
   updatedAt: string
@@ -104,7 +138,7 @@ export interface SyncRange {
 }
 
 /** 默认声音设置 */
-export const DEFAULT_SYNC_MIX: SyncMix = { source: 'file', accomp: 1, synth: 0.5 }
+export const DEFAULT_SYNC_MIX: SyncMix = { source: 'file', accomp: 1, synth: 0.5, video: 1 }
 
 /** `赤伶.jps` → `赤伶.jps.sync.json` */
 export function sidecarPathOf(jpsPath: string): string {
@@ -223,7 +257,10 @@ export function parseSyncDoc(text: string): { doc: SyncDoc | null; error?: strin
     Array.isArray(o.marks) ||
     o.range !== undefined ||
     typeof o.markId === 'string' ||
-    hasCardRef
+    hasCardRef ||
+    // adj1264：只选了背景视频 / 只调了连续谱外观的 sidecar 同样有意义（不必先有伴奏）
+    (typeof o.video === 'string' && o.video.trim() !== '') ||
+    (o.linear !== null && typeof o.linear === 'object' && !Array.isArray(o.linear))
   if (audio === '' && !hasExtras) return { doc: null, error: '对拍文件里没有记伴奏文件名（audio）' }
 
   const warnings: string[] = []
@@ -275,6 +312,8 @@ export function parseSyncDoc(text: string): { doc: SyncDoc | null; error?: strin
     source,
     accomp: clampGain(mixRaw.accomp, DEFAULT_SYNC_MIX.accomp),
     synth: clampGain(mixRaw.synth, DEFAULT_SYNC_MIX.synth),
+    // adj1264：旧 sidecar 没有 video ⇒ 按 1（不是 0，否则老的连续谱一打开就没声音）
+    video: clampGain(mixRaw.video, 1),
   }
 
   const key = typeof o.key === 'string' && o.key.trim() !== '' ? o.key.trim() : undefined
@@ -330,6 +369,31 @@ export function parseSyncDoc(text: string): { doc: SyncDoc | null; error?: strin
   if (hasCardRef) {
     card = { template: ((cardRaw as Record<string, unknown>).template as string).trim() }
   }
+  /**
+   * adj1264：背景视频名 + 连续谱外观。
+   *
+   * 两侧都要"能救的救、不能救的丢"：名字只是提示用（文件本身不跟着走），
+   * 外观里越界的数值一律夹紧（与 `stripTheme` 同一套范围），不让坏值进渲染。
+   */
+  const video = typeof o.video === 'string' && o.video.trim() !== '' ? o.video.trim() : undefined
+  const linearRaw = o.linear
+  let linear: SyncLinear | undefined
+  if (linearRaw !== null && typeof linearRaw === 'object' && !Array.isArray(linearRaw)) {
+    const l = linearRaw as Record<string, unknown>
+    const out: SyncLinear = {}
+    if (typeof l.theme === 'string' && l.theme.trim() !== '') out.theme = l.theme.trim()
+    const ratio = (v: unknown, lo: number, hi: number): number | undefined => {
+      const n = finiteOr(v, Number.NaN)
+      return Number.isFinite(n) ? Math.round(Math.min(hi, Math.max(lo, n)) * 1000) / 1000 : undefined
+    }
+    const topRatio = ratio(l.topRatio, 0, 1)
+    const blockRatio = ratio(l.blockRatio, 0.1, 0.9)
+    const bandScale = ratio(l.bandScale, 0.3, 3)
+    if (topRatio !== undefined) out.topRatio = topRatio
+    if (blockRatio !== undefined) out.blockRatio = blockRatio
+    if (bandScale !== undefined) out.bandScale = bandScale
+    if (Object.keys(out).length > 0) linear = out
+  }
   const doc: SyncDoc = {
     version: SYNC_VERSION,
     audio,
@@ -344,6 +408,8 @@ export function parseSyncDoc(text: string): { doc: SyncDoc | null; error?: strin
     ...(markId !== undefined ? { markId } : {}),
     ...(range !== undefined ? { range } : {}),
     ...(card !== undefined ? { card } : {}),
+    ...(video !== undefined ? { video } : {}),
+    ...(linear !== undefined ? { linear } : {}),
     codeHash: typeof o.codeHash === 'string' ? o.codeHash : '',
     updatedAt: typeof o.updatedAt === 'string' ? o.updatedAt : new Date().toISOString(),
   }
@@ -369,6 +435,10 @@ export function makeSyncDoc(input: {
   range?: SyncRange | null
   /** adj1176：这首歌用的卡片模板（缺省 = 不写，保持旧文件形状） */
   card?: SyncCard
+  /** adj1264：背景视频名（缺省 = 不写） */
+  video?: string
+  /** adj1264：连续谱台面外观（缺省 = 不写） */
+  linear?: SyncLinear
   code: string
   now?: string
 }): SyncDoc {
@@ -391,6 +461,8 @@ export function makeSyncDoc(input: {
     ...(input.markId !== undefined ? { markId: input.markId } : {}),
     ...(input.range !== undefined ? { range: input.range } : {}),
     ...(input.card !== undefined ? { card: input.card } : {}),
+    ...(input.video !== undefined && input.video !== '' ? { video: input.video } : {}),
+    ...(input.linear !== undefined ? { linear: input.linear } : {}),
     codeHash: codeFingerprint(input.code),
     updatedAt: input.now ?? new Date().toISOString(),
   }

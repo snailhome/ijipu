@@ -86,15 +86,17 @@ export async function createLinearSession(opts: CreateLinearSessionOptions): Pro
       } else {
         bg.draw(ctx, tMs)
       }
-      // ② 定位色块（左 1/3，短宽：宽 ≈ 谱带高的 0.55）
+      // ② 定位色块（左 1/3；宽 = **一个音符宽**，见 `stripFrame` 的 `blockW`）
       //    ⚠ 先画色块、再画谱带（adj1263 看真图后调整）：色块是**底衬高亮**，
       //    盖在字上面会把当前音染成粉色（截图里"0 0"就是粉的），字就不"白"了。
-      const bw = Math.max(10, Math.round(stripH * 0.55))
+      //    adj1264（用户 2026-11-09）：宽度改成一个数字的墨迹宽、固定不随段落变化，
+      //    原来按谱带高 ×0.55 算 ⇒ 一块罩住三四个音，看不出"当前是哪个音"。
+      const bw = Math.max(4, g.blockW)
       const bh = stripH
       ctx.save()
       ctx.globalAlpha = style.blockAlpha
       ctx.fillStyle = style.blockColor
-      roundRect(ctx, g.blockX - bw / 2, g.blockTop, bw, bh, Math.min(8, bw / 2))
+      roundRect(ctx, g.blockX - bw / 2, g.blockTop, bw, bh, Math.min(6, bw / 2))
       ctx.fill()
       ctx.restore()
       // ③ 谱带

@@ -60,6 +60,10 @@ const SaveAsDialog = lazy(() => import('./dialogs/SaveAsDialog').then((m) => ({ 
 const CardStyleDialog = lazy(() => import('./dialogs/CardStyleDialog').then((m) => ({ default: m.CardStyleDialog })))
 // adj1119：对拍台（应用内独立台面；相机位「对拍…」触发）
 const SyncDialog = lazy(() => import('./dialogs/SyncDialog').then((m) => ({ default: m.SyncDialog })))
+// adj1264：连续动态谱（单行横滚）对拍台——试听栏与导出面板各一条入口
+const LinearSyncDialog = lazy(() =>
+  import('./dialogs/LinearSyncDialog').then((m) => ({ default: m.LinearSyncDialog })),
+)
 // adj1195：导出乐谱包（zip）——乐谱库上传用；三端轻功能
 const ScorePackageDialog = lazy(() =>
   import('./dialogs/ScorePackageDialog').then((m) => ({ default: m.ScorePackageDialog })),
@@ -703,6 +707,8 @@ function App() {
       {modal === 'cardStyle' && <Suspense fallback={null}><CardStyleDialog /></Suspense>}
       {/* adj1119：对拍台（独立台面） */}
       {modal === 'sync' && <Suspense fallback={null}><SyncDialog /></Suspense>}
+      {/* adj1264：连续动态谱对拍台（横滚条带 + 背景视频 + 出片） */}
+      {modal === 'linearSync' && <Suspense fallback={null}><LinearSyncDialog /></Suspense>}
       {modal === 'package' && <Suspense fallback={null}><ScorePackageDialog /></Suspense>}
       {/* adj928：两栏源码差异框（确认条 → 「查看差异」；左本地 / 右外部，可直接做决定） */}
       {fileDiff && <Suspense fallback={null}><FileDiffDialog /></Suspense>}

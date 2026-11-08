@@ -22,7 +22,26 @@
  */
 import { Output, Mp4OutputFormat, BufferTarget, CanvasSource, AudioBufferSource, Quality } from 'mediabunny'
 import type { AttachedImage } from 'mediabunny'
-import type { DynamicSession } from './renderer'
+
+/**
+ * 能被 `encodeMp4` 编成片的最小会话结构（adj1264）。
+ *
+ * 为什么放宽：连续动态谱的会话（`createLinearSession`）与相机位会话（`DynamicSession`）
+ * 是**两条不同的画法**，但"逐帧 draw + 编 H.264"这段完全一样。原来签名写死
+ * `DynamicSession`（相机/页位图/事件…），单行谱只能复制一份编码循环 ⇒ 两套编码时间戳一旦
+ * 不一致，成片就会一半对一半错。现在只要求编码真正用到的四个字段。
+ */
+export interface EncodableSession {
+  width: number
+  height: number
+  totalMs: number
+  draw: (ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D, tMs: number) => unknown
+  /**
+   * 预热某一时刻（可选）。视频背景要**先解码再画**——出片循环每帧前 `await` 它，
+   * 否则解不出来就是上一帧/黑屏（`adj1264` 的负向判据之一）。
+   */
+  warm?: (tMs: number) => Promise<void>
+}
 
 export interface Mp4Options {
   /** 帧率（缺省 30） */
@@ -97,10 +116,11 @@ export function trimAudio(buffer: AudioBuffer, ms: number): AudioBuffer {
 /**
  * 把一次放映会话编成 MP4。
  *
- * @param session `createDynamicSession()` 的结果（已含相机与页面位图）
+ * @param session `createDynamicSession()` / `createLinearSession()` 的结果
+ *                （只要求 `width/height/totalMs/draw`，可带 `warm`）
  * @returns MP4 字节（Blob，可直接触发下载）
  */
-export async function encodeMp4(session: DynamicSession, opts: Mp4Options = {}): Promise<Blob> {
+export async function encodeMp4(session: EncodableSession, opts: Mp4Options = {}): Promise<Blob> {
   if (typeof VideoEncoder === 'undefined') {
     throw new Error('当前环境不支持 WebCodecs（请更新 WebView2 / 换 Chrome）')
   }
@@ -137,6 +157,7 @@ export async function encodeMp4(session: DynamicSession, opts: Mp4Options = {}):
    */
   const coverMs = opts.coverMs === undefined ? DEFAULT_COVER_MS : opts.coverMs
   if (coverMs !== null && coverMs < spanMs) {
+    await session.warm?.(coverMs)
     session.draw(ctx, coverMs)
     const jpeg = await canvas.convertToBlob({ type: COVER_MIME, quality: 0.9 })
     output.setMetadataTags({ images: [coverImageOf(new Uint8Array(await jpeg.arrayBuffer()))] })
@@ -147,7 +168,10 @@ export async function encodeMp4(session: DynamicSession, opts: Mp4Options = {}):
     const keyEvery = Math.max(1, Math.round(fps * KEYFRAME_SEC))
     for (let i = 0; i < frameCount; i++) {
       if (opts.signal?.aborted) throw new DOMException('已取消', 'AbortError')
-      session.draw(ctx, (i * 1000) / fps)
+      const tMs = (i * 1000) / fps
+      // adj1264：视频背景要先解码再画（`warm` 不存在的会话直接跳过）
+      if (session.warm !== undefined) await session.warm(tMs)
+      session.draw(ctx, tMs)
       // `add` 返回的 Promise 就是背压：等它 resolve 再画下一帧，内存不会被撑爆
       await video.add(i / fps, 1 / fps, { keyFrame: i % keyEvery === 0 })
       opts.onProgress?.(((i + 1) / frameCount) * (audio ? 0.85 : 1))

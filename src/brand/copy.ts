@@ -1566,6 +1566,64 @@ export const syncCopy = {
 } as const
 
 /**
+ * adj1264：**连续动态谱**（单行横滚谱）对拍台的文案。
+ *
+ * 为什么独立一份：它与"对拍（伴奏对齐）"共用对拍数据，但入口/口径不同
+ * （背景视频、视频原声、标记段、横滚条带），混在 `syncCopy` 里会让两处文案互相牵动。
+ */
+export const linearSyncCopy = {
+  title: '连续动态谱（横滚）',
+  desktopOnly: '连续动态谱要在桌面版里做（视频解码、出片都需要桌面能力）',
+  entryHint: '单行横滚谱 + 背景视频：导入视频 → 对拍 → 选段 → 出片',
+  stageHint: '画面就是成片的样子：背景视频 + 一条横滚的谱带，色块压在当前音上',
+  fallbackColor: '没有视频：用纯色背景（也可以选一张背景图）',
+  fallbackImage: '没有视频：用背景图',
+  frameMissing: '这一帧还没解出来（视频解码中）；不影响对拍',
+  videoBusy: '正在打开视频…',
+  pickVideo: '导入视频…',
+  repickVideo: '换视频…',
+  pickImage: '背景图…',
+  imageFailed: '这张图打不开（换一张 png/jpg 试试）',
+  bgColor: '底色',
+  bgColorHint: '没有视频也没有背景图时的底色',
+  videoLoaded: (name: string, hasAudio: boolean) => `${name}${hasAudio ? '（带原声）' : '（无音轨）'}`,
+  videoAudioFailed: '视频原声解不出来：这一条会出无声画面（可以另加伴奏）',
+  videoRemembered: (name: string) => `上次用的是「${name}」，请重新选择视频文件`,
+  play: '播放',
+  pause: '暂停',
+  tap: '打点(T)',
+  tapHint: '按 T：把当前位置记成一个谱面拍点（然后确认小节:拍）',
+  waveHint: '点一下/拖一下：跳到这里；压暗的两端不会被导出',
+  audioLabel: '伴奏',
+  pickAudio: '选伴奏…',
+  repickAudio: '换伴奏…',
+  accompLoaded: '用的是单独这条伴奏',
+  videoSound: '用的是视频原声',
+  noSound: '还没有声音：导入视频（带音轨）或另加伴奏',
+  noMedia: '还没有视频/伴奏：先导入一个，或用纯色背景只出谱带',
+  rangeLabel: '导出段',
+  nudgeHint: '微调起点 10ms（打点时手抖那一点点）',
+  markLabel: '标记段',
+  markAll: '整曲',
+  markHint: '从试听栏的标记段里选一段：保留段会对齐到它的起止',
+  markMissing: '这一段在当前演奏顺序里找不到（谱面改过？）',
+  export: '出片',
+  cancelExport: '取消出片',
+  videoGain: '视频原声',
+  mixRule: '没加单独伴奏 ⇒ 用视频原声；加了 ⇒ 用单独那条',
+  theme: '配色',
+  bandTop: '谱带位置',
+  bandScale: '谱带大小',
+  noWebCodecs: '当前环境不支持 WebCodecs，不能出片（请更新 WebView2 / 换 Chrome）',
+  noSuchBar: (bar: number) => `谱面没有第 ${bar} 小节`,
+  dupAnchor: '这个谱位已有锚点，先删掉旧的再加',
+  exportCanceled: '已取消导出',
+  exportFailed: (e: string) => `出片失败：${e}`,
+  exported: (path: string) => `连续动态谱已导出：${path}`,
+  exportedWeb: '连续动态谱已开始下载',
+} as const
+
+/**
  * adj1195：导出乐谱包（zip）对话框文案。
  *
  * 乐谱包是**发布/交流单元**：meta.json + README.md + score.jps + assets/；

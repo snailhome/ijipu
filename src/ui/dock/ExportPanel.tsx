@@ -19,7 +19,7 @@ import { useDocStore } from '../../store/docStore'
 // adj965（方案 OVL，EP-10）：水印/背景资源（与预览/打印共用同一份）
 import { withOverlay } from '../../store/overlayAssets'
 import { useUiStore, enabledVoicesOf } from '../../store/uiStore'
-import { exportCopy, scorePackageCopy } from '../../brand/copy'
+import { exportCopy, linearSyncCopy, scorePackageCopy } from '../../brand/copy'
 import { layoutScore, renderScoreToSvg, buildPlaySequence, inferBpm, eventsToMidi, rangeBox, applyRangeToSvg, readViewBoxOf } from '@ijipu/engine'
 import type { ExportRange } from '@ijipu/engine'
 import { renderToAudioBuffer, audioBufferToWav, audioBufferToMp3 } from '../../export/audio'
@@ -339,6 +339,20 @@ export function ExportPanel() {
             动态谱视频
           </button>
           <span className="dock-muted">在预览区打开相机位（9:16 / 1:1 / 16:9）；可生成视频</span>
+        </div>
+      )}
+      {/* adj1264：连续动态谱（单行横滚 + 背景视频）——方案 §八 P8：导出面板也放一条入口 */}
+      {dynamicVideoEnabled && (
+        <div className="dock-field">
+          <button
+            type="button"
+            className="btn"
+            onClick={() => openModal('linearSync')}
+            disabled={busy !== null}
+          >
+            {linearSyncCopy.title}
+          </button>
+          <span className="dock-muted">{linearSyncCopy.entryHint}</span>
         </div>
       )}
       {/* adj626：说明 PDF 两条路的差别（默认那条走系统打印对话框，故必须讲清怎么选） */}

@@ -22,6 +22,7 @@ import {
   serializeSyncDoc,
   type SyncCard,
   type SyncDoc,
+  type SyncLinear,
   type SyncMix,
   type SyncPracticeMark,
   type SyncRange,
@@ -60,6 +61,13 @@ interface SyncState {
    * （`setAudio` 会把 `trim.endMs` 拉到整段，那是"换了一首伴奏"的口径，这里不能那么做）。
    */
   setAudioBuffer: (buf: AudioBuffer) => void
+  /**
+   * adj1264：连续动态谱台面导入背景视频后，把**视频时长**当主时间轴长度写进 doc。
+   *
+   * 只在没有外部伴奏时调用（有伴奏时伴奏长度才是权威）；保留段的终点会被夹到新长度，
+   * 起点保留（用户可能已经从某处起拍）。
+   */
+  setMediaDuration: (ms: number) => void
   addAnchor: (a: SyncAnchor) => void
   updateAnchor: (i: number, patch: Partial<SyncAnchor>) => void
   removeAnchor: (i: number) => void
@@ -75,6 +83,10 @@ interface SyncState {
     range?: SyncRange | null
     /** adj1176：这首歌用的卡片模板（只记 id） */
     card?: SyncCard
+    /** adj1264：背景视频名（只记名字，不复制文件） */
+    video?: string
+    /** adj1264：连续谱台面外观（主题/谱带位置/色块位置/缩放） */
+    linear?: SyncLinear
   }) => void
   setKey: (k: string) => void
   setAudioName: (n: string) => void
@@ -147,6 +159,16 @@ export const useSyncStore = create<SyncState>((set, get) => ({
     })
   },
 
+  setMediaDuration: (ms) => {
+    const cur = get().doc
+    if (cur === null) return
+    const dur = Math.max(0, Math.round(ms))
+    if (dur === cur.audioDurationMs) return
+    const end = dur > 0 ? Math.min(cur.trim.endMs > 0 ? cur.trim.endMs : dur, dur) : cur.trim.endMs
+    const start = Math.min(cur.trim.startMs, end)
+    set({ doc: { ...cur, audioDurationMs: dur, trim: { startMs: start, endMs: end } }, rev: get().rev + 1 })
+  },
+
   addAnchor: (a) => {
     const cur = get().doc
     if (cur === null) return
@@ -194,6 +216,8 @@ export const useSyncStore = create<SyncState>((set, get) => ({
         ...(patch.markId !== undefined ? { markId: patch.markId } : {}),
         ...(patch.range !== undefined ? { range: patch.range } : {}),
         ...(patch.card !== undefined ? { card: patch.card } : {}),
+        ...(patch.video !== undefined ? { video: patch.video } : {}),
+        ...(patch.linear !== undefined ? { linear: patch.linear } : {}),
       },
       rev: get().rev + 1,
     })
@@ -227,6 +251,9 @@ export const useSyncStore = create<SyncState>((set, get) => ({
       ...(cur.range !== undefined ? { range: cur.range } : {}),
       // adj1176：卡片模板引用跟着 sidecar 一起存（每首谱记住自己那套）
       ...(cur.card !== undefined ? { card: cur.card } : {}),
+      // adj1264：背景视频名与连续谱外观（只记名字/数值，文件不复制）
+      ...(cur.video !== undefined ? { video: cur.video } : {}),
+      ...(cur.linear !== undefined ? { linear: cur.linear } : {}),
       code,
     })
     set({ doc, rev: get().rev + 1 })

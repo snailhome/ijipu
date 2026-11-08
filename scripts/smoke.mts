@@ -178,6 +178,17 @@ import { chunkPlanOf, stripSvgOf, stripLayoutOf, STRIP_INK_COLORS } from '../src
 // adj1260：一帧的几何（定位块/球/滚动）与主题钳制——都是纯函数
 import { stripFrameAt, bandTopOf } from '../src/export/video/stripFrame'
 import { normalizeStripStyle, stripThemeOf, STRIP_THEMES } from '../src/export/video/stripTheme'
+// adj1264：连续动态谱对拍台的纯口径（时钟映射 / 混音三档 / 偶数化 / 一个音符宽的色块）
+import {
+  evenSizeOf,
+  exportRangeOf,
+  linearClockOf,
+  linearMixPlanOf,
+  locatorBlockWidthOf,
+  mediaMsAt,
+  scoreMsAt,
+} from '../src/export/video/linearSync'
+import { audioTracksOf, playbackWindowsOf } from '../src/export/video/linearExport'
 import { codePosToNoteId, noteIdToCodePos } from '@ijipu/engine/cursorMap.ts'
 // M1-1 动态谱时间轴：把拍段收成"定时矩形"，供视频逐帧取"此刻哪几块在亮"
 import { buildRectTrack, rectsActiveAt } from '@ijipu/engine/index.ts'
@@ -38490,5 +38501,199 @@ C2: 甲 乙 丙 丁 戊 己 庚 辛
     'adj1263 负对照：小节号全抹成 0 ⇒ 减时线真的跨到别的小节（证明上一条不是在空跑）',
     brokenBeams.length > 0 && inOneRun(brokenBeams) > 0,
     `跨小节 ${inOneRun(brokenBeams)} 条`,
+  )
+}
+
+/**
+ * adj1264：连续动态谱**对拍台**（M3）的口径。
+ *
+ * 台面本身要浏览器（视频解码/声卡），但"这一帧画什么、出片编多长、哪几路出声"全是纯数学——
+ * 这些数错了，框里看到的和出片出来的就不是一回事。这里钉四组：
+ *  ① 时钟：媒体时刻 ↔ 谱面时刻（前奏定格、夹到条带末尾、往返一致）；
+ *  ② 混音：视频原声/伴奏/合成音谁响（用户口径「没加单独音频 ⇒ 用视频的音频」）；
+ *  ③ 出片：保留段夹紧、至少 1 帧、宽高偶数化；
+ *  ④ 定位色块 = **一个音符宽、固定**（adj1264 用户口径），且 `stripFrameAt` 同一 t 两次一致。
+ */
+console.log('[adj1264] 连续动态谱对拍台：时钟 / 混音 / 出片范围 / 一个音符宽的色块')
+{
+  /* ---- ① 时钟 ---- */
+  const clock = linearClockOf({ offsetMs: 1500, mediaMs: 60000, scoreEndMs: 30000, scoreBeatMs: 500 })
+  check(
+    'adj1264 时钟：总长按媒体长（P6：上限按视频长度，不套 3 分钟）',
+    clock.totalMs === 60000 && clock.headWaitMs === 1500,
+    `total=${clock.totalMs} head=${clock.headWaitMs}`,
+  )
+  check(
+    'adj1264 前奏等待里谱面定格在第 1 拍（不许倒推成负时刻）',
+    scoreMsAt(clock, 0) === 0 && scoreMsAt(clock, 1499) === 0,
+    `${scoreMsAt(clock, 0)}/${scoreMsAt(clock, 1499)}`,
+  )
+  check('adj1264 媒体时刻 → 谱面时刻：扣掉对拍偏移', scoreMsAt(clock, 3500) === 2000, String(scoreMsAt(clock, 3500)))
+  check(
+    'adj1264 谱面时刻夹到条带末尾（视频比谱面长时不再往后画）',
+    scoreMsAt(clock, 59999) === 30000,
+    String(scoreMsAt(clock, 59999)),
+  )
+  check('adj1264 往返一致（打点用的是同一个映射的逆）', mediaMsAt(clock, scoreMsAt(clock, 12345)) === 12345, '')
+  const noMedia = linearClockOf({ offsetMs: 1200, mediaMs: 0, scoreEndMs: 8000, scoreBeatMs: 500 })
+  check(
+    'adj1264 没有视频/伴奏时：总长 = 谱面长、偏移归零（不出"凭空的前奏定格"）',
+    noMedia.totalMs === 8000 && noMedia.offsetMs === 0 && noMedia.headWaitMs === 0,
+    `total=${noMedia.totalMs} offset=${noMedia.offsetMs}`,
+  )
+  const badClock = linearClockOf({ offsetMs: Number.NaN, mediaMs: Number.NaN, scoreEndMs: Number.NaN, scoreBeatMs: 0 })
+  check(
+    'adj1264 非法时钟输入不把 NaN 传下去（台面/出片都不会算出 NaN 帧）',
+    Number.isFinite(badClock.totalMs) && Number.isFinite(badClock.offsetMs) && badClock.scoreBeatMs >= 20,
+    JSON.stringify(badClock),
+  )
+
+  /* ---- ③ 出片范围（先测，后面混音要它的时长） ---- */
+  const whole = exportRangeOf(clock, { startMs: 0, endMs: 0 })
+  check('adj1264 结束 ≤ 开始 ⇒ 当整曲（还没设终点时不该出空片）', whole.startMs === 0 && whole.endMs === 60000, '')
+  const clamped = exportRangeOf(clock, { startMs: -500, endMs: 99999 })
+  check('adj1264 保留段夹进 [0, 总长]', clamped.startMs === 0 && clamped.endMs === 60000, '')
+  const tiny = exportRangeOf(clock, { startMs: 1000, endMs: 1005 })
+  check('adj1264 至少留 34ms（≈1 帧），否则会编出 0 帧文件', tiny.durationMs >= 34, `dur=${tiny.durationMs}`)
+
+  /* ---- ② 混音三档 ---- */
+  const baseMix = { videoGain: 1, accompGain: 1, synthGain: 0.5 }
+  const pVideo = linearMixPlanOf({ ...baseMix, hasVideoAudio: true, hasAccomp: false, hasSynth: false, source: 'file' })
+  check(
+    'adj1264 没加单独音频 ⇒ 用视频原声',
+    pVideo.video && !pVideo.accomp && !pVideo.synth && !pVideo.silent,
+    JSON.stringify(pVideo),
+  )
+  const pAccomp = linearMixPlanOf({ ...baseMix, hasVideoAudio: true, hasAccomp: true, hasSynth: false, source: 'file' })
+  check(
+    'adj1264 加了单独伴奏 ⇒ 视频原声不再出声（不叠成回声）',
+    !pAccomp.video && pAccomp.accomp,
+    JSON.stringify(pAccomp),
+  )
+  const pMix = linearMixPlanOf({ ...baseMix, hasVideoAudio: true, hasAccomp: false, hasSynth: true, source: 'mix' })
+  check('adj1264 mix 档：视频原声 + 合成音一起', pMix.video && pMix.synth, JSON.stringify(pMix))
+  const pSynthFail = linearMixPlanOf({ ...baseMix, hasVideoAudio: true, hasAccomp: false, hasSynth: false, source: 'synth' })
+  check(
+    'adj1264 选了合成音但渲染不出来 ⇒ 回退视频原声并标出来（不许静默无声）',
+    pSynthFail.video && pSynthFail.synthFallback === 'video' && !pSynthFail.silent,
+    JSON.stringify(pSynthFail),
+  )
+  const pSilent = linearMixPlanOf({ ...baseMix, hasVideoAudio: false, hasAccomp: false, hasSynth: false, source: 'file' })
+  check('adj1264 三路都没有 ⇒ 明确 silent（台面按这条提示，别让人"点了播放没反应"）', pSilent.silent, '')
+  const pClamp = linearMixPlanOf({
+    hasVideoAudio: true,
+    hasAccomp: false,
+    hasSynth: false,
+    source: 'file',
+    videoGain: 9,
+    accompGain: -3,
+    synthGain: Number.NaN,
+  })
+  check(
+    'adj1264 三条音量越界被钳制（0~2；NaN 回默认）',
+    pClamp.videoGain === 2 && pClamp.accompGain === 0 && pClamp.synthGain === 0.5,
+    `${pClamp.videoGain}/${pClamp.accompGain}/${pClamp.synthGain}`,
+  )
+
+  /* ---- ②b 轨序与排点：预览与出片同一套 ---- */
+  const fakeBuf = {} as unknown as AudioBuffer
+  const tracks = audioTracksOf(
+    { ...pMix },
+    { video: fakeBuf, accomp: null, synth: fakeBuf },
+    clock.offsetMs,
+    0.96,
+  )
+  check(
+    'adj1264 要放的轨按「视频原声 → 伴奏 → 合成音」排，合成音从谱面第 1 拍起（offsetMs）',
+    tracks.length === 2 && tracks[0].startAtMs === 0 && tracks[1].startAtMs === clock.offsetMs,
+    tracks.map((t) => t.startAtMs).join(','),
+  )
+  check('adj1264 合成音按对拍拍速变速（渲染用谱面 J:，播放用对拍速度）', tracks[1]?.rate === 0.96, String(tracks[1]?.rate))
+  const wins = playbackWindowsOf(
+    [
+      { buffer: fakeBuf, gain: 1, startAtMs: 1500 },
+      { buffer: fakeBuf, gain: 1, startAtMs: 0 },
+    ],
+    1000,
+  )
+  check(
+    'adj1264 从合成音起点之前起播 ⇒ 延迟 0.5s、从头放；伴奏从 1s 处接着放',
+    wins[0]?.whenSec === 0.5 && wins[0].skipSec === 0 && wins[1]?.whenSec === 0 && wins[1]?.skipSec === 1,
+    JSON.stringify(wins),
+  )
+
+  /* ---- ④ 偶数化与"一个音符宽"的定位色块 ---- */
+  const even = evenSizeOf(1081, 1921)
+  check(
+    'adj1264 奇数宽高往下取偶（H.264 要偶数；最小 2，不许出 0）',
+    even.width === 1080 && even.height === 1920 && evenSizeOf(1, 1).width === 2,
+    JSON.stringify(even),
+  )
+  check(
+    'adj1264 定位色块宽 = 一个音符宽（字号 × 0.62），按谱带缩放走',
+    locatorBlockWidthOf(64, 1) === 40 && locatorBlockWidthOf(64, 0.5) === 20 && locatorBlockWidthOf(0, 1) >= 6,
+    `${locatorBlockWidthOf(64, 1)}/${locatorBlockWidthOf(64, 0.5)}`,
+  )
+
+  /* ---- ④b 用真条带验：同一 t 两次几何一致、色块宽不随时间变 ---- */
+  const SRC = `V: 1.0
+B: 对拍台
+Q: 1 2 3 4 | 5 6 7 1' |: 2 3 4 5 :|
+`
+  const r = parseJpsRaw(SRC)
+  const lay = layoutScore(r, defaultPageConfig)
+  const seq = buildPlaySequence(r, lay, 120)
+  const strip = buildLinearStrip(lay, seq, defaultPageConfig)
+  const lay2 = { viewW: 1080, viewH: 1920, stripH: Math.round(strip.height) }
+  const g1 = stripFrameAt(1000, strip, lay2)
+  const g2 = stripFrameAt(9000, strip, lay2)
+  check(
+    'adj1264 同一个 t 画两次几何完全一致（draw(t) 是纯函数的输入）',
+    JSON.stringify(g1) === JSON.stringify(stripFrameAt(1000, strip, lay2)),
+    '',
+  )
+  check(
+    'adj1264 色块宽不随时间变化（固定宽度，不随当前音的时值伸缩）',
+    g1.blockW === g2.blockW,
+    `${g1.blockW} vs ${g2.blockW}`,
+  )
+  check(
+    'adj1264 色块宽 ≈ 字号 × 0.62（不再是谱带高的 0.55 —— 那样会罩住好几个音）',
+    g1.blockW === locatorBlockWidthOf(strip.noteSize, 1) && g1.blockW < strip.height * 0.3,
+    `blockW=${g1.blockW} stripH=${strip.height} noteSize=${strip.noteSize}`,
+  )
+
+  /* ---- sidecar：背景视频名与台面外观跟着这首歌走 ---- */
+  const linearDoc = makeSyncDoc({
+    audio: '',
+    audioDurationMs: 60000,
+    anchors: [],
+    video: '背景.mp4',
+    linear: { theme: 'gold', topRatio: 0.4, blockRatio: 1 / 3 },
+    code: SRC,
+  })
+  const rt = parseSyncDoc(serializeSyncDoc(linearDoc)).doc
+  check(
+    'adj1264 sidecar 记住背景视频名与台面外观（只记名字，不复制文件）',
+    rt?.video === '背景.mp4' && rt?.linear?.theme === 'gold' && Math.abs((rt?.linear?.topRatio ?? 0) - 0.4) < 1e-6,
+    JSON.stringify(rt?.linear),
+  )
+  check('adj1264 只有视频、没有伴奏的 sidecar 也能读回来（不再报"没有 audio"）', rt !== null, '')
+  const badLinear = parseSyncDoc(
+    JSON.stringify({ version: 1, audio: '', video: ' x.mp4 ', linear: { topRatio: 5, blockRatio: -1, bandScale: 99 } }),
+  ).doc
+  check(
+    'adj1264 外观数值越界被夹紧、视频名去空白',
+    badLinear?.linear?.topRatio === 1 &&
+      badLinear?.linear?.blockRatio === 0.1 &&
+      badLinear?.linear?.bandScale === 3 &&
+      badLinear?.video === 'x.mp4',
+    JSON.stringify(badLinear?.linear),
+  )
+  const legacy = parseSyncDoc(JSON.stringify({ version: 1, audio: 'a.mp3' })).doc
+  check(
+    'adj1264 旧 sidecar 不凭空写出 video/linear 字段（保持旧文件形状），视频音量按 1',
+    legacy !== null && legacy.video === undefined && legacy.linear === undefined && legacy.mix.video === 1,
+    '',
   )
 }

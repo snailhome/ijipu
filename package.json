@@ -17,6 +17,7 @@
     "preview": "vite preview",
     "verify:site": "node --check scripts/verify-site.mjs && node scripts/verify-site.mjs",
     "verify:app-ui": "node --check scripts/verify-app-ui.mjs && node scripts/verify-app-ui.mjs",
+    "verify:video": "node --check scripts/verify-video.mjs && node scripts/verify-video.mjs",
     "smoke": "npm run check:encoding && npm run cli:typecheck && npm run cli:build && vite build --config vite.smoke.config.ts && node dist-smoke/smoke.cjs && node dist-smoke/cli-assert.cjs",
     "release:body": "node scripts/release-body.mjs",
     "build:embed": "npm run gen:info && node scripts/embed-assets.mjs && tsc -b && vite build --config vite.config.embed.mjs",
