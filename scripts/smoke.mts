@@ -174,7 +174,7 @@ import { buildPlaySequence, inferBpm, schedulePlay, matchInstrument, resolveInst
 // adj1258：连续动态谱（单行滚动谱）——"排版 → 源小节表 → 按演奏顺序拼成一条线"
 import { buildLinearStrip, stripXAt, stripEndMs, stripBallAt } from '@ijipu/engine/index.ts'
 // adj1259：单行谱出 SVG + 配色替换 + 分块规划（纯函数，Node 里可直接断言）
-import { chunkPlanOf, stripSvgOf, STRIP_INK_COLORS } from '../src/export/video/stripSvg'
+import { chunkPlanOf, stripSvgOf, stripLayoutOf, STRIP_INK_COLORS } from '../src/export/video/stripSvg'
 // adj1260：一帧的几何（定位块/球/滚动）与主题钳制——都是纯函数
 import { stripFrameAt, bandTopOf } from '../src/export/video/stripFrame'
 import { normalizeStripStyle, stripThemeOf, STRIP_THEMES } from '../src/export/video/stripTheme'
@@ -38412,5 +38412,83 @@ Q: 1 2 3 4 | 5 6 7 1' | 2 3 4 5 | 6 7 1' 2' | 3 4 5 6 | 7 1' 2' 3' | 4 5 6 7 | 1
     'adj1262 每段宽为正、且相邻段首尾相接',
     b.strip.runs.every((r, i) => r.x1 > r.x0 && (i === 0 || Math.abs(r.x0 - b.strip.runs[i - 1].x1) < 0.2)),
     '',
+  )
+
+  /* ---- adj1263：进浏览器看真图才暴露的两个硬伤（整页白底 / 减时线跨小节） ---- */
+  const BEAM_SRC = `V: 1.0
+B: 减时线
+Q: 1/ 2/ 3/ 4/ 5/ 6/ 7/ 1' | 2/ 3/ 4/ 5/ 6/ 7/ 1' 2' | 3/ 4/ 5/ 6/ 7/ 1' 2' 3' | 4/ 5/ 6/ 7/ 1' 2' 3' 4' |
+`
+  const c = build(BEAM_SRC)
+  const rawSvg = renderScoreToSvg(stripLayoutOf(c.strip, defaultPageConfig))[0] ?? ''
+  const cleanSvg = stripSvgOf(c.strip, defaultPageConfig)
+  check(
+    'adj1263 条带 SVG 不带整页白底（白底会挡住背景视频，并把剪影描边染成一大块黑）',
+    !cleanSvg.includes('data-page-bg') && rawSvg.includes('data-page-bg') && cleanSvg.startsWith('<svg'),
+    `raw=${rawSvg.slice(0, 60)}`,
+  )
+  check(
+    'adj1263 只删带标记的那一个白底 rect（减时线/增时线等其它 rect 一个不少）',
+    rawSvg.match(/<rect /g)?.length === (cleanSvg.match(/<rect /g)?.length ?? 0) + 1,
+    `raw=${rawSvg.match(/<rect /g)?.length} clean=${cleanSvg.match(/<rect /g)?.length}`,
+  )
+
+  // 墨色清单必须"全"：漏一个，那类字在深色背景上就还是黑字（adj1263 的歌词就是这样）
+  const LYRIC_SRC = `V: 1.0
+B: 歌词
+Q: 1 2 3 4 | 5 6 7 1' |
+C1: 一 二 三 四 五 六 七 一
+C2: 甲 乙 丙 丁 戊 己 庚 辛
+`
+  const d = build(LYRIC_SRC)
+  const rawLyricSvg = renderScoreToSvg(stripLayoutOf(d.strip, defaultPageConfig))[0] ?? ''
+  const rawFills = [...new Set(Array.from(rawLyricSvg.matchAll(/fill="([^"]+)"/g), (m) => m[1]))]
+  const uncoveredFills = rawFills.filter(
+    (col) => col !== 'none' && col !== '#ffffff' && !(STRIP_INK_COLORS as readonly string[]).includes(col),
+  )
+  check(
+    'adj1263 条带里的每一种墨色都在 STRIP_INK_COLORS 里（漏登记 ⇒ 那类字不换色）',
+    uncoveredFills.length === 0 && rawLyricSvg.includes('fill="#101010"'),
+    `未登记 ${uncoveredFills.join(',') || '无'}｜实测 ${rawFills.join(',')}`,
+  )
+  const tintedLyric = stripSvgOf(d.strip, defaultPageConfig, '#ffffff')
+  check(
+    'adj1263 歌词的墨色也换成主题色（深底上不再是一片黑）',
+    tintedLyric.includes('fill="#ffffff"') && !['#101010', '#999', '#8a8a8a'].some((x) => tintedLyric.includes(`fill="${x}"`)),
+    '',
+  )
+  // 负对照：旧清单（只有 4 个主墨色）⇒ 歌词仍然是 #101010（就是看真图时看到的"空心字"）
+  const oldTint = ['#1b1b1b', '#333', '#555', '#888'].reduce(
+    (s, col) => s.split(`fill="${col}"`).join('fill="#ffffff"'),
+    rawLyricSvg,
+  )
+  check(
+    'adj1263 负对照：用旧名单（4 色）换色 ⇒ 歌词仍是 #101010（证明上一条不是在空跑）',
+    oldTint.includes('fill="#101010"'),
+    '',
+  )
+  // 减时线只在本小节内连：每条 beam 都落在某一段 run 的 x 区间里
+  const inOneRun = (beams: { x1: number; x2: number }[]): number =>
+    beams.filter((bm) => !c.strip.runs.some((r) => bm.x1 >= r.x0 - 1 && bm.x2 <= r.x1 + 1)).length
+  const stripBeams = computeBeamsForTest(c.strip.page.notes, c.strip.noteSize)
+  check(
+    'adj1263 减时线不跨小节（条带把各行压到同一基线后，小节号必须重编）',
+    stripBeams.length > 0 && inOneRun(stripBeams) === 0,
+    `beams=${stripBeams.length} 跨小节 ${inOneRun(stripBeams)} 条`,
+  )
+  check(
+    'adj1263 减时线跨度合理（不超过该小节宽，不是"一整行连成一条"）',
+    stripBeams.every((bm) => bm.x2 - bm.x1 <= Math.max(...c.strip.runs.map((r) => r.x1 - r.x0)) + 1),
+    '',
+  )
+  // 负对照：把小节号抹成同一个（= 修之前的继承行为）⇒ 上一条必须为假
+  const brokenBeams = computeBeamsForTest(
+    c.strip.page.notes.map((n) => ({ ...n, barIndex: 0 })),
+    c.strip.noteSize,
+  )
+  check(
+    'adj1263 负对照：小节号全抹成 0 ⇒ 减时线真的跨到别的小节（证明上一条不是在空跑）',
+    brokenBeams.length > 0 && inOneRun(brokenBeams) > 0,
+    `跨小节 ${inOneRun(brokenBeams)} 条`,
   )
 }

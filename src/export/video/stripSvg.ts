@@ -18,8 +18,14 @@
  */
 import { renderScoreToSvg, type LinearStrip, type PageConfig, type ScoreLayout } from '@ijipu/engine'
 
-/** 引擎渲染里出现的墨色（顺序无关；替换成一个主题色） */
-export const STRIP_INK_COLORS = ['#1b1b1b', '#333', '#555', '#888'] as const
+/**
+ * 引擎渲染里出现的**谱面墨色**（顺序无关；替换成一个主题色）。
+ *
+ * adj1263：`#101010`（歌词）/ `#999`（歌词注释里的音名）/ `#8a8a8a`（页码）之前漏登记，
+ * 于是歌词在深色背景上**仍是黑字**（截图里只剩一圈若有若无的轮廓）。
+ * 这份清单必须"全"，有闸门守着：`rawSvg` 里出现的 `fill` 若不在清单里（`none`/`#ffffff` 除外）就红灯。
+ */
+export const STRIP_INK_COLORS = ['#1b1b1b', '#333', '#555', '#888', '#101010', '#999', '#8a8a8a'] as const
 
 /** 一块（条带坐标） */
 export interface StripChunk {
@@ -67,12 +73,26 @@ export function stripLayoutOf(strip: LinearStrip, cfg: PageConfig): ScoreLayout 
 }
 
 /**
+ * 去掉引擎画的**整页白底**（`data-page-bg`，见 `render/index.ts`）。
+ *
+ * 为什么必须去掉（adj1263，看真图才发现的）：
+ *  · 条带是**盖在背景视频上的图层**，白底会把视频整块遮住；
+ *  · 更要命的是描边：`stripRaster` 用 `source-in` 把整块染成剪影，白底是**不透明矩形**
+ *    ⇒ 剪影 = 整块矩形，8 方向偏移画出来就是一块大黑影（实测第一块上出现深色方块 + 白带）。
+ * 引擎给这个 rect 打了 `data-page-bg` 标记，就是给宿主"要透明化时按它选"的（别用 `rect:first-child`）。
+ */
+export function stripOverlaySvg(svg: string): string {
+  return svg.replace(/<rect\s+data-page-bg="1"[^>]*\/>/g, '')
+}
+
+/**
  * 出 SVG（一条字符串）。
  *
  * `ink` 给了就顺手换色；不给就保持引擎原色（便于排查"是配色错了还是渲染错了"）。
+ * 不论换不换色，**整页白底一律去掉**（条带是透明图层，见 `stripOverlaySvg`）。
  */
 export function stripSvgOf(strip: LinearStrip, cfg: PageConfig, ink?: string): string {
   const svgs = renderScoreToSvg(stripLayoutOf(strip, cfg))
-  const svg = svgs[0] ?? ''
+  const svg = stripOverlaySvg(svgs[0] ?? '')
   return ink !== undefined && ink !== '' ? tintSvg(svg, ink) : svg
 }

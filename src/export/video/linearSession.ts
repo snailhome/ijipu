@@ -86,9 +86,9 @@ export async function createLinearSession(opts: CreateLinearSessionOptions): Pro
       } else {
         bg.draw(ctx, tMs)
       }
-      // ② 谱带
-      cache.blit(ctx, g.scrollX, g.bandTop)
-      // ③ 定位色块（左 1/3，短宽：宽 ≈ 谱带高的 0.55）
+      // ② 定位色块（左 1/3，短宽：宽 ≈ 谱带高的 0.55）
+      //    ⚠ 先画色块、再画谱带（adj1263 看真图后调整）：色块是**底衬高亮**，
+      //    盖在字上面会把当前音染成粉色（截图里"0 0"就是粉的），字就不"白"了。
       const bw = Math.max(10, Math.round(stripH * 0.55))
       const bh = stripH
       ctx.save()
@@ -97,6 +97,8 @@ export async function createLinearSession(opts: CreateLinearSessionOptions): Pro
       roundRect(ctx, g.blockX - bw / 2, g.blockTop, bw, bh, Math.min(8, bw / 2))
       ctx.fill()
       ctx.restore()
+      // ③ 谱带
+      cache.blit(ctx, g.scrollX, g.bandTop)
       // ④ 跳跳球（x 固定；落地压扁）
       const r = Math.max(6, stripH * 0.16)
       ctx.save()

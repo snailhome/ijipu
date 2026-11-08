@@ -98,8 +98,24 @@ function mainNotesOf(m: SrcMeasure): { notes: PlacedToken[]; skipped: number } {
   return { notes, skipped }
 }
 
-/** 克隆一个音符：x/占宽/拍段按 k 缩放、y 平移到条带基线 */
-function cloneNote(n: PlacedToken, x0: number, m: SrcMeasure, k: number, yShift: number, index: number): PlacedToken {
+/**
+ * 克隆一个音符：x/占宽/拍段按 k 缩放、y 平移到条带基线。
+ *
+ * ⚠ `barIndex` **必须重编**（adj1263，看真图才发现的坑）：
+ * 渲染端的 `computeBeams()` 按 `y|barIndex` 分组算减时线；条带把所有行压到**同一条基线**
+ * （y 全一样）又原样继承了源小节的 `barIndex` ⇒ 一整行的小节被并成一组，
+ * 减时线会从第 1 小节一路连到第 4 小节（实测出现过 1469px / 2912px 的横线）。
+ * 条带上"一小节 = 一段 run"，所以每个 run 给一个唯一序号，减时线就只在本小节内连。
+ */
+function cloneNote(
+  n: PlacedToken,
+  x0: number,
+  m: SrcMeasure,
+  k: number,
+  yShift: number,
+  index: number,
+  barIndex: number,
+): PlacedToken {
   const mapX = (x: number): number => Math.round((x0 + (x - m.x0) * k) * 10) / 10
   const out: PlacedToken = {
     ...n,
@@ -107,6 +123,7 @@ function cloneNote(n: PlacedToken, x0: number, m: SrcMeasure, k: number, yShift:
     x: mapX(n.x),
     y: Math.round((n.y + yShift) * 10) / 10,
     width: Math.round(n.width * k * 10) / 10,
+    barIndex,
   }
   if (n.rightX !== undefined) out.rightX = mapX(n.rightX)
   if (n.inkLeftX !== undefined) out.inkLeftX = mapX(n.inkLeftX)
@@ -204,7 +221,7 @@ export function buildLinearStrip(
     const x1 = x0 + srcW * k
 
     for (const n of src) {
-      const c = cloneNote(n, x0, m, k, yShift, noteIdx)
+      const c = cloneNote(n, x0, m, k, yShift, noteIdx, runs.length)
       noteIdx += 1
       page.notes.push(c)
       // 音符时刻：小节内按"离左边界多远"折算（与 x 的仿射同源，保证图和声对得上）
