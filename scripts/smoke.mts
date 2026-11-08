@@ -171,6 +171,8 @@ import {
 import { splitTempo } from '@ijipu/engine/parser/parser.ts'
 import { parseKey } from '@ijipu/engine/layout/index.ts'
 import { buildPlaySequence, inferBpm, schedulePlay, matchInstrument, resolveInstrument, eventsToMidi, pitchToMidiNote, instrumentToProgram, pcmToWav, SAMPLER_LIBRARIES, getSamplerLibrary, classifyNetwork, GmChannelAllocator, GM_MELODIC_CHANNELS, GM_VOICES, gmVoiceRef, gmVoiceProgram, countScoreInstrumentSwitches, noteIdStringOf, slicePlaySequenceByNoteRange, resolvePracticeRange, slicePlaySequenceByRange, extendRangeEndToSlurEnd } from '@ijipu/engine/playback/index.ts'
+// adj1258：连续动态谱（单行滚动谱）——"排版 → 源小节表 → 按演奏顺序拼成一条线"
+import { buildLinearStrip, stripXAt, stripEndMs } from '@ijipu/engine/index.ts'
 import { codePosToNoteId, noteIdToCodePos } from '@ijipu/engine/cursorMap.ts'
 // M1-1 动态谱时间轴：把拍段收成"定时矩形"，供视频逐帧取"此刻哪几块在亮"
 import { buildRectTrack, rectsActiveAt } from '@ijipu/engine/index.ts'
@@ -38244,4 +38246,89 @@ function runAdj1189Tests(): void {
       '',
     )
   }
+}
+
+/**
+ * adj1258：**连续动态谱（单行滚动谱）**——「排版 → 源小节表 → 按演奏顺序拼成一条线」。
+ *
+ * 这里守三件最容易做错的事（用户 2026-11-08 特别点出第一条）：
+ *  ① **行首小节线**：排版里行首的 `|` 不画、`|/` 不画也不占位 ⇒ 拼接处会缺线，
+ *     单行谱必须自己补，且**每一条 run 的起点都要有且只有一根线**；
+ *  ② **反复/跳转已展开**：同一源小节出现多次，条带上**不能再有**反复记号/跳房子/`&ds` 等；
+ *  ③ **时刻 → 横坐标**：`stripXAt(t0)` 必须精确落在该小节的 `x0`（定位色块压住当前音就靠它）。
+ */
+console.log('[adj1258] 连续动态谱：单行拼接 / 行首小节线 / 反复展开 / 时刻→x')
+{
+  /** 带反复的一小段：第 3 小节反复一遍 ⇒ 演奏顺序里它出现两次 */
+  const CODE_REPEAT = `V: 1.0
+B: 单行谱
+Q: 1 2 3 4 | 5 6 7 1' |: 2 3 4 5 :|
+`
+  const build = (code: string, cfg = defaultPageConfig) => {
+    const r = parseJpsRaw(code)
+    const lay = layoutScore(r, cfg)
+    const seq = buildPlaySequence(r, lay, 120)
+    return { lay, seq, strip: buildLinearStrip(lay, seq, cfg) }
+  }
+  const a = build(CODE_REPEAT)
+  // ① 反复展开：源小节 3 出现两次
+  const bars = a.strip.runs.map((r) => r.sourceBar)
+  check(
+    'adj1258 反复段展开成两条 run（同一源小节出现两次）',
+    a.strip.runs.length === bars.length && bars.filter((b) => b === 3).length === 2,
+    `bars=${bars.join(',')}`,
+  )
+  check(
+    'adj1258 条带上的小节号 = 播放序列的 barNos（不另算一套）',
+    JSON.stringify(bars) === JSON.stringify(a.seq.barNos ?? []),
+    `runs=${bars.join(',')} barNos=${(a.seq.barNos ?? []).join(',')}`,
+  )
+  // ② 行首小节线：除第一段外，每段起点都有一根线（含原先隐藏/被跳过的行首线）
+  const hasLineAt = (x: number): boolean =>
+    a.strip.page.barlines.some((b) => Math.abs(b.x - x) < 0.6)
+  const missing = a.strip.runs.slice(1).filter((r) => !hasLineAt(r.x0))
+  check(
+    'adj1258 每个小节起点都有小节线（行首隐藏线已补成普通线）',
+    missing.length === 0,
+    `缺 ${missing.length} 根（x=${missing.map((m) => m.x0).join(',')}）`,
+  )
+  // ③ 反复/跳房子记号不再出现在条带上
+  const cleanBars = a.strip.page.barlines.every(
+    (b) => (b.type === '|' || b.type === '||') && b.marks === undefined && b.voltaStart === undefined && b.voltaEnd === undefined,
+  )
+  check('adj1258 条带上没有反复/跳房子/&ds 等修饰线（只剩 | 与 ||）', cleanBars, '')
+  // ④ 时刻 → x：每段起点精确落在自己的 x0
+  const drift = a.strip.runs.reduce((mx, r) => Math.max(mx, Math.abs(stripXAt(a.strip, r.t0) - r.x0)), 0)
+  check('adj1258 stripXAt(t0) 与段起点 x0 一致（误差 < 0.2px）', drift < 0.2, `drift=${drift}`)
+  // ⑤ 单调：时间递增 ⇒ x 不减；曲末取末端
+  let mono = true
+  let prevX = -1
+  for (let t = 0; t <= stripEndMs(a.strip) + 500; t += 25) {
+    const x = stripXAt(a.strip, t)
+    if (x < prevX - 1e-6) mono = false
+    prevX = x
+  }
+  check('adj1258 stripXAt 随时间单调不减（含曲后外推不外溢）', mono, '')
+  check(
+    'adj1258 stripEndMs = 最后一段结束时刻',
+    Math.abs(stripEndMs(a.strip) - a.strip.runs[a.strip.runs.length - 1].t1) < 0.5,
+    '',
+  )
+
+  // ⑥ 长谱跨行：第二行起的小节线也要补齐（这才是"行首线被跳过"真正会踩的场景）
+  const LONG = `V: 1.0
+B: 长谱
+Q: 1 2 3 4 | 5 6 7 1' | 2 3 4 5 | 6 7 1' 2' | 3 4 5 6 | 7 1' 2' 3' | 4 5 6 7 | 1' 2' 3' 4' |
+Q: 1 2 3 4 | 5 6 7 1' | 2 3 4 5 | 6 7 1' 2' | 3 4 5 6 | 7 1' 2' 3' | 4 5 6 7 | 1' 2' 3' 4' |
+`
+  const b = build(LONG)
+  const multiRow = new Set(b.strip.runs.map((r) => r.rowIndex)).size > 1
+  const missB = b.strip.runs.slice(1).filter((r) => !b.strip.page.barlines.some((x) => Math.abs(x.x - r.x0) < 0.6))
+  check('adj1258 长谱确实被排成多行（这条断言才有意义）', multiRow, `rows=${new Set(b.strip.runs.map((r) => r.rowIndex)).size}`)
+  check('adj1258 跨行拼接处一根线都不缺', missB.length === 0, `缺 ${missB.length} 根`)
+  check(
+    'adj1258 源小节表数量 = 播放序列里的最大小节号',
+    b.strip.runs.length > 0 && Math.max(...b.strip.runs.map((r) => r.sourceBar)) === 16,
+    `max=${Math.max(...b.strip.runs.map((r) => r.sourceBar))}`,
+  )
 }
