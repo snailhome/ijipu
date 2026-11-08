@@ -38398,4 +38398,19 @@ Q: 1 2 3 4 | 5 6 7 1' | 2 3 4 5 | 6 7 1' 2' | 3 4 5 6 | 7 1' 2' 3' | 4 5 6 7 | 1
   check('adj1260 主题越界被钳制（描边 0~12、模糊 0~24、透明度 0~1）', bad.haloWidth === 0 && bad.shadowBlur === 24 && bad.blockAlpha === 1, `${bad.haloWidth}/${bad.shadowBlur}/${bad.blockAlpha}`)
   check('adj1260 非法色串回退到基准色（不把坏值写进 canvas）', bad.ink === n0.ink, bad.ink)
   check('adj1260 四套内置主题都过得了钳制（没有一套自带坏值）', STRIP_THEMES.every((t) => JSON.stringify(stripThemeOf(t.id)) === JSON.stringify(normalizeStripStyle(t.style))), '')
+
+  /* ---- adj1262：条带几何自检（不靠浏览器，先把 NaN / 越界这类硬错钉死） ---- */
+  check('adj1262 条带 SVG 里没有 NaN / undefined 属性', !/NaN|undefined/.test(svg), /NaN|undefined/.exec(svg)?.[0] ?? '')
+  const outOfBand = b.strip.notes.filter((n) => !(n.x >= -0.5 && n.x <= b.strip.width + 0.5))
+  check('adj1262 所有音符都落在 [0, 条带宽] 内（拼接没把内容甩出去）', outOfBand.length === 0, `越界 ${outOfBand.length} 个`)
+  check(
+    'adj1262 主基线落在条带内、条带高为正',
+    b.strip.height > 0 && b.strip.baselineY > 0 && b.strip.baselineY < b.strip.height,
+    `h=${b.strip.height} base=${b.strip.baselineY}`,
+  )
+  check(
+    'adj1262 每段宽为正、且相邻段首尾相接',
+    b.strip.runs.every((r, i) => r.x1 > r.x0 && (i === 0 || Math.abs(r.x0 - b.strip.runs[i - 1].x1) < 0.2)),
+    '',
+  )
 }
