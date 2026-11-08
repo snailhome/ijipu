@@ -42,7 +42,15 @@ import { decodeAccompaniment, waveformPeaks } from '../export/video/accompanimen
 import { DEFAULT_SYNC_MIX, syncDocStale, audioRefOf, effectiveSyncFitOf } from '../export/video/syncDoc'
 import { pickAudioFileNative, readSidecarAudio } from '../export/video/syncIo'
 import { loadSidecarAudioFor } from '../store/syncSidecar'
-import { stripStyleOf, stripPresetStyleOf, stripStyleOverrideOf, colorSwatchOf, STRIP_THEMES, type StripThemeId, type StripStyle } from '../export/video/stripTheme'
+import {
+  stripStyleOf,
+  stripBaseStyleOf,
+  stripStyleOverrideOf,
+  colorSwatchOf,
+  STRIP_THEMES,
+  STRIP_THEME_AUTO,
+  type StripStyle,
+} from '../export/video/stripTheme'
 import { createLinearSession, type LinearSession } from '../export/video/linearSession'
 import { CARD_TEMPLATES, resolveCardStyle } from '../export/video/cardTemplates'
 import { recordCardTemplate } from '../store/syncExtras'
@@ -60,6 +68,7 @@ import {
   linearCardTimelineOf,
   linearCardsOf,
   linearClockOf,
+  linearExportWindowOf,
   LINEAR_INTRO_FADE_MS,
   linearMixPlanOf,
   mediaMsAt,
@@ -159,28 +168,40 @@ export function LinearSyncDialog() {
   const trim = useMemo(() => doc?.trim ?? { startMs: 0, endMs: mediaMs }, [doc?.trim, mediaMs])
   const range = useMemo(() => exportRangeOf(clock, trim), [clock, trim])
   const linearStyle = useMemo(() => doc?.linear ?? {}, [doc?.linear])
-  const themeId = (linearStyle.theme ?? 'night') as StripThemeId
+  /** adj1266：缺字段 = `auto`（跟随卡片模板），旧 sidecar 天然兼容 */
+  const themeId = linearStyle.theme ?? STRIP_THEME_AUTO
   const topRatio = linearStyle.topRatio ?? 0.25
   const blockRatio = linearStyle.blockRatio ?? 1 / 3
   const bandScale = linearStyle.bandScale ?? 1
+  /** 卡片样式与相机位共用模板库（sidecar 记的模板优先，没有就用当前选中的） */
+  const effectiveCardStyle = useMemo(
+    () => resolveCardStyle(doc?.card?.template ?? dynamicCardStyle, cardTemplates),
+    [cardTemplates, doc?.card?.template, dynamicCardStyle],
+  )
   /**
-   * adj1265：主题 + 自定义覆盖 ⇒ 实际样式。**这是唯一入口**（预览/出片/卡片都读它），
-   * 等价于"用户改一笔颜色，下一次重建会话就按新颜色走"。
+   * adj1266（用户 2026-11-09 拍板「配色随卡片模板」）：默认 `auto` ⇒ 谱带配色由卡片模板推出来；
+   * 明确选了四套预设才不跟卡片。**这是唯一入口**（预览/出片/编辑器/断言都读它）。
    */
   const styleOverride = linearStyle.style
-  const linearStripStyle = useMemo(() => stripStyleOf(themeId, styleOverride), [styleOverride, themeId])
-  /** 编辑器的"恢复预设"要能拿到该主题的标准样式 */
-  const presetStyle = useMemo(() => stripPresetStyleOf(themeId), [themeId])
+  const linearStripStyle = useMemo(
+    () => stripStyleOf(themeId, styleOverride, effectiveCardStyle),
+    [effectiveCardStyle, styleOverride, themeId],
+  )
+  /** 编辑器的"恢复预设"要能拿到当前基准（auto 时是卡片模板算出来的那份） */
+  const presetStyle = useMemo(() => stripBaseStyleOf(themeId, effectiveCardStyle), [effectiveCardStyle, themeId])
   /** 片头/片尾卡（跟着这首歌走：存 sidecar 的 `linear.cards`） */
   const cardsOn = linearStyle.cards === true
   const cards = useMemo(() => linearCardsOf(cardsOn), [cardsOn])
   const cardTimeline = useMemo(() => linearCardTimelineOf(range, cards), [cards, range])
   /** 会话总长（带卡片 = 片头 + 导出段 + 片尾；不带 = 媒体总长） */
   const sessionTotalMs = cardsOn ? cardTimeline.totalMs : clock.totalMs
-  /** 卡片样式与相机位共用模板库（sidecar 记的模板优先，没有就用当前选中的） */
-  const effectiveCardStyle = useMemo(
-    () => resolveCardStyle(doc?.card?.template ?? dynamicCardStyle, cardTemplates),
-    [cardTemplates, doc?.card?.template, dynamicCardStyle],
+  /**
+   * adj1266：**出片窗口**——不带卡片时只编保留段（画面从 `range.startMs` 起画）。
+   * 预览仍用整条 `sessionTotalMs`（播放头要能在整首歌里拖），两者不是一回事。
+   */
+  const exportWindow = useMemo(
+    () => linearExportWindowOf({ range, cardsOn, cardTotalMs: cardTimeline.totalMs }),
+    [cardsOn, cardTimeline.totalMs, range],
   )
   /** 片头卡上的文字（第 1 页描述头） */
   const cardMeta = scoreLayout.pages[0]?.meta ?? null
@@ -746,6 +767,23 @@ export function LinearSyncDialog() {
     [styleDraft, writeStyle],
   )
 
+  /**
+   * adj1266：选配色主题。`auto` = 跟随卡片模板 ⇒ 不写 `theme` 字段（缺字段就是 auto，
+   * 这样旧 sidecar 天然是"跟卡片走"，也不必为一个"默认值"往每份文件里写字符串）。
+   */
+  const setThemeChoice = useCallback(
+    (v: string) => {
+      if (v === STRIP_THEME_AUTO) {
+        const next = { ...linearStyle }
+        delete next.theme
+        setExtras({ linear: next })
+        return
+      }
+      setExtras({ linear: { ...linearStyle, theme: v } })
+    },
+    [linearStyle, setExtras],
+  )
+
   const barBeatLabel = useCallback(
     (b: number): string => {
       for (let i = barStartBeats.length - 1; i >= 0; i--) {
@@ -888,16 +926,23 @@ export function LinearSyncDialog() {
        */
       const pad = cardsOn ? linearAudioPadOf(cardTimeline) : { headMs: 0, tailMs: 0 }
       const mixed = await mixLinearAudio(tracks, range, pad)
+      /**
+       * adj1266：出片只编**窗口**（不带卡片 = 保留段），画面由媒体时刻 `t + 偏移` 画出来。
+       *
+       * 原来这里给的是 `sessionTotalMs`（整首）：保留段只裁了音轨，画面还是整首歌——
+       * 真机素材上表现为"导 2 秒却要编 3:56"。`E-2026-566`。
+       */
+      const off = exportWindow.mediaOffsetMs
       const outSession = {
         width: out.width,
         height: out.height,
-        totalMs: sessionTotalMs,
+        totalMs: exportWindow.totalMs,
         draw: (ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D, t: number): void => {
-          s.draw(ctx, t)
+          s.draw(ctx, t + off)
         },
         warm: async (t: number): Promise<void> => {
-          await videoRef.current?.warm(s.mediaMsOf(t))
-          await s.warm(t)
+          await videoRef.current?.warm(s.mediaMsOf(t + off))
+          await s.warm(t + off)
         },
       }
       const blob = await encodeLinearMp4(outSession, {
@@ -946,7 +991,7 @@ export function LinearSyncDialog() {
       abortRef.current = null
       setExporting(false)
     }
-  }, [cardTimeline, cardsOn, exporting, fileName, out.height, out.width, range, sessionTotalMs, showNotice, tracks])
+  }, [cardTimeline, cardsOn, exportWindow, exporting, fileName, out.height, out.width, range, showNotice, tracks])
 
   // ---------- 键盘 ----------
   useEffect(() => {
@@ -1202,10 +1247,13 @@ export function LinearSyncDialog() {
             <span className="sync-label">{linearSyncCopy.theme}</span>
             <select
               className="sync-select"
+              data-role="linear-theme"
               value={themeId}
               aria-label={linearSyncCopy.theme}
-              onChange={(e) => setExtras({ linear: { ...linearStyle, theme: e.target.value } })}
+              title={linearSyncCopy.themeHint}
+              onChange={(e) => setThemeChoice(e.target.value)}
             >
+              <option value={STRIP_THEME_AUTO}>{linearSyncCopy.themeAuto(effectiveCardStyle.name)}</option>
               {STRIP_THEMES.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.label}

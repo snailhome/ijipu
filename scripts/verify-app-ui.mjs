@@ -3518,6 +3518,89 @@ async function main() {
           cardsUi.total !== totalBefore && cardsUi.hint && cardsUi.template,
           `${totalBefore} → ${cardsUi.total}`,
         )
+        /**
+         * adj1266（用户 2026-11-09 拍板「配色随卡片模板」）：真浏览器里换模板，看谱带配色跟着换。
+         * 这里读**编辑器里的墨色输入框**（它就是 `linearStripStyle.ink`），比数画布像素稳：
+         * 深色视频/底色下"墨字 + 白描边"与"白字 + 黑描边"的像素数受抗锯齿影响，不适合当唯一判据。
+         */
+        const themeUi = await evalJs(
+          c,
+          `(() => {
+            const sel = document.querySelector('[data-role="linear-theme"]')
+            const ink = document.querySelectorAll('[data-role="linear-style"] input[type="color"]')[0]
+            return {
+              value: sel ? sel.value : '',
+              label: sel && sel.selectedOptions[0] ? sel.selectedOptions[0].textContent : '',
+              ink: ink ? ink.value : '',
+              template: !!document.querySelector('.linear-panel select[aria-label="卡片模板"]'),
+            }
+          })()`,
+        )
+        check(
+          'adj1266 配色默认是「跟随卡片模板」（下拉第一项带当前模板名，不是某套固定预设）',
+          themeUi.value === 'auto' && themeUi.label.startsWith('跟随卡片模板'),
+          JSON.stringify(themeUi),
+        )
+        const setSelect = (sel, val) => `(() => {
+            const s = document.querySelector(${JSON.stringify(sel)})
+            if (!s) return 'no-select'
+            const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set
+            setter.call(s, ${JSON.stringify(val)})
+            s.dispatchEvent(new Event('change', { bubbles: true }))
+            return s.value
+          })()`
+        const toBrand = await evalJs(c, setSelect('.linear-panel select[aria-label="卡片模板"]', 'brand'))
+        await sleep(700)
+        const brandInk = await evalJs(
+          c,
+          `(() => {
+            const ink = document.querySelectorAll('[data-role="linear-style"] input[type="color"]')[0]
+            return ink ? ink.value : ''
+          })()`,
+        )
+        check(
+          'adj1266 换成深空蓝模板 ⇒ 墨色变成白字（配色真的跟着卡片调色板走）',
+          toBrand === 'brand' && brandInk === '#ffffff',
+          `${toBrand} / ${brandInk}`,
+        )
+        const toPaper = await evalJs(c, setSelect('.linear-panel select[aria-label="卡片模板"]', 'paper'))
+        await sleep(700)
+        const paperUi = await evalJs(
+          c,
+          `(() => {
+            const sel = document.querySelector('[data-role="linear-theme"]')
+            const ink = document.querySelectorAll('[data-role="linear-style"] input[type="color"]')[0]
+            return {
+              label: sel && sel.selectedOptions[0] ? sel.selectedOptions[0].textContent : '',
+              ink: ink ? ink.value : '',
+            }
+          })()`,
+        )
+        check(
+          'adj1266 换成纸面模板 ⇒ 谱带墨色跟着变成卡片的墨字、下拉项也写明「纸面」',
+          toPaper === 'paper' && paperUi.ink === '#241f19' && paperUi.label.includes('纸面'),
+          `${toPaper} / ${JSON.stringify(paperUi)}`,
+        )
+        // 明确指定一套预设 ⇒ 不跟卡片；再选回 auto ⇒ 又跟卡片
+        await evalJs(c, setSelect('[data-role="linear-theme"]', 'gold'))
+        await sleep(500)
+        const goldInk = await evalJs(c, `(() => {
+            const ink = document.querySelectorAll('[data-role="linear-style"] input[type="color"]')[0]
+            return ink ? ink.value : ''
+          })()`)
+        await evalJs(c, setSelect('[data-role="linear-theme"]', 'auto'))
+        await sleep(500)
+        const backInk = await evalJs(c, `(() => {
+            const ink = document.querySelectorAll('[data-role="linear-style"] input[type="color"]')[0]
+            return ink ? ink.value : ''
+          })()`)
+        check(
+          'adj1266 显式选「金」就按金色的字（不跟卡片）；选回「跟随卡片模板」又回到纸面墨字',
+          goldInk === '#ffd36b' && backInk === '#241f19',
+          `${goldInk} → ${backInk}`,
+        )
+        await evalJs(c, setSelect('.linear-panel select[aria-label="卡片模板"]', 'brand'))
+        await sleep(500)
         await evalJs(c, `document.querySelector('[data-role="linear-cards"]')?.click(), true`)
         await sleep(500)
         await evalJs(c, `document.querySelector('[data-role="linear-style-toggle"]')?.click(), true`)

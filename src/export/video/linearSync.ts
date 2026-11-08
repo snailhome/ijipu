@@ -111,6 +111,36 @@ export function exportRangeOf(clock: LinearClock, trim: { startMs: number; endMs
   return { startMs: Math.round(start), endMs: Math.round(end), durationMs: Math.round(end - start) }
 }
 
+/**
+ * adj1266：**出片窗口**——保留段到底编多长、画面从媒体哪一刻起画。
+ *
+ * 为什么必须单独定口径：`adj1264` 的出片把**音轨**裁到了保留段，画面却按 `clock.totalMs`
+ * （整首）编。于是"只导这一段"导出来是**整首歌的画面 + 保留段的声音**，还慢得离谱
+ * （3:56 的真机素材、2 秒的保留段 → 要编 7090 帧）。之前的验收素材都是 2 秒，
+ * 这个洞一直没露头；`E-2026-566` 记了这次是怎么被真机素材顶出来的。
+ *
+ *  · 带卡片：会话时间轴本来就是 `[片头][保留段][片尾]`，窗口 = 卡片时间轴总长，偏移 0；
+ *  · 不带卡片：窗口 = 保留段本身，画面从 `range.startMs` 起画（`mediaOffsetMs`）。
+ *
+ * 预览**不用**这个窗口（播放头要能在整首歌里拖），只有出片用。
+ */
+export interface LinearExportWindow {
+  /** 要编多少毫秒 */
+  totalMs: number
+  /** 会话时刻 → 媒体时刻的偏移（带卡片 0；不带卡片 = range.startMs） */
+  mediaOffsetMs: number
+}
+
+export function linearExportWindowOf(input: {
+  range: LinearRange
+  cardsOn: boolean
+  /** `linearCardTimelineOf(range, cards).totalMs`（不带卡片时忽略） */
+  cardTotalMs: number
+}): LinearExportWindow {
+  if (input.cardsOn) return { totalMs: Math.max(0, Math.round(input.cardTotalMs)), mediaOffsetMs: 0 }
+  return { totalMs: Math.max(1, Math.round(input.range.durationMs)), mediaOffsetMs: Math.max(0, Math.round(input.range.startMs)) }
+}
+
 /* ============================================================
  * adj1265：片头 / 片尾卡的时间轴（M4「卡片适配」）
  *

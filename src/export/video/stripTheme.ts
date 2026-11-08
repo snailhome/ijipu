@@ -7,7 +7,14 @@
  * 为什么单独一层：主题要同时被 **预览** 与 **出片** 消费，而且颜色写错（非法色串、
  * 透明度越界）不该让整条视频崩——所以取值一律过 `normalizeStripStyle` 钳制。
  * 预设只给"能直接用的四套"，自定义走同一结构（以后加模板库）。
+ *
+ * adj1266（用户 2026-11-09 拍板「配色随卡片模板」）：默认不再是某套固定预设，而是
+ * **`auto` = 从卡片模板的调色板推出来**——卡片和谱带在同一个画面里，用户直觉是
+ * "这套模板就是这支片子的样子"；两处各自挑色最容易出现"深蓝卡片 + 金色谱带"这种不搭。
+ * 四套预设仍保留，供用户明确指定（这时就不跟卡片走）。
  */
+import type { CardStyle } from './cardTemplates'
+
 export interface StripStyle {
   /** 文本（墨色） */
   ink: string
@@ -98,6 +105,90 @@ export const STRIP_THEMES: StripThemePreset[] = [
 export const DEFAULT_STRIP_THEME_ID: StripThemeId = 'night'
 
 /**
+ * adj1266：`auto` = **跟随卡片模板**（用户 2026-11-09 拍板）。
+ *
+ * 为什么用一个字符串而不是 `undefined`：sidecar 里"没写过 theme"与"明确选了跟卡片走"
+ * 在界面上要显示成同一项（`auto`），所以解析层统一归一成它；写盘时 `auto` 不落字段
+ * （缺字段就是 auto，旧文件天然兼容）。
+ */
+export const STRIP_THEME_AUTO = 'auto'
+
+/** 颜色亮度（0~1，WCAG 相对亮度的简化版；只用来区分"深底/浅底"）。认不出按深色算。 */
+export function colorLuminanceOf(color: string): number {
+  const c = (color ?? '').trim().toLowerCase()
+  if (c === 'white') return 1
+  if (c === 'black') return 0
+  const hex = /^#([0-9a-f]{3,8})$/.exec(c)
+  if (hex !== null) {
+    let h = hex[1]
+    // #rgb / #rgba 先展开；#rrggbbaa 只看前 6 位（底色不透明度不影响"深/浅"判断）
+    if (h.length === 3 || h.length === 4) h = `${h[0]}${h[0]}${h[1]}${h[1]}${h[2]}${h[2]}`
+    else if (h.length === 8) h = h.slice(0, 6)
+    const r = Number.parseInt(h.slice(0, 2), 16)
+    const g = Number.parseInt(h.slice(2, 4), 16)
+    const b = Number.parseInt(h.slice(4, 6), 16)
+    if (![r, g, b].every((n) => Number.isFinite(n))) return 0
+    const lin = (v: number): number => {
+      const s = v / 255
+      return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4
+    }
+    return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
+  }
+  const rgb = /^rgba?\(\s*(\d{1,3})[\s,]+(\d{1,3})[\s,]+(\d{1,3})/i.exec(c)
+  if (rgb !== null) {
+    const [r, g, b] = [rgb[1], rgb[2], rgb[3]].map(Number)
+    if (![r, g, b].every((n) => Number.isFinite(n))) return 0
+    return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255
+  }
+  return 0
+}
+
+/** 这套卡片是不是浅底（纸面）；用来决定谱带描边走白边还是黑边 */
+export function isLightCard(card: Pick<CardStyle, 'bg'>): boolean {
+  return colorLuminanceOf(card.bg[1]) > 0.5
+}
+
+/**
+ * adj1266：**卡片模板 → 谱带配色**（用户 2026-11-09 拍板「配色随卡片模板」）。
+ *
+ * 规则只有四条，全部确定性（同一套模板每次算出同一份样式，可直接断言）：
+ *  ① 墨色 = 卡片标题色 `title.from`——深底模板本来就是亮字、纸面本来就是墨字，
+ *     这套搭配是卡片自己"在底上可读"的答案，直接复用；
+ *  ② 描边 = 与底色相反的半透明色（深底黑边 / 浅底白边）——**它才是"任何背景都读得清"的保险**，
+ *     所以纸面模板（墨字）落在深色视频上也不会糊成一团；
+ *  ③ 色块 / 跳跳球 = 卡片强调色 `accent`（片子的高亮与卡片同一支色）；
+ *  ④ 色块浓淡：浅底 0.18 / 深底 0.22（与四套预设同一量级，不抢字）。
+ */
+export function stripStyleFromCard(card: CardStyle): StripStyle {
+  const light = isLightCard(card)
+  const accent = colorSwatchOf(card.accent)
+  return normalizeStripStyle({
+    ink: card.title.from,
+    halo: light ? 'rgba(255,255,255,0.92)' : 'rgba(0,0,0,0.85)',
+    haloWidth: 3,
+    shadow: light ? 'rgba(0,0,0,0.28)' : 'rgba(0,0,0,0.55)',
+    shadowBlur: 0,
+    blockColor: accent,
+    blockAlpha: light ? 0.18 : 0.22,
+    ballColor: accent,
+  })
+}
+
+/**
+ * adj1266：主题选择的**基准样式**——`auto`（缺省）走卡片模板，其它走四套预设。
+ *
+ * 这是"配色从哪来"的唯一入口：界面、sidecar 判重、断言都调它，不许各写一套。
+ * `card` 缺省（拿不到模板时）退回默认预设，行为与 adj1265 一致。
+ */
+export function stripBaseStyleOf(theme: string | null | undefined, card?: CardStyle | null): StripStyle {
+  const id = (theme ?? '').trim()
+  if (id === '' || id === STRIP_THEME_AUTO) {
+    return card !== null && card !== undefined ? stripStyleFromCard(card) : stripThemeOf(DEFAULT_STRIP_THEME_ID)
+  }
+  return stripThemeOf(id)
+}
+
+/**
  * adj1265：**用户自定义的那几项**（M4 主题编辑器）。
  *
  * 为什么存"覆盖"而不是整份样式：整份存下来会把当时预设的值一起冻进 sidecar，
@@ -129,12 +220,16 @@ export function stripThemeOf(id: StripThemeId | string | null | undefined): Stri
  *
  * 覆盖里的非法色串/越界数值一律回退到该主题预设的值（`normalizeStripStyle` 的 `base`），
  * 所以用户手抖写坏一个色串，最多那一项没生效，不会整条视频崩。
+ *
+ * adj1266：第三个参数 `card` 是"跟随卡片模板"（`auto`）时的调色板来源；
+ * 明确选了四套预设时它不影响结果。缺省省略 ⇒ 等价于旧行为。
  */
 export function stripStyleOf(
-  id: StripThemeId | string | null | undefined,
+  id: string | null | undefined,
   override?: StripStyleOverride | null,
+  card?: CardStyle | null,
 ): StripStyle {
-  const base = stripThemeOf(id)
+  const base = stripBaseStyleOf(id, card)
   return normalizeStripStyle(override ?? null, base)
 }
 

@@ -1612,6 +1612,9 @@ export const linearSyncCopy = {
   videoGain: '视频原声',
   mixRule: '没加单独伴奏 ⇒ 用视频原声；加了 ⇒ 用单独那条',
   theme: '配色',
+  /** adj1266（用户 2026-11-09 拍板）：配色默认跟着卡片模板走；四套预设仍可明确指定 */
+  themeAuto: (name: string) => `跟随卡片模板（${name}）`,
+  themeHint: '默认跟着卡片模板的配色走：换模板，谱带的墨色/描边/色块/球一起换；也可指定下面四套预设',
   bandTop: '谱带位置',
   bandScale: '谱带大小',
   /**

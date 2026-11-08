@@ -33,6 +33,14 @@
  *    跑不了会在第 1 条就红，并打印原因）。
  *
  * 用法：`npm run verify:video`（不属于 `npm run smoke`：它依赖浏览器与编码器）。
+ *
+ * ## 真机素材（adj1266，可选）
+ *
+ * 用户 2026-11-09 给了一段真手机拍的 mp4（`一直很安静.mp4`）⇒ 脚本加了第 ⑤ 段：
+ * 设 `IJIPU_VIDEO_REAL=<路径>` 就额外跑一遍「解码 / 显示宽高 / 播放 / 截 2s 出片 / 读回」；
+ * 可再设 `IJIPU_VIDEO_REAL2=<路径>` 加一段备用真素材（主素材解不了时补验 H.264 真素材）。
+ * 不设就跳过（CI 与没这段素材的机器不受影响）；跳过会明确打印一行，不假装验过。
+ * 解不了的素材（如本机不支持的 HEVC）只验"提示明确"，并明说端到端没验完。
  */
 import { createServer } from 'node:http'
 import { existsSync, statSync, readFileSync, mkdirSync } from 'node:fs'
@@ -394,6 +402,226 @@ try {
     await sleep(5000)
     const durCard = await evalJs(`(document.body.innerText.match(/ \\/ (0:0\\d\\.\\d\\d)/) ?? ['', ''])[1]`)
     check('带卡片的成片读回来时长 ≈ 6.5s（片头/片尾段真的编进文件了）', /0:06\./.test(durCard), durCard)
+  }
+
+  /**
+   * ⑤ adj1266（用户 2026-11-09）：**真机素材**回归。
+   *
+   * 前三段用的是脚本现编的 2s 素材（尺寸/旋转元数据像手机，但不是真手机拍的）。
+   * 真机素材可能带 HDR / 10bit / 变帧率 / 方向随重力变化 / **HEVC 编码**，
+   * 解码路径与编码器现编的不完全一样，所以这里把真 mp4 走同一条链：
+   * 解码 → 显示宽高（旋转算进去）→ 播放时钟 → 截 2 秒出片 → 再读回时长。
+   *
+   * 两个可选的素材位：
+   *  · `IJIPU_VIDEO_REAL`：主素材（用户点名的那段）；
+   *  · `IJIPU_VIDEO_REAL2`：备用真素材（比如主素材是 HEVC、本机解不了时，用一段 H.264 真素材补验）。
+   * 解不了的素材**不算通过**：单独验"提示是否明确"，然后明说这一段没验完（不假装验过）。
+   */
+  const realVideos = [process.env.IJIPU_VIDEO_REAL, process.env.IJIPU_VIDEO_REAL2]
+    .map((s) => (s ?? '').trim())
+    .filter((s) => s !== '')
+  if (realVideos.length === 0) {
+    console.log('— 真机素材：未设置 IJIPU_VIDEO_REAL / IJIPU_VIDEO_REAL2，跳过（这一段没验）—')
+  }
+  for (const realVideo of realVideos) {
+    if (!existsSync(realVideo)) {
+      check(`真机素材存在（${realVideo}）`, false, '文件不存在')
+      continue
+    }
+    const realName = path.basename(realVideo)
+    const realNameJs = JSON.stringify(realName)
+    const realMb = Math.round(statSync(realVideo).size / 1048576)
+    console.log(`— 真机素材：${realName}（${realMb}MB）→ 解码 / 显示宽高 / 播放 / 截 2s 出片 —`)
+    await send('DOM.setFileInputFiles', { nodeId: input.nodeId, files: [realVideo] })
+    /**
+     * ⚠ 必须等**这个文件名**出现在状态行，不能只等"带原声"——
+     * 上一段素材（card-reimport）也带原声，`waitFor` 会立刻命中旧文字，
+     * 后面量到的全是上一段的尺寸/时长（本轮第一次跑就这么假绿了 4 条）。
+     * 同时要把三类解码失败的人话也算"有结果"（HEVC 走的是 `noDecoder`，不是 `unreadable`）。
+     */
+    await waitFor(
+      `document.body.innerText.includes(${realNameJs} + '（') ||
+       /打不开这个视频|这个文件里没有画面轨|这个视频的编码本机解不了|视频解码失败（原因不明）/.test(document.body.innerText)`,
+      '真机视频载入（文件名或明确报错）',
+      900,
+    )
+    const loaded = await evalJs(`(() => {
+      const t = document.body.innerText
+      const err = t.match(/打不开这个视频[^\\n]*|这个文件里没有画面轨[^\\n]*|这个视频的编码本机解不了[^\\n]*|视频解码失败（原因不明）[^\\n]*/)
+      return {
+        named: t.includes(${realNameJs} + '（'),
+        error: err ? err[0] : '',
+        audio: t.includes(${realNameJs} + '（带原声）'),
+      }
+    })()`)
+    if (!loaded.named) {
+      /**
+       * 解不了：**这不是失败**（负向判据要求"必须明确提示、不许静默黑屏"），
+       * 但也**不是通过**——后面的画布/播放/出片一概没验，所以要单独说清楚。
+       */
+      check(
+        `真机素材（${realName}）：解不了时给出明确人话（不静默黑屏）`,
+        loaded.error !== '',
+        loaded.error === '' ? '既没载入、也没报错' : loaded.error,
+      )
+      console.log(`  （${realName} 没能进台面：${loaded.error}；跳过画布/播放/出片断言，不假装验过）`)
+      continue
+    }
+    check(
+      `真机素材（${realName}）：台面真的换成了这个文件（状态行显示文件名，不是上一段素材）`,
+      true,
+      loaded.error,
+    )
+    // 大素材的音轨要整条解出来（播放/出片都要用）：等它解完再往下验，否则"播放不动"是假红
+    if (loaded.audio) {
+      await waitFor(`document.body.innerText.includes('用的是视频原声')`, '真机视频音轨解码完成（台面写出"用的是视频原声"）', 900)
+    }
+    await sleep(1800)
+    const realInfo = await evalJs(`(() => {
+      const txt = document.body.innerText
+      const size = txt.match(/(\\d{2,5})×(\\d{2,5}) · 30fps/)
+      const dur = txt.match(/ \\/ (\\d+):(\\d{2})\\.(\\d{2})/)
+      return {
+        w: size ? Number(size[1]) : 0,
+        h: size ? Number(size[2]) : 0,
+        dur: dur ? dur[0].slice(3) : '',
+        durSec: dur ? Number(dur[1]) * 60 + Number(dur[2]) + Number(dur[3]) / 100 : 0,
+        error: txt.includes('打不开这个视频'),
+        audio: txt.includes('带原声'),
+      }
+    })()`)
+    check(
+      '真机素材：解码成功（没有"打不开这个视频"），读到的是这段长素材（时长 > 30s，不是上一段 6.5s）',
+      realInfo.error === false && realInfo.w > 0 && realInfo.durSec > 30,
+      JSON.stringify(realInfo),
+    )
+    check(
+      '真机素材：画布按**显示宽高**定（偶数化、不低于 640×360；不是兜底的 1080×1920 就当没验）',
+      realInfo.w >= 640 && realInfo.h >= 360 && realInfo.w % 2 === 0 && realInfo.h % 2 === 0,
+      `${realInfo.w}×${realInfo.h}`,
+    )
+    const realColors = await evalJs(`(() => {
+      const cv = document.querySelector('[data-role="linear-stage"]')
+      const g = cv.getContext('2d')
+      const d = g.getImageData(0, 0, cv.width, cv.height).data
+      const set = new Set()
+      const stepX = Math.max(1, Math.floor(cv.width / 48))
+      const stepY = Math.max(1, Math.floor(cv.height / 48))
+      for (let y = 0; y < cv.height; y += stepY) {
+        for (let x = 0; x < cv.width; x += stepX) {
+          const i = (y * cv.width + x) * 4
+          set.add((d[i] << 16) | (d[i + 1] << 8) | d[i + 2])
+        }
+      }
+      return set.size
+    })()`)
+    check(
+      '真机素材：画面里真的有视频帧（采样到 > 120 种颜色；纯色兜底 + 一条谱带出不了这么多色）',
+      realColors > 120,
+      `采样色数 ${realColors}`,
+    )
+    if (loaded.audio) {
+      // 播放时钟真的在走（有音轨时走音频时钟）
+      const posBefore = await evalJs(`document.querySelector('[data-role="linear-pos"]')?.textContent ?? ''`)
+      await evalJs(
+        `[...document.querySelectorAll('.linear-panel .btn')].find((el) => (el.textContent || '').trim() === '播放')?.click(), true`,
+      )
+      await sleep(1600)
+      const posAfter = await evalJs(`document.querySelector('[data-role="linear-pos"]')?.textContent ?? ''`)
+      await evalJs(
+        `[...document.querySelectorAll('.linear-panel .btn')].find((el) => (el.textContent || '').trim() === '暂停')?.click(), true`,
+      )
+      check('真机素材：播放时读数在走（音频时钟真的在跑）', posBefore !== posAfter && posAfter !== '', `${posBefore} → ${posAfter}`)
+    } else {
+      console.log('  （真机素材无音轨：跳过"播放时钟"这一条，不假装验过）')
+    }
+
+    // 只截前 2 秒出片（整段 4 分钟会跑太久；截 2s 也足以验证"真机素材能进成片"）
+    const totalMs = await evalJs(`(() => {
+      const t = document.querySelector('[data-role="linear-total"]')?.textContent ?? ''
+      const m = t.match(/\\/\\s*(\\d+):(\\d{2})\\.(\\d{2})/)
+      return m ? (Number(m[1]) * 60 + Number(m[2])) * 1000 + Number(m[3]) * 10 : 0
+    })()`)
+    const seekFrac = (ms) => `(() => {
+      const cv = document.querySelector('[data-role="linear-wave"]')
+      const r = cv.getBoundingClientRect()
+      cv.dispatchEvent(new PointerEvent('pointerdown', {
+        clientX: r.left + (r.width * ${ms}) / Math.max(1, ${totalMs}),
+        clientY: r.top + 10,
+        bubbles: true,
+      }))
+      return true
+    })()`
+    await evalJs(seekFrac(0))
+    await sleep(300)
+    await evalJs(
+      `[...document.querySelectorAll('.linear-panel .btn')].find((el) => (el.textContent || '').trim() === '起点=当前')?.click(), true`,
+    )
+    await sleep(200)
+    await evalJs(seekFrac(2000))
+    await sleep(300)
+    await evalJs(
+      `[...document.querySelectorAll('.linear-panel .btn')].find((el) => (el.textContent || '').trim() === '终点=当前')?.click(), true`,
+    )
+    await sleep(400)
+    const rangeText = await evalJs(`(document.body.innerText.match(/0:\\d{2}\\.\\d{2} → 0:\\d{2}\\.\\d{2}（0:\\d{2}\\.\\d{2}）/) ?? [''])[0]`)
+    check('真机素材：导出段能截成约 2 秒（不是整段 4 分钟）', /（0:02\.\d{2}）/.test(rangeText), rangeText)
+    /**
+     * 无头 Chrome 对**同名文件**的第二次下载会静默丢弃（`E-2026-565`）：
+     * 上一段卡片成片也叫 `连续动态谱-….mp4`，先改名腾开名字，否则这次的下载根本落不下来。
+     */
+    for (const f of await readdir(DL)) {
+      if (f.endsWith('.mp4') && f.startsWith('连续动态谱')) {
+        await rename(path.join(DL, f), path.join(DL, `prev-${Date.now()}-${f}`))
+      }
+    }
+    const realBefore = new Set(await readdir(DL))
+    // 换视频会重建会话（谱带光栅/卡片图解码）；重建期间「出片」是 disabled 的，点了等于没点
+    await waitFor(
+      `(() => {
+        const b = [...document.querySelectorAll('.linear-panel .btn')].find((el) => (el.textContent || '').trim() === '出片')
+        return !!b && !b.disabled
+      })()`,
+      '「出片」按钮可用（会话重建完成）',
+      200,
+    )
+    await evalJs(
+      `[...document.querySelectorAll('.linear-panel .btn')].find((el) => (el.textContent || '').trim() === '出片')?.click(), true`,
+    )
+    let realOut = null
+    let realState = ''
+    for (let i = 0; i < 600 && realOut === null; i++) {
+      await sleep(300)
+      if (i % 10 === 0) {
+        realState = await evalJs(`(() => JSON.stringify({
+          btn: [...document.querySelectorAll('.linear-panel .btn')].find((el) => /出片|取消/.test((el.textContent || '').trim()))?.textContent ?? '',
+          prog: document.querySelector('[data-role="linear-progress"]')?.textContent ?? '',
+          notice: document.querySelector('.linear-notice')?.textContent ?? '',
+        }))()`)
+      }
+      for (const f of await readdir(DL)) {
+        if (f.endsWith('.mp4') && !realBefore.has(f)) realOut = f
+      }
+    }
+    const realOutPath = realOut === null ? null : path.join(DL, realOut)
+    const realOutSize = realOutPath !== null ? statSync(realOutPath).size : 0
+    check(
+      '真机素材：能出片（真 mp4、不是空壳）',
+      realOut !== null && realOutSize > 20000,
+      realOut === null ? `没出现；最后状态：${realState}` : `${realOut} ${realOutSize} 字节`,
+    )
+    if (realOutPath !== null) {
+      // 读回自己出的片：时长应 ≈ 2s（说明真机素材的帧与音轨都进了文件）
+      await writeFile(path.join(DL, 'real-reimport.mp4'), readFileSync(realOutPath))
+      await send('DOM.setFileInputFiles', { nodeId: input.nodeId, files: [path.join(DL, 'real-reimport.mp4')] })
+      await waitFor(`document.body.innerText.includes('real-reimport.mp4（')`, '成片读回（状态行显示 real-reimport.mp4）', 300)
+      await sleep(2500)
+      const durReal = await evalJs(`(() => {
+        const m = document.body.innerText.match(/ \\/ (\\d+:\\d{2}\\.\\d{2})/)
+        return m ? m[1] : ''
+      })()`)
+      check('真机素材：成片读回来时长 ≈ 2s（画面/音轨等长）', /^0:02\.\d{2}$/.test(durReal), durReal)
+    }
   }
   ws.close()
 } catch (e) {

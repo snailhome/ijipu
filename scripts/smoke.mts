@@ -177,7 +177,7 @@ import { buildLinearStrip, stripXAt, stripEndMs, stripBallAt } from '@ijipu/engi
 import { chunkPlanOf, stripSvgOf, stripLayoutOf, STRIP_INK_COLORS } from '../src/export/video/stripSvg'
 // adj1260：一帧的几何（定位块/球/滚动）与主题钳制——都是纯函数
 import { stripFrameAt, bandTopOf } from '../src/export/video/stripFrame'
-import { normalizeStripStyle, stripThemeOf, stripStyleOf, stripStyleOverrideOf, colorSwatchOf, hasStripStyleOverride, STRIP_THEMES } from '../src/export/video/stripTheme'
+import { normalizeStripStyle, stripThemeOf, stripStyleOf, stripStyleOverrideOf, colorSwatchOf, hasStripStyleOverride, STRIP_THEMES, STRIP_THEME_AUTO, stripStyleFromCard, stripBaseStyleOf, colorLuminanceOf, isLightCard } from '../src/export/video/stripTheme'
 // adj1264：连续动态谱对拍台的纯口径（时钟映射 / 混音三档 / 偶数化 / 一个音符宽的色块）
 import {
   evenSizeOf,
@@ -193,6 +193,8 @@ import {
   linearCardFrameAt,
   linearCardTimelineOf,
   linearCardsOf,
+  /* adj1266：出片窗口（保留段 → 编多长、从媒体哪一刻起画） */
+  linearExportWindowOf,
   mediaMsOfSession,
   sessionMsOfMedia,
 } from '../src/export/video/linearSync'
@@ -212,6 +214,7 @@ import { keySignatureOf } from '@ijipu/engine/index.ts'
 import { cardTemplateZipNameOf, createCardTemplateZip, readCardTemplateZip } from '../src/export/video/cardTemplateZip.ts'
 // adj1176：卡片模板库解析 / 背景图取景几何 / 水印与印章多字
 import {
+  CARD_TEMPLATES,
   DEFAULT_CARD_STYLE,
   cardFontStack,
   cardImageRect,
@@ -38928,5 +38931,185 @@ Q: 1 2 3 4 |
     'adj1265 没开卡片的老 sidecar 不凭空写出 cards（保持旧文件形状）',
     noCardsField?.linear?.cards === undefined && noCardsField?.linear?.style === undefined,
     JSON.stringify(noCardsField?.linear),
+  )
+}
+
+/**
+ * adj1266（M5，用户 2026-11-09 拍板「配色随卡片模板」）：
+ * 谱带配色默认由**卡片模板的调色板**推出来，不再默认某套固定预设。
+ *
+ * 为什么这条要机器守：配色和卡片在同一个画面里，最容易退化成"两处各挑各的"——
+ * 卡是深空蓝、谱带却是金色，看起来像两个产品拼在一起。这里把四条映射规则钉死：
+ *  ① 墨色 = 卡片标题色（深底亮字 / 纸面墨字）；
+ *  ② 描边 = 与底相反（深底黑边 / 浅底白边）——它才是"任何背景都读得清"的保险；
+ *  ③ 色块/球 = 卡片强调色；
+ *  ④ `auto` 缺省、显式预设优先、自定义覆盖照旧叠在基准之上。
+ */
+console.log('[adj1266] M5：谱带配色随卡片模板（auto = 卡片调色板）')
+{
+  const paper = cardStyleById('paper')
+  const brand = cardStyleById('brand')
+  const inkCard = cardStyleById('ink')
+  const minimal = cardStyleById('minimal')
+  const paperStyle = stripStyleFromCard(paper)
+  const brandStyle = stripStyleFromCard(brand)
+
+  check(
+    'adj1266 纸面模板 ⇒ 谱带墨色跟卡片标题色（墨字）、描边反过来给白边（浅底不配黑边）',
+    paperStyle.ink === paper.title.from &&
+      paperStyle.ink === '#241f19' &&
+      colorSwatchOf(paperStyle.halo) === '#ffffff' &&
+      colorSwatchOf(paperStyle.shadow) === '#000000',
+    JSON.stringify(paperStyle),
+  )
+  check(
+    'adj1266 深空蓝模板 ⇒ 白字黑边，色块与球都用卡片强调色（霓虹青）',
+    brandStyle.ink === '#ffffff' &&
+      colorSwatchOf(brandStyle.halo) === '#000000' &&
+      brandStyle.blockColor === '#00f0ff' &&
+      brandStyle.ballColor === '#00f0ff',
+    JSON.stringify(brandStyle),
+  )
+  check(
+    'adj1266 四套内置模板都能推出可用配色（墨色与描边不同色、色块=强调色、数值全在钳制范围内）',
+    CARD_TEMPLATES.every((c) => {
+      const s = stripStyleFromCard(c)
+      return (
+        colorSwatchOf(s.ink) !== colorSwatchOf(s.halo) &&
+        s.blockColor === colorSwatchOf(c.accent) &&
+        s.ballColor === s.blockColor &&
+        s.haloWidth > 0 &&
+        s.blockAlpha > 0 &&
+        s.blockAlpha < 1 &&
+        JSON.stringify(s) === JSON.stringify(normalizeStripStyle(s))
+      )
+    }),
+    CARD_TEMPLATES.map((c) => `${c.name}:${stripStyleFromCard(c).ink}`).join(' / '),
+  )
+  check(
+    'adj1266 亮度判据：#f3ead7 是浅底、#1e2a5e 是深底（纸面 / 深空蓝各归各边，判断不看名字看颜色）',
+    colorLuminanceOf('#f3ead7') > 0.5 &&
+      colorLuminanceOf('#1e2a5e') < 0.5 &&
+      isLightCard(paper) &&
+      !isLightCard(brand) &&
+      !isLightCard(inkCard) &&
+      !isLightCard(minimal),
+    `${colorLuminanceOf('#f3ead7').toFixed(2)}/${colorLuminanceOf('#1e2a5e').toFixed(2)}`,
+  )
+  check(
+    'adj1266 换卡片模板 ⇒ 推出来的配色真的换（墨色/色块都跟着变，不是只换标题）',
+    paperStyle.ink !== brandStyle.ink &&
+      paperStyle.blockColor !== brandStyle.blockColor &&
+      paperStyle.halo !== brandStyle.halo,
+    `${paperStyle.ink}/${brandStyle.ink}`,
+  )
+  check(
+    'adj1266 缺省主题 = auto：不写 theme ⇒ 跟卡片；显式预设则以预设为准（卡片不干扰）',
+    stripBaseStyleOf(undefined, paper).ink === paper.title.from &&
+      stripBaseStyleOf('', paper).ink === paper.title.from &&
+      stripBaseStyleOf(STRIP_THEME_AUTO, brand).ink === '#ffffff' &&
+      stripBaseStyleOf('gold', paper).ink === stripThemeOf('gold').ink,
+    `${stripBaseStyleOf(undefined, paper).ink}/${stripBaseStyleOf('gold', paper).ink}`,
+  )
+  const overrideOnAuto = stripStyleOf(undefined, { ink: '#00ff00' }, paper)
+  check(
+    'adj1266 auto 之上仍可自定义一笔：只改墨色，描边/色块仍来自卡片模板',
+    overrideOnAuto.ink === '#00ff00' &&
+      overrideOnAuto.blockColor === colorSwatchOf(paper.accent) &&
+      overrideOnAuto.halo === paperStyle.halo,
+    JSON.stringify(overrideOnAuto),
+  )
+
+  /* ---- sidecar：auto 下的"没改过"也要判得出来 ---- */
+  const autoSame = parseSyncDoc(
+    JSON.stringify({
+      version: 1,
+      audio: '',
+      card: { template: 'paper' },
+      linear: { style: { ink: paper.title.from } },
+    }),
+  ).doc
+  check(
+    'adj1266 sidecar（auto）读到"与卡片调色板相同"的覆盖项 ⇒ 丢弃（不然每份文件都留一笔假自定义）',
+    autoSame?.linear?.style === undefined,
+    JSON.stringify(autoSame?.linear),
+  )
+  const autoKept = parseSyncDoc(
+    JSON.stringify({
+      version: 1,
+      audio: '',
+      card: { template: 'paper' },
+      linear: { style: { ink: '#123456' } },
+    }),
+  ).doc
+  check(
+    'adj1266 sidecar（auto）里"真改了"的一项仍然保留（auto 不吞用户改动）',
+    autoKept?.linear?.style?.ink === '#123456',
+    JSON.stringify(autoKept?.linear),
+  )
+  const presetSame = parseSyncDoc(
+    JSON.stringify({
+      version: 1,
+      audio: '',
+      linear: { theme: 'paper', style: { ink: stripThemeOf('paper').ink } },
+    }),
+  ).doc
+  check(
+    'adj1266 明确选了预设 ⇒ 基准还是那套预设（不会拿卡片调色板去误删）',
+    presetSame?.linear?.style === undefined,
+    JSON.stringify(presetSame?.linear),
+  )
+
+  /* ---- 界面接线：auto 不落 theme 字段、四套预设仍可明确指定 ---- */
+  const linearDialogSrc = readFileSync(join(root, 'src', 'dialogs', 'LinearSyncDialog.tsx'), 'utf8')
+  check(
+    'adj1266 台面接线：缺 theme ⇒ auto；选 auto 时删掉字段不写盘；下拉第一项是「跟随卡片模板（模板名）」',
+    /linearStyle\.theme \?\? STRIP_THEME_AUTO/.test(linearDialogSrc) &&
+      /delete next\.theme/.test(linearDialogSrc) &&
+      /linearSyncCopy\.themeAuto\(effectiveCardStyle\.name\)/.test(linearDialogSrc) &&
+      /stripStyleOf\(themeId, styleOverride, effectiveCardStyle\)/.test(linearDialogSrc),
+    '',
+  )
+
+  /**
+   * adj1266：**出片窗口**（真机素材暴露的真 bug，`E-2026-566`）。
+   *
+   * adj1264 里"导出段"只裁了音轨，画面按整首编 ⇒ 2 秒的段落在 3:56 的素材上要编整首，
+   * 成片是"整首画面 + 2 秒声音"。采样素材都是 2 秒，所以三条验收全绿也没发现。
+   */
+  const range = { startMs: 5000, endMs: 65_000, durationMs: 60_000 }
+  const tl = linearCardTimelineOf(range, linearCardsOf(true))
+  const winNoCards = linearExportWindowOf({ range, cardsOn: false, cardTotalMs: tl.totalMs })
+  check(
+    'adj1266 不带卡片 ⇒ 出片窗口 = 保留段（画面从 range.startMs 起画，不再编整首）',
+    winNoCards.totalMs === 60_000 && winNoCards.mediaOffsetMs === 5000,
+    JSON.stringify(winNoCards),
+  )
+  const winCards = linearExportWindowOf({ range, cardsOn: true, cardTotalMs: tl.totalMs })
+  check(
+    'adj1266 带卡片 ⇒ 出片窗口 = 卡片时间轴总长、偏移 0（片头/片尾本来就在会话里）',
+    winCards.totalMs === tl.totalMs && winCards.mediaOffsetMs === 0,
+    JSON.stringify(winCards),
+  )
+  const winWhole = linearExportWindowOf({
+    range: { startMs: 0, endMs: 60_000, durationMs: 60_000 },
+    cardsOn: false,
+    cardTotalMs: 0,
+  })
+  check(
+    'adj1266 保留段 = 整首 ⇒ 窗口就是整首（没裁时行为与旧版一致）',
+    winWhole.totalMs === 60_000 && winWhole.mediaOffsetMs === 0,
+    JSON.stringify(winWhole),
+  )
+  check(
+    'adj1266 台面确实按窗口出片（`totalMs: exportWindow.totalMs` + `draw(ctx, t + off)`）',
+    /totalMs: exportWindow\.totalMs/.test(linearDialogSrc) && /s\.draw\(ctx, t \+ off\)/.test(linearDialogSrc),
+    '',
+  )
+  const syncDocSrc = readFileSync(join(root, 'src', 'export', 'video', 'syncDoc.ts'), 'utf8')
+  check(
+    'adj1266 sidecar 解析用同一条基准（auto ⇒ 卡片模板；没有模板库时退回默认模板）',
+    /stripBaseStyleOf\(out\.theme, resolveCardStyle\(card\?\.template, \[\]\)\)/.test(syncDocSrc),
+    '',
   )
 }

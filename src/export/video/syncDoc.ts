@@ -21,10 +21,11 @@ import type { SyncAnchor, SyncSegmentStat, SyncTrim } from '@ijipu/engine'
 import {
   STRIP_STYLE_KEYS,
   normalizeStripStyle,
-  stripThemeOf,
+  stripBaseStyleOf,
   type StripStyle,
   type StripStyleOverride,
 } from './stripTheme'
+import { resolveCardStyle } from './cardTemplates'
 
 /** sidecar 后缀：`赤伶.jps` → `赤伶.jps.sync.json` */
 export const SYNC_SUFFIX = '.sync.json'
@@ -56,7 +57,10 @@ export interface SyncMix {
  * 换首歌应当各自不同（与卡片模板引用同一层）。
  */
 export interface SyncLinear {
-  /** 主题 id（`stripTheme.ts` 的四套之一） */
+  /**
+   * 配色主题：缺字段 / `auto` = **跟随卡片模板**（adj1266 用户拍板）；
+   * 四套预设 id（night/paper/gold/brand）才是"不跟卡片、明确指定"。
+   */
   theme?: string
   /** 谱带纵向位置（0~1，默认 0.25 = 上 1/4） */
   topRatio?: number
@@ -417,7 +421,15 @@ export function parseSyncDoc(text: string): { doc: SyncDoc | null; error?: strin
     const styleRaw = l.style
     if (styleRaw !== null && typeof styleRaw === 'object' && !Array.isArray(styleRaw)) {
       const sIn = styleRaw as Record<string, unknown>
-      const base = stripThemeOf(out.theme)
+      /**
+       * adj1266：基准要跟着主题走——`auto`（缺字段）时基准是**卡片模板的调色板**，
+       * 否则"与基准相同"的项判不出来（会把用户改回原值的那一笔也留在 sidecar 里）。
+       *
+       * 这里只知道模板 **id**：内置模板能精确还原；用户自建模板在 L1 模板库里、
+       * sidecar 层拿不到，退回默认模板的调色板（只影响"哪些项算没改"，不影响画出来的颜色——
+       * 界面重算时用的是真模板）。
+       */
+      const base = stripBaseStyleOf(out.theme, resolveCardStyle(card?.template, []))
       const partial: Partial<StripStyle> = {}
       const keys: string[] = []
       for (const k of STRIP_STYLE_KEYS) {
