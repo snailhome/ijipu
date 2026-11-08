@@ -175,6 +175,9 @@ import { buildPlaySequence, inferBpm, schedulePlay, matchInstrument, resolveInst
 import { buildLinearStrip, stripXAt, stripEndMs, stripBallAt } from '@ijipu/engine/index.ts'
 // adj1259：单行谱出 SVG + 配色替换 + 分块规划（纯函数，Node 里可直接断言）
 import { chunkPlanOf, stripSvgOf, STRIP_INK_COLORS } from '../src/export/video/stripSvg'
+// adj1260：一帧的几何（定位块/球/滚动）与主题钳制——都是纯函数
+import { stripFrameAt, bandTopOf } from '../src/export/video/stripFrame'
+import { normalizeStripStyle, stripThemeOf, STRIP_THEMES } from '../src/export/video/stripTheme'
 import { codePosToNoteId, noteIdToCodePos } from '@ijipu/engine/cursorMap.ts'
 // M1-1 动态谱时间轴：把拍段收成"定时矩形"，供视频逐帧取"此刻哪几块在亮"
 import { buildRectTrack, rectsActiveAt } from '@ijipu/engine/index.ts'
@@ -38368,4 +38371,31 @@ Q: 1 2 3 4 | 5 6 7 1' | 2 3 4 5 | 6 7 1' 2' | 3 4 5 6 | 7 1' 2' 3' | 4 5 6 7 | 1
     plan[plan.length - 1].x + plan[plan.length - 1].w === a.strip.width
   check('adj1259 分块首尾相接、不重叠不漏（末块按剩余宽裁）', cover, `chunks=${plan.length}`)
   check('adj1259 块宽不被钳到 0 以下（极小条带也有 1 块）', chunkPlanOf(1, 1200).length === 1, '')
+
+  /* ---- adj1260：一帧几何（定位块 1/3、球固定、谱带默认上 1/4）与主题钳制 ---- */
+  const LAY = { viewW: 1080, viewH: 1920, stripH: 300, topRatio: 0.25, blockRatio: 1 / 3 }
+  const g0 = stripFrameAt(0, a.strip, LAY)
+  check('adj1260 定位色块在画面左 1/3（不是 1/4、也不是居中）', g0.blockX === 360, `x=${g0.blockX}`)
+  check('adj1260 谱带默认落在上 1/4', g0.bandTop === 480, `top=${g0.bandTop}`)
+  check('adj1260 谱带比例过大时不出画（夹到 viewH − stripH）', bandTopOf(1920, 300, 1) === 1620, String(bandTopOf(1920, 300, 1)))
+  const ballFixed = [0, 170, 640, 1500].every((t) => stripFrameAt(t, a.strip, LAY).ballX === g0.blockX)
+  check('adj1260 球的 x 固定压在色块上（谱面动、球不动）', ballFixed, '')
+  // 当前演奏时点与色块对应：音符起点处 scrollX + blockX == 该音 x
+  const r0 = a.strip.runs[0]
+  const gAtRun = stripFrameAt(r0.t0, a.strip, LAY)
+  check('adj1260 段起点处"滚动量 + 色块 x" = 该段 x0（时点与色块对齐）', Math.abs(gAtRun.scrollX + gAtRun.blockX - r0.x0) < 0.2, `${gAtRun.scrollX}+${gAtRun.blockX} vs ${r0.x0}`)
+  let monoScroll = true
+  let prev = -1e9
+  for (let t = 0; t <= stripEndMs(a.strip); t += 40) {
+    const s = stripFrameAt(t, a.strip, LAY).scrollX
+    if (s < prev - 1e-6) monoScroll = false
+    prev = s
+  }
+  check('adj1260 滚动量随时间单调不减（不会来回抖）', monoScroll, '')
+
+  const bad = normalizeStripStyle({ haloWidth: -5, shadowBlur: 999, blockAlpha: 5, ink: 'not a color' })
+  const n0 = normalizeStripStyle(STRIP_THEMES[0].style)
+  check('adj1260 主题越界被钳制（描边 0~12、模糊 0~24、透明度 0~1）', bad.haloWidth === 0 && bad.shadowBlur === 24 && bad.blockAlpha === 1, `${bad.haloWidth}/${bad.shadowBlur}/${bad.blockAlpha}`)
+  check('adj1260 非法色串回退到基准色（不把坏值写进 canvas）', bad.ink === n0.ink, bad.ink)
+  check('adj1260 四套内置主题都过得了钳制（没有一套自带坏值）', STRIP_THEMES.every((t) => JSON.stringify(stripThemeOf(t.id)) === JSON.stringify(normalizeStripStyle(t.style))), '')
 }
