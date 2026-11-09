@@ -199,6 +199,8 @@ export function LinearSyncDialog() {
   const blockRatio = linearStyle.blockRatio ?? 1 / 3
   /** adj1277：谱带放大倍数（条带按谱面原尺寸排版，这里只决定"放多大"） */
   const bandScale = linearStyle.bandScale ?? DEFAULT_BAND_SCALE
+  /** adj1280：谱带在画布上占的宽度比例（0.2~1；越小一行显示的拍越少） */
+  const bandWidth = linearStyle.bandWidth ?? 1
   /** adj1271：两端淡化（占画布宽的比例；缺字段 = 0.08，0 = 关） */
   const edgeFade = linearStyle.edgeFade ?? 0.08
   /** adj1278：没有视频时的工作画布尺寸（预览用；导出按谱带裁） */
@@ -275,6 +277,8 @@ export function LinearSyncDialog() {
      */
     return evenSizeOf(Math.max(320, Math.round(outW)), Math.max(120, Math.round(outH)))
   }, [video, outW, outH])
+  /** adj1280：谱带在画布上的像素宽度（预览/出片取景/参考线共用这一个数） */
+  const bandW = Math.max(64, Math.round(out.width * bandWidth))
 
   // ---------- 合成音 ----------
   const [synthBuf, setSynthBuf] = useState<AudioBuffer | null>(null)
@@ -444,6 +448,7 @@ export function LinearSyncDialog() {
       background,
       lay: layRef.current,
       bandScale,
+      bandWidth,
       edgeFade,
       mediaTotalMs: clock.totalMs,
       ...(cardsOn
@@ -469,7 +474,7 @@ export function LinearSyncDialog() {
       sessionRef.current = null
       setSessionReady(false)
     }
-  }, [bgColor, bgImage, bgNone, bandScale, cardBpm, cardMeta, cards, cardsOn, clock.totalMs, edgeFade, linearCardStyle, linearStripStyle, out.height, out.width, range.endMs, range.startMs, strip, stripCfg, video])
+  }, [bgColor, bgImage, bgNone, bandScale, bandWidth, cardBpm, cardMeta, cards, cardsOn, clock.totalMs, edgeFade, linearCardStyle, linearStripStyle, out.height, out.width, range.endMs, range.startMs, strip, stripCfg, video])
 
   /** 位置只改会话内参数（见 `layRef`），不重建 */
   useEffect(() => {
@@ -635,24 +640,9 @@ export function LinearSyncDialog() {
     }
   }, [])
   /**
-   * 滚轮 = **谱带宽度**（"宽度/位置通过鼠标可以调整"）。
-   * 必须挂 **non-passive** 才能 `preventDefault`（React 的 onWheel 在根节点上是 passive 的），
-   * 否则放大预览后滚轮会同时滚舞台、又改宽度。
+   * adj1280（用户 2026-11-09「鼠标滚动是调整缩放比率，这不是我要的效果，取消」）：
+   * 画布上**不再接管滚轮** —— 舞台自己滚（放大预览后看细节），谱带宽度只从「谱带宽度」控件调。
    */
-  const wheelRef = useRef({ bandScale, linearStyle })
-  wheelRef.current = { bandScale, linearStyle }
-  useEffect(() => {
-    const el = stageRef.current
-    if (el === null) return
-    const onWheel = (e: WheelEvent): void => {
-      e.preventDefault()
-      const cur = wheelRef.current
-      const next = Math.max(1, Math.min(12, cur.bandScale - Math.sign(e.deltaY) * 0.5))
-      setExtras({ linear: { ...cur.linearStyle, bandScale: Math.round(next * 100) / 100 } })
-    }
-    el.addEventListener('wheel', onWheel, { passive: false })
-    return () => el.removeEventListener('wheel', onWheel)
-  }, [setExtras])
 
   /**
    * adj1274（用户 2026-11-09）：**谱带外框 + 曲/词分界虚线**——拖它们直接调位置/宽度/行间距。
@@ -1199,7 +1189,7 @@ export function LinearSyncDialog() {
       const view = linearExportViewOf({
         hasVideo: video !== null,
         hasBgImage: bgImage !== null,
-        outW: out.width,
+        outW: bandW,
         outH: out.height,
         bandH: Math.max(48, Math.round(strip.height * bandScale)),
         bandTop: bandTopOf(out.height, Math.max(48, Math.round(strip.height * bandScale)), topRatio),
@@ -1378,6 +1368,8 @@ export function LinearSyncDialog() {
                     style={{
                       top: pctOfHeight(bandTopOf(out.height, stripH, topRatio)),
                       height: pctOfHeight(stripH),
+                      // adj1280：外框宽度 = 谱带实际宽度（不再是整块画布）
+                      width: `${(bandW / Math.max(1, out.width)) * 100}%`,
                     }}
                   />
                   <div
@@ -1386,7 +1378,10 @@ export function LinearSyncDialog() {
                     role="slider"
                     aria-label={linearSyncCopy.guideQuciHint}
                     title={linearSyncCopy.guideQuciHint}
-                    style={{ top: pctOfHeight(quciGuideY) }}
+                    style={{
+                      top: pctOfHeight(quciGuideY),
+                      width: `${(bandW / Math.max(1, out.width)) * 100}%`,
+                    }}
                     onPointerDown={onGuideDown('quci')}
                     onPointerMove={onGuideMove}
                     onPointerUp={onGuideUp}
@@ -1396,7 +1391,12 @@ export function LinearSyncDialog() {
                     className="linear-guide-scale"
                     data-role="linear-guide-scale"
                     title={linearSyncCopy.guideScaleHint}
-                    style={{ top: pctOfHeight(bandTopOf(out.height, stripH, topRatio) + stripH) }}
+                    style={{
+                      top: pctOfHeight(bandTopOf(out.height, stripH, topRatio) + stripH),
+                      // adj1280：手柄贴谱带右缘（谱带变窄时跟着走）
+                      left: `${(bandW / Math.max(1, out.width)) * 100}%`,
+                      right: 'auto',
+                    }}
                     onPointerDown={onGuideDown('scale')}
                     onPointerMove={onGuideMove}
                     onPointerUp={onGuideUp}
@@ -1732,6 +1732,22 @@ export function LinearSyncDialog() {
               value={bandScale}
               aria-label={linearSyncCopy.bandScale}
               onChange={(e) => setExtras({ linear: { ...linearStyle, bandScale: Number(e.target.value) } })}
+            />
+            {/* adj1280：谱带宽度（越窄，一行里显示的拍越少） */}
+            <span className="sync-label" title={linearSyncCopy.bandWidthHint}>
+              {linearSyncCopy.bandWidth}
+            </span>
+            <input
+              className="sync-mix-range"
+              type="range"
+              min={0.2}
+              max={1}
+              step={0.01}
+              value={bandWidth}
+              data-role="linear-bandwidth"
+              aria-label={linearSyncCopy.bandWidth}
+              title={linearSyncCopy.bandWidthHint}
+              onChange={(e) => setExtras({ linear: { ...linearStyle, bandWidth: Number(e.target.value) } })}
             />
             <label className="sync-label" title={linearSyncCopy.lyricsHint}>
               <input

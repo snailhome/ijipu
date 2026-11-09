@@ -471,9 +471,11 @@ export function buildLinearStrip(
     x1: number,
     x2: number,
     onPair: (a: RunMap, b: RunMap) => void,
+    row?: number,
+    nearY?: number,
   ): boolean => {
-    const barA = measureOfX(measures, pageIndex, x1)
-    const barB = measureOfX(measures, pageIndex, x2)
+    const barA = measureOfX(measures, pageIndex, x1, row, nearY)
+    const barB = measureOfX(measures, pageIndex, x2, row, nearY)
     if (barA < 0 || barB < 0) return false
     const listA = runsByBar.get(barA) ?? []
     const listB = runsByBar.get(barB) ?? []
@@ -495,7 +497,7 @@ export function buildLinearStrip(
           y: Math.min(a.y(span.y1), b.y(span.y2)),
           half: undefined,
         })
-      })
+      }, span.src.row, span.src.rowTop ?? span.src.y)
       if (!ok) droppedCross += 1
     }
     for (const d of p.dynamics) {
@@ -504,7 +506,7 @@ export function buildLinearStrip(
         const x2 = b.x(d.x2)
         if (!(x2 > x1)) return
         page.dynamics.push({ ...d, x1: Math.max(0, x1), x2, y: Math.min(a.y(d.y), b.y(d.y)) })
-      })
+      }, undefined, d.y)
       if (!ok) droppedCross += 1
     }
   }
@@ -551,11 +553,33 @@ export function buildLinearStrip(
   }
 }
 
-/** 某个页面坐标 x 落在第几号源小节（找不到 -1） */
-function measureOfX(measures: SrcMeasure[], pageIndex: number, x: number): number {
+/**
+ * 某个页面坐标 x 落在第几号源小节（找不到 -1）。
+ *
+ * ⚠ `adj1280`（用户截图实报「曲部没有连音线，反倒下面行里多了不少连音线」）：
+ * **行与行的 x 范围是重叠的**（每一行都从页边距开始），只按 x 找会命中**别的行**的小节，
+ * 于是连音线的 y 用了别行的基线 —— 结果是"谱带上方没有线、下面飘着一排弧"。
+ * 现在优先按**行号**匹配（`PlacedSlur.row`），没有行号时按"离哪个基线近"。
+ */
+function measureOfX(
+  measures: SrcMeasure[],
+  pageIndex: number,
+  x: number,
+  row?: number,
+  nearY?: number,
+): number {
+  let fallback = -1
+  let best: { no: number; d: number } | null = null
   for (const m of measures) {
     if (m.pageIndex !== pageIndex) continue
-    if (x >= m.x0 - 0.5 && x < m.x1 + 0.5) return m.no
+    if (!(x >= m.x0 - 0.5 && x < m.x1 + 0.5)) continue
+    if (row !== undefined && m.rowIndex === row) return m.no
+    if (fallback < 0) fallback = m.no
+    if (nearY !== undefined) {
+      const d = Math.abs(m.baselineY - nearY)
+      if (best === null || d < best.d) best = { no: m.no, d }
+    }
   }
-  return -1
+  if (row !== undefined && fallback >= 0) return best?.no ?? fallback
+  return best?.no ?? fallback
 }

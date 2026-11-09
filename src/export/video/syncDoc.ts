@@ -127,6 +127,11 @@ export interface SyncLinear {
    * **导出仍然只取谱带那一条**（宽 = `outW`、高 = 谱带高 × 谱带大小）。
    */
   outH?: number
+  /**
+   * adj1280：**谱带在画布上占的宽度比例**（0.2~1，缺字段 = 1 = 占满）。
+   * 宽度越小，一行里显示的拍越少。
+   */
+  bandWidth?: number
 }
 
 export interface SyncDoc {
@@ -523,6 +528,11 @@ export function parseSyncDoc(text: string): { doc: SyncDoc | null; error?: strin
     if (l.outH !== undefined && l.outH !== null) {
       const n = finiteOr(l.outH, Number.NaN)
       if (Number.isFinite(n)) out.outH = Math.round(Math.min(4096, Math.max(120, n)))
+    }
+    // adj1280：谱带宽度比例（0.2 ~ 1）
+    if (l.bandWidth !== undefined && l.bandWidth !== null) {
+      const n = finiteOr(l.bandWidth, Number.NaN)
+      if (Number.isFinite(n)) out.bandWidth = Math.round(Math.min(1, Math.max(0.2, n)) * 1000) / 1000
     }
     if (Object.keys(out).length > 0) linear = out
   }

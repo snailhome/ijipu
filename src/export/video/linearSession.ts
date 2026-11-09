@@ -87,6 +87,13 @@ export interface CreateLinearSessionOptions {
   /** 谱带整体缩放（谱带高 / 字号；1 = 用 `strip.noteSize`） */
   bandScale?: number
   /**
+   * adj1280（用户 2026-11-09「谱带宽度不能调整，我需要通过调整宽度来决定一行里显示多少拍」）：
+   * 谱带在画布上占的**宽度比例**（0.2~1）。
+   *
+   * 宽度越小，一行里显示的拍越少（同一缩放比下）；谱带只画在这条矩形里，右侧留空。
+   */
+  bandWidth?: number
+  /**
    * adj1271：**两端淡化**的宽度（占画布宽的比例，0 = 关闭）。
    *
    * 只淡**谱带那一层**（背景视频/图片不动）——所以它走"先把谱带画到一张透明小画布、
@@ -126,7 +133,9 @@ export async function createLinearSession(opts: CreateLinearSessionOptions): Pro
     zoom: bandScale,
     style,
   })
-  const lay = { ...(opts.lay ?? {}), viewW: opts.width, viewH: opts.height, stripH }
+  /** adj1280：谱带在画布上的宽度（比例 → 像素）；预览与出片都用它 */
+  const bandW = Math.max(64, Math.round(opts.width * Math.min(1, Math.max(0.2, opts.bandWidth ?? 1))))
+  const lay = { ...(opts.lay ?? {}), viewW: bandW, viewH: opts.height, stripH }
   const stripEndMs = opts.strip.runs.length === 0 ? 0 : opts.strip.runs[opts.strip.runs.length - 1].t1
 
   /**
@@ -241,6 +250,14 @@ export async function createLinearSession(opts: CreateLinearSessionOptions): Pro
     } else {
       bg.draw(ctx, mediaMs)
     }
+    // ②~④ 只在谱带宽度范围内画（adj1280：谱带可以只占画布的一部分）
+    const clipBand = bandW < opts.width
+    if (clipBand) {
+      ctx.save()
+      ctx.beginPath()
+      ctx.rect(0, 0, bandW, opts.height)
+      ctx.clip()
+    }
     // ② 定位色块（左 1/3；宽 = **一个音符宽**，见 `stripFrame` 的 `blockW`）
     //    ⚠ 先画色块、再画谱带（adj1263 看真图后调整）：色块是**底衬高亮**，
     //    盖在字上面会把当前音染成粉色（截图里"0 0"就是粉的），字就不"白"了。
@@ -264,6 +281,7 @@ export async function createLinearSession(opts: CreateLinearSessionOptions): Pro
     ctx.ellipse(g.ballX, g.ballY, r * (1 + 0.35 * g.squash), r * (1 - 0.45 * g.squash), 0, 0, Math.PI * 2)
     ctx.fill()
     ctx.restore()
+    if (clipBand) ctx.restore()
     if (alpha < 1) ctx.restore()
     return g
   }

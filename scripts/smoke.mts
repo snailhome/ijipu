@@ -39510,6 +39510,27 @@ C: 一 二 三 四 五 六 七 八
     !withVideo.cropped && !withImage.cropped && withVideo.height === 1080 && withVideo.offsetY === 0,
     `${JSON.stringify(withVideo)} / ${JSON.stringify(withImage)}`,
   )
+  /**
+   * adj1280（用户截图实报「曲部没有连音线，反倒下面行里多了不少连音线」）：
+   * 行与行的 x 范围重叠，按 x 找小节会命中**别的行** ⇒ 连音线用了别行的基线，飘到谱带下面。
+   * 判据：两行谱、连音线只在第 2 行；条带上的连音线必须落在**谱表那一条带**里。
+   */
+  const TWO_ROWS = `V: 1.0
+B: 两行连音
+Q: 1 2 3 4 | 5 6 7 1' | 2 3 4 5 | 6 7 1' 2' | 3 4 5 6 | 7 1' 2' 3' | 4 5 6 7 | 1' 2' 3' 4' |
+Q: ( 5 6 7 1' | 2 3 4 5 ) | 6 7 1' 2' | 3 4 5 6 | 7 1' 2' 3' | 4 5 6 7 | 1' 2' 3' 4' | 5 6 7 1' |
+`
+  const rr = parseJpsRaw(TWO_ROWS)
+  const rlay = layoutScore(rr, defaultPageConfig)
+  const rseq = buildPlaySequence(rr, rlay, 120)
+  const rstrip = buildLinearStrip(rlay, rseq, defaultPageConfig)
+  const bandTopY = rstrip.baselineY - rstrip.noteSize * 2.5
+  const bandBottomY = rstrip.baselineY + rstrip.noteSize * 0.5
+  check(
+    'adj1280 连音线的 y 落在谱表那一条带里（不再飘到下面几行：行与行的 x 重叠时按行号匹配小节）',
+    rstrip.page.slurs.length > 0 && rstrip.page.slurs.every((s) => s.y > bandTopY && s.y < bandBottomY),
+    rstrip.page.slurs.map((s) => `y=${s.y}`).join(' / ') + `（允许 ${bandTopY.toFixed(1)}..${bandBottomY.toFixed(1)}）`,
+  )
 }
 
 /**

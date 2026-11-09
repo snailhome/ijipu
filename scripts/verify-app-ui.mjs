@@ -3555,8 +3555,17 @@ async function main() {
         const top1 = await topOf()
         check('adj1271 画布上按住往下拖 ⇒ 谱带位置跟着下移（鼠标直接调位置）', top1 > top0 + 0.05, `${top0} → ${top1}`)
 
-        // 滚轮 = 谱带大小
-        const scaleOf = async () => Number(await evalJs(c, `document.querySelector('[aria-label="谱带大小"]').value`))
+        // 滚轮**不再**改缩放（用户 2026-11-09：「鼠标滚动是调整缩放比率，这不是我要的效果，取消」）
+        const setRange = (sel, v) => `(() => {
+            const el = document.querySelector(${JSON.stringify(sel)})
+            if (!el) return false
+            const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set
+            setter.call(el, String(${JSON.stringify(v)}))
+            el.dispatchEvent(new Event('input', { bubbles: true }))
+            el.dispatchEvent(new Event('change', { bubbles: true }))
+            return true
+          })()`
+        const scaleOf = async () => Number(await evalJs(c, `document.querySelector('[aria-label="谱面缩放"]').value`))
         const sc0 = await scaleOf()
         await evalJs(
           c,
@@ -3568,7 +3577,29 @@ async function main() {
         )
         await sleep(500)
         const sc1 = await scaleOf()
-        check('adj1271 画布上滚轮向上 ⇒ 谱带变大（鼠标直接调宽度）', sc1 > sc0 + 0.02, `${sc0} → ${sc1}`)
+        check('adj1280 滚轮不再改缩放（谱面缩放只能从面板控件调）', sc1 === sc0, `${sc0} → ${sc1}`)
+        // 谱带宽度：拖窄 ⇒ 谱带在画面里占比变小（外框宽度跟着变）
+        const bandBox = async () =>
+          evalJs(
+            c,
+            `(() => {
+              const b = document.querySelector('[data-role="linear-guide-band"]')
+              const s = document.querySelector('[data-role="linear-stage"]')
+              if (!b || !s) return null
+              return { band: Math.round(b.getBoundingClientRect().width), stage: Math.round(s.getBoundingClientRect().width) }
+            })()`,
+          )
+        const bb0 = await bandBox()
+        await evalJs(c, setRange('[data-role="linear-bandwidth"]', 0.5))
+        await sleep(900)
+        const bb1 = await bandBox()
+        check(
+          'adj1280 「谱带宽度」拉到 50% ⇒ 谱带外框只占画面一半（一行显示的拍变少）',
+          bb0 !== null && bb1 !== null && bb1.band < bb0.band * 0.65,
+          `${JSON.stringify(bb0)} → ${JSON.stringify(bb1)}`,
+        )
+        await evalJs(c, setRange('[data-role="linear-bandwidth"]', 1))
+        await sleep(600)
 
         // 无背景（透明）
         await evalJs(c, `(document.querySelector('[data-role="linear-bgnone"]')?.click(), true)`)
@@ -3667,15 +3698,6 @@ async function main() {
          * adj1271：两端淡化——拉满到 0.3 后，左右两端那两条的墨迹亮度应明显变少。
          * （判据在下面：只量两端各 25% 的**亮度总量**，中间那片不参与。）
          */
-        const setRange = (sel, v) => `(() => {
-            const el = document.querySelector(${JSON.stringify(sel)})
-            if (!el) return false
-            const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set
-            setter.call(el, String(${JSON.stringify(v)}))
-            el.dispatchEvent(new Event('input', { bubbles: true }))
-            el.dispatchEvent(new Event('change', { bubbles: true }))
-            return true
-          })()`
         // 先把输出宽度收窄到 640：窗口比条带窄，两端才真的有内容可淡（不然左/右是空的）
         await evalJs(
           c,

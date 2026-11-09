@@ -1621,7 +1621,10 @@ export const linearSyncCopy = {
   themeAuto: (name: string) => `跟随卡片模板（${name}）`,
   themeHint: '默认跟着卡片模板的配色走：换模板，谱带的墨色/描边/色块/球一起换；也可指定下面四套预设',
   bandTop: '谱带位置',
-  bandScale: '谱带大小',
+  bandScale: '谱面缩放',
+  /** adj1280：谱带宽度（一行显示多少拍） */
+  bandWidth: '谱带宽度',
+  bandWidthHint: '谱带在画面里占多宽：越窄，一行里显示的拍越少（谱面本身不变形、不缩放）',
   /** adj1271：预览缩放与两端淡化 */
   zoom: '预览缩放',
   zoomHint: '只放大"看"（画布像素尺寸仍是出片尺寸）；放大后拖滚动条看细节',
@@ -1636,8 +1639,7 @@ export const linearSyncCopy = {
   quciGapLabel: (px: number) => `曲词间距 ${px > 0 ? '+' : ''}${px}`,
   /** adj1276：没有视频时的输出范围（= 谱带本身） */
   outWidth: '画布',
-  outHeight: '画布高',
-  outWidthHint:
+  outHeight: '画布高',  outWidthHint:
     '没有导入视频时，预览用这块工作画布摆位置；导出只取谱带那一条（宽 = 画布宽、高 = 谱带高 × 谱带大小）。导入视频后以视频宽高为准',
   /** adj1267：谱带上的歌词（多段歌词按演奏遍次自动换行） */
   lyrics: '歌词',
