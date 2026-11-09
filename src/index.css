@@ -6810,6 +6810,9 @@ span.ws-check {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  /* adj1279：面板可拖宽高 ⇒ 内容区吃掉剩余高度并自己滚（不然放大后下面被裁掉） */
+  flex: 1;
+  min-height: 0;
   overflow: auto;
   padding-bottom: 2px;
 }
@@ -6819,6 +6822,7 @@ span.ws-check {
   display: block;
   /* adj1271：预览可缩放 ⇒ 舞台要能滚（放大后拖滚动条看细节） */
   overflow: auto;
+  min-height: 140px;
   background: #000;
   border-radius: 8px;
 }

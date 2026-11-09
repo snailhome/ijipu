@@ -120,6 +120,13 @@ export interface SyncLinear {
    * 有视频时以视频宽高为准，这个值不参与。
    */
   outW?: number
+  /**
+   * adj1278：**只连续动态谱**时的**工作画布高度**（px，默认 1080）。
+   *
+   * 没有视频时预览给一块像样的工作区（能看见谱带摆在哪儿），
+   * **导出仍然只取谱带那一条**（宽 = `outW`、高 = 谱带高 × 谱带大小）。
+   */
+  outH?: number
 }
 
 export interface SyncDoc {
@@ -511,6 +518,11 @@ export function parseSyncDoc(text: string): { doc: SyncDoc | null; error?: strin
     if (l.outW !== undefined && l.outW !== null) {
       const n = finiteOr(l.outW, Number.NaN)
       if (Number.isFinite(n)) out.outW = Math.round(Math.min(4096, Math.max(320, n)))
+    }
+    // adj1278：工作画布高度（120 ~ 4096）
+    if (l.outH !== undefined && l.outH !== null) {
+      const n = finiteOr(l.outH, Number.NaN)
+      if (Number.isFinite(n)) out.outH = Math.round(Math.min(4096, Math.max(120, n)))
     }
     if (Object.keys(out).length > 0) linear = out
   }

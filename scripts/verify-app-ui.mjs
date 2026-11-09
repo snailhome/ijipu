@@ -3600,8 +3600,8 @@ async function main() {
           )
         const box0 = await canvasBox()
         check(
-          'adj1276 没有视频 ⇒ 输出范围就是谱带本身（宽高比 > 3、高远小于 1920，不再是大竖屏画布）',
-          box0.ratio > 3 && box0.h < 900,
+          'adj1278 没有视频 ⇒ 预览是一块工作画布（16:9），谱带摆在里面（导出只取谱带那一条）',
+          box0.w === 1920 && box0.h === 1080,
           JSON.stringify(box0),
         )
         const outWBefore = box0.w
@@ -3620,7 +3620,7 @@ async function main() {
         await sleep(1500)
         const box1 = await canvasBox()
         check(
-          'adj1276 「输出宽度」改 1280 ⇒ 画布宽度真的变成 1280（谱带宽度可调）',
+          'adj1278 「画布」宽改 1280 ⇒ 画布宽度真的变成 1280（工作画布可调）',
           Math.abs(box1.w - 1280) <= 2 && box1.w !== outWBefore,
           `${outWBefore} → ${box1.w}`,
         )
@@ -3951,6 +3951,53 @@ async function main() {
             '',
           )
         }
+        /**
+         * adj1279（用户 2026-11-09）：对话框要**能拖宽高、能最大化**。
+         * 判据：拖右下角把手后面板变宽；双击标题条后铺满视口。
+         */
+        const panelW = async () => Number(await evalJs(c, `Math.round(document.querySelector('.linear-panel').getBoundingClientRect().width)`))
+        const pw0 = await panelW()
+        await evalJs(
+          c,
+          `(() => {
+            const h = document.querySelector('[data-role="linear-resize"]')
+            if (!h) return false
+            const r = h.getBoundingClientRect()
+            const opts = (x, y) => ({ bubbles: true, clientX: x, clientY: y, pointerId: 4, button: 0 })
+            h.dispatchEvent(new PointerEvent('pointerdown', opts(r.left + 4, r.top + 4)))
+            window.dispatchEvent(new PointerEvent('pointermove', opts(r.left + 204, r.top + 64)))
+            window.dispatchEvent(new PointerEvent('pointerup', opts(r.left + 204, r.top + 64)))
+            return true
+          })()`,
+        )
+        await sleep(500)
+        const pw1 = await panelW()
+        check('adj1279 拖右下角把手 ⇒ 对话框真的变宽（可调宽高）', pw1 > pw0 + 100, `${pw0} → ${pw1}px`)
+        await evalJs(
+          c,
+          `(() => {
+            const head = document.querySelector('.linear-panel .sync-head')
+            if (!head) return false
+            head.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))
+            return true
+          })()`,
+        )
+        await sleep(600)
+        const pw2 = await panelW()
+        check(
+          'adj1279 双击标题条 ⇒ 对话框最大化（宽度接近视口）',
+          pw2 > 1200,
+          `最大化后 ${pw2}px（视口 ${await evalJs(c, 'window.innerWidth')}px）`,
+        )
+        await evalJs(
+          c,
+          `(() => {
+            const head = document.querySelector('.linear-panel .sync-head')
+            head?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))
+            return true
+          })()`,
+        )
+        await sleep(400)
         // 关掉（Esc）——App 的全局 ESC 在捕获阶段收口，这里验"层真的没了"
         for (const type of ['keyDown', 'keyUp']) {
           await c.send('Input.dispatchKeyEvent', {

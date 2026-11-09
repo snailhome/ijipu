@@ -83,6 +83,7 @@ import { bytesToBase64 } from '../export/zip'
 import { isTauriShell, tauriInvoke } from '../brand/env'
 import { dynamicVideoCopy, linearSyncCopy, syncCopy } from '../brand/copy'
 import { audioClockOf, timeLabelOf, timeScaleOf } from './syncRuler'
+import { loadSyncLayout, saveSyncLayout, normalizeSyncLayout, resizeSyncLayout, type SyncLayout } from './syncLayout'
 
 /**
  * adj1277：条带按**谱面原尺寸**排版（就是预览那一套），`bandScale` 默认放大 4.5 倍
@@ -199,8 +200,9 @@ export function LinearSyncDialog() {
   const bandScale = linearStyle.bandScale ?? DEFAULT_BAND_SCALE
   /** adj1271：两端淡化（占画布宽的比例；缺字段 = 0.08，0 = 关） */
   const edgeFade = linearStyle.edgeFade ?? 0.08
-  /** adj1276：没有视频时的**输出宽度**（有视频时以视频宽高为准，这个值不参与） */
+  /** adj1278：没有视频时的工作画布尺寸（预览用；导出按谱带裁） */
   const outW = linearStyle.outW ?? 1920
+  const outH = linearStyle.outH ?? 1080
   /** adj1272：无背景（透明）——第 1 层，只要谱 */
   const bgNone = linearStyle.bgNone === true
   /** 卡片样式与相机位共用模板库（sidecar 记的模板优先，没有就用当前选中的） */
@@ -263,17 +265,15 @@ export function LinearSyncDialog() {
   }, [video])
   useEffect(() => () => video?.close(), [video])
 
-  /** 出片/预览画布尺寸：有视频 = 视频宽高；**没有视频 = 谱带自己的范围**（adj1276） */
+  /** 出片/预览画布尺寸：有视频 = 视频宽高；没有视频 = 用户设的工作画布（默认 1920×1080） */
   const out = useMemo(() => {
     if (video !== null) return evenSizeOf(video.info.width, video.info.height)
     /**
-     * adj1276（用户 2026-11-09）：没有导入视频时**只显示谱带范围**，输出也以谱带范围为视频范围。
-     *
-     * 原来固定 1080×1920（竖屏大画布）⇒ 谱带只占上面一条，上下全是空的；
-     * 现在：宽 = 用户设的输出宽度（默认 1920），高 = 谱带排版高 × 谱带大小（就是谱带本身）。
+     * adj1278（用户 2026-11-09）：没有视频时**预览要给一块像样的工作区**（能看见谱带摆在哪儿），
+     * 但**出片只要谱带那一条**——所以这里画布是工作尺寸，导出时再按谱带矩形裁。
      */
-    return evenSizeOf(Math.max(320, Math.round(outW)), Math.max(48, Math.round(strip.height * bandScale)))
-  }, [video, outW, strip.height, bandScale])
+    return evenSizeOf(Math.max(320, Math.round(outW)), Math.max(120, Math.round(outH)))
+  }, [video, outW, outH])
 
   // ---------- 合成音 ----------
   const [synthBuf, setSynthBuf] = useState<AudioBuffer | null>(null)
@@ -354,6 +354,44 @@ export function LinearSyncDialog() {
    * 改成"按容器实测尺寸算出一个显示宽高 × 缩放"直接写到画布样式上 —— 放大后才真的能滚。
    */
   const [stageZoom, setStageZoom] = useState(1)
+  /**
+   * adj1279（用户 2026-11-09「对话框不可调整宽高/不可最大化」）：复用对拍台那套面板尺寸
+   * （拖右下角 / 双击标题条最大化 / 记 L1），两个台面共用同一个记忆键。
+   */
+  const [layout, setLayout] = useState<SyncLayout>(() => loadSyncLayout())
+  const layoutRef = useRef(layout)
+  layoutRef.current = layout
+  const layoutDragRef = useRef<{ x: number; y: number; base: SyncLayout } | null>(null)
+  useEffect(() => {
+    const sync = (): void => setLayout((l) => normalizeSyncLayout(l, window.innerWidth, window.innerHeight))
+    sync()
+    window.addEventListener('resize', sync)
+    return () => window.removeEventListener('resize', sync)
+  }, [])
+  useEffect(() => {
+    const onMove = (e: PointerEvent): void => {
+      const d = layoutDragRef.current
+      if (d === null) return
+      setLayout(resizeSyncLayout(d.base, e.clientX - d.x, e.clientY - d.y, window.innerWidth, window.innerHeight))
+    }
+    const onUp = (): void => {
+      if (layoutDragRef.current === null) return
+      layoutDragRef.current = null
+      saveSyncLayout(layoutRef.current)
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    window.addEventListener('pointercancel', onUp)
+    return () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', onUp)
+    }
+  }, [])
+  const startLayoutDrag = useCallback((e: React.PointerEvent<HTMLElement>) => {
+    e.preventDefault()
+    layoutDragRef.current = { x: e.clientX, y: e.clientY, base: layoutRef.current }
+  }, [])
   const stageBoxRef = useRef<HTMLDivElement | null>(null)
   const [stageBox, setStageBox] = useState({ w: 0, h: 0 })
   useEffect(() => {
@@ -1152,12 +1190,27 @@ export function LinearSyncDialog() {
        * 真机素材上表现为"导 2 秒却要编 3:56"。`E-2026-566`。
        */
       const off = exportWindow.mediaOffsetMs
+      /**
+       * adj1278（用户 2026-11-09）：**只连续动态谱**（没有视频、也没有背景图）时，
+       * 导出的视频只取**谱带那一条** —— 预览里那块工作画布只是用来"摆位置"的。
+       */
+      const bandCrop = video === null && bgImage === null
+      const bandH = Math.max(48, Math.round(strip.height * bandScale))
+      const bandTop = bandTopOf(out.height, bandH, topRatio)
       const outSession = {
         width: out.width,
-        height: out.height,
+        height: bandCrop ? bandH : out.height,
         totalMs: exportWindow.totalMs,
         draw: (ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D, t: number): void => {
+          if (!bandCrop) {
+            s.draw(ctx, t + off)
+            return
+          }
+          // 把画布往上挪 `bandTop` ⇒ 编出来的那一帧正好是谱带那条
+          ctx.save()
+          ctx.translate(0, -bandTop)
           s.draw(ctx, t + off)
+          ctx.restore()
         },
         warm: async (t: number): Promise<void> => {
           await videoRef.current?.warm(s.mediaMsOf(t + off))
@@ -1215,7 +1268,7 @@ export function LinearSyncDialog() {
       abortRef.current = null
       setExporting(false)
     }
-  }, [bgNone, cardTimeline, cardsOn, exportWindow, exporting, fileName, out.height, out.width, range, showNotice, tracks])
+  }, [bgImage, bgNone, bandScale, cardTimeline, cardsOn, exportWindow, exporting, fileName, out.height, out.width, range, showNotice, strip.height, topRatio, tracks, video])
 
   // ---------- 键盘 ----------
   useEffect(() => {
@@ -1261,8 +1314,17 @@ export function LinearSyncDialog() {
 
   return (
     <div className="sync-layer" role="dialog" aria-label={linearSyncCopy.title}>
-      <div className="sync-panel linear-panel">
-        <div className="sync-head">
+      <div
+        className="sync-panel linear-panel"
+        style={layout.maximized ? { width: '100%', height: '100%' } : { width: `${layout.w}px`, height: `${layout.h}px` }}
+      >
+        <div
+          className="sync-head"
+          onDoubleClick={(e) => {
+            if ((e.target as HTMLElement).closest('button, input, select')) return
+            setLayout({ ...layoutRef.current, maximized: !layoutRef.current.maximized })
+          }}
+        >
           <b>{linearSyncCopy.title}</b>
           <span className="sync-dim sync-name">{fileName}</span>
           {stale && <span className="sync-warn">{syncCopy.stale}</span>}
@@ -1421,7 +1483,7 @@ export function LinearSyncDialog() {
               />
               {linearSyncCopy.bgNone}
             </label>
-            {/* adj1276：没有视频时，输出范围 = 谱带本身（宽可调；高 = 谱带大小 × 谱带排版高） */}
+            {/* adj1276/adj1278：没有视频时，预览是一块工作画布（宽×高），导出只取谱带那一条 */}
             {video === null && (
               <>
                 <span className="sync-label" title={linearSyncCopy.outWidthHint}>
@@ -1438,6 +1500,19 @@ export function LinearSyncDialog() {
                   aria-label={linearSyncCopy.outWidth}
                   title={linearSyncCopy.outWidthHint}
                   onChange={(e) => setExtras({ linear: { ...linearStyle, outW: Number(e.target.value) } })}
+                />
+                <span className="sync-dim">×</span>
+                <input
+                  className="sync-num"
+                  type="number"
+                  min={120}
+                  max={4096}
+                  step={2}
+                  value={outH}
+                  data-role="linear-outh"
+                  aria-label={linearSyncCopy.outHeight}
+                  title={linearSyncCopy.outWidthHint}
+                  onChange={(e) => setExtras({ linear: { ...linearStyle, outH: Number(e.target.value) } })}
                 />
               </>
             )}
@@ -1840,6 +1915,8 @@ export function LinearSyncDialog() {
             </div>
           )}
         </div>
+        {/* adj1279：右下角拖拽把手（改面板宽高；松手才写 L1） */}
+        {!layout.maximized && <div className="sync-resize" data-role="linear-resize" onPointerDown={startLayoutDrag} />}
       </div>
     </div>
   )
