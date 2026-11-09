@@ -3432,6 +3432,73 @@ async function main() {
           '',
         )
         /**
+         * adj1284（用户 2026-11-09「把音符时值图搬到连续谱台面的波形下面，复用 SyncDialog 那套，
+         * 含波形」）：真点一遍，守三件源码级断言拦不住的事——
+         *  ① 时值图真的在**波形下面**、与波形**同宽**（同一时间轴，格子和波形才对得上）；
+         *  ② 格子的确是按主音符画出来的（数得出来，且有小节线）；
+         *  ③ 点一格 ⇒ 播放头/读数真的跳过去（不是画着玩的），时值图上的红线也跟着到中点。
+         */
+        const stripUi = await evalJs(
+          c,
+          `(() => {
+            const s = document.querySelector('[data-role="linear-note-strip"]')
+            const wv = document.querySelector('[data-role="linear-wave"]')
+            if (!s || !wv) return { strip: !!s, wave: !!wv }
+            const sr = s.getBoundingClientRect()
+            const wr = wv.getBoundingClientRect()
+            return {
+              strip: true,
+              cells: s.querySelectorAll('.sync-note-cell').length,
+              bars: s.querySelectorAll('.sync-bar-line').length,
+              head: !!s.querySelector('[data-role="linear-strip-head"]'),
+              below: sr.top >= wr.top + wr.height - 2,
+              sameW: Math.abs(sr.width - wr.width) <= 4,
+              h: Math.round(sr.height),
+            }
+          })()`,
+        )
+        check(
+          'adj1284 音符时值图在波形**下面**、与波形同宽（同一时间轴）',
+          stripUi.strip === true && stripUi.below === true && stripUi.sameW === true && stripUi.h >= 40 && stripUi.head === true,
+          JSON.stringify(stripUi),
+        )
+        check(
+          'adj1284 时值图的每格 = 一个主音符（还有小节线，不是空框）',
+          Number(stripUi.cells) >= 8 && Number(stripUi.bars) >= 4,
+          JSON.stringify(stripUi),
+        )
+        const posBefore = String(await evalJs(c, `document.querySelector('[data-role="linear-pos"]')?.textContent ?? ''`))
+        await evalJs(
+          c,
+          `(() => {
+            const s = document.querySelector('[data-role="linear-note-strip"]')
+            const r = s.getBoundingClientRect()
+            s.dispatchEvent(
+              new PointerEvent('pointerdown', {
+                bubbles: true,
+                clientX: r.left + r.width / 2,
+                clientY: r.top + r.height / 2,
+                pointerId: 1,
+                button: 0,
+              }),
+            )
+            return true
+          })()`,
+        )
+        await sleep(400)
+        const posAfter = String(await evalJs(c, `document.querySelector('[data-role="linear-pos"]')?.textContent ?? ''`))
+        const headPct = Number(
+          await evalJs(
+            c,
+            `(() => { const h = document.querySelector('[data-role="linear-strip-head"]'); return h ? parseFloat(h.style.left) : -1 })()`,
+          ),
+        )
+        check(
+          'adj1284 点时值图 ⇒ 播放头跳过去（读数变了；时值图上的红线到中点附近）',
+          posAfter !== posBefore && headPct > 40 && headPct < 60,
+          `读数 "${posBefore}" → "${posAfter}"；红线 ${headPct}%`,
+        )
+        /**
          * adj1267：歌词开关 + 多段歌词（真点一遍）。
          *
          * 判据用"离底色的像素数"而不是"白色像素数"：`adj1267` 起关掉歌词**不缩谱带**

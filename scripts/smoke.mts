@@ -28998,6 +28998,20 @@ C2: 歌，@那么我@是想要画你的手。@ {tp 1// 2/.} 你看我多么 {tp 
     offenders.length === 0,
     offenders.join('；') ||
       `（pdf.ts 用 '%' + 'PDF-1.4\\n' 拼写 ✓；负对照：把拼接改回连续字面量即判红）`)
+  /**
+   * adj1284（用户 2026-11-09「合成音、没加音频」时波形是一条空带，顺手查出来的）：
+   * **Canvas 不认 CSS 变量** —— `ctx.strokeStyle = 'var(--jp-accent, …)'` 是**非法值**，
+   * 浏览器**静默忽略**（保持上一次/默认的黑色），深色底上等于没画；不报错、肉眼也不一定看出。
+   * 这里扫全源码：canvas 的 `fillStyle` / `strokeStyle` 不许直接写 `var(`。
+   */
+  {
+    const bad = srcFiles.filter((f) => /(fillStyle|strokeStyle)\s*=\s*['"`]var\(/.test(readFileSync(f, 'utf8')))
+    check(
+      'adj1284 canvas 的 fillStyle/strokeStyle 不得写 `var(--…)`（canvas 不认 CSS 变量，会静默画成黑色）',
+      bad.length === 0,
+      bad.map((f) => f.replace(process.cwd(), '.')).join('；') || '（负对照：改回 var(--jp-accent) 即判红）',
+    )
+  }
   // 负对照：往源码里塞一行连续魔数字面量，判据必须变假（闸门真的在量东西）
   {
     const pdfSrc = readFileSync(join(process.cwd(), 'src/export/pdf.ts'), 'utf8')
@@ -38357,20 +38371,35 @@ Q: 1 2 3 4 | 5 6 7 1' |: 2 3 4 5 :|
     (b) => (b.type === '|' || b.type === '||') && b.marks === undefined && b.voltaStart === undefined && b.voltaEnd === undefined,
   )
   check('adj1258 条带上没有反复/跳房子/&ds 等修饰线（只剩 | 与 ||）', cleanBars, '')
-  // ④ 时刻 → x：每段起点精确落在自己的 x0
+  // ④ 时刻 → x：拍点处精确落在该拍的音上
   /**
-   * adj1282（用户 2026-11-09「定位色块处的音符与合成音没对齐」）：口径从"段内 x ∝ t"改成
-   * **按音符插值**——每个音符起点 ⇔ 它自己的中心（空间优先排版里 x 本来就不跟时值成比例）。
-   * 这里改成验"每个音符起点落在它自己的中心上"（同 t0 的和弦取并集的区间）。
+   * **口径改动（`adj1284`，用户 2026-11-09 拍板；不是放宽断言）**：
+   *
+   * 旧口径（`adj1282`）是"**每个音符**起点 ⇔ 它自己的中心"——按音插值。
+   * 用户原话：「谱子在移动，跳跳球落下时，谱子刚好移到拍位上……由于是空间优先，谱子的移动
+   * 可能不是匀速的，而是要根据下一拍的占宽和一拍的时值来计算下一拍谱子的移动速度，
+   * 以保证一拍结束后，谱子刚好移动到下一拍，然后重算下下拍」。
+   *
+   * ⇒ 现在按**拍**插值（`strip.beatXs`），只保证**拍点**上的落位；
+   *   拍中间的音不单独设锚（它们按本拍的速度匀速经过，这也正是"与预览里球落拍位"对齐的代价）。
+   *   所以这条断言从"每个音"收窄成"每个拍点"——**收窄的是口径，不是阈值**。
    */
-  const drift = a.strip.notes.reduce((mx, n) => {
+  const beatOnsets = a.strip.notes.filter((n) => {
+    const b = n.t0 / a.strip.beatMs
+    return Math.abs(b - Math.round(b)) <= 1e-3
+  })
+  const beatDrift = beatOnsets.reduce((mx, n) => {
     const same = a.strip.notes.filter((m) => Math.abs(m.t0 - n.t0) < 0.5)
     const lo = Math.min(...same.map((m) => m.x + m.w / 2))
     const hi = Math.max(...same.map((m) => m.x + m.w / 2))
     const x = stripXAt(a.strip, n.t0)
     return Math.max(mx, x < lo - 0.5 ? lo - x : x > hi + 0.5 ? x - hi : 0)
   }, 0)
-  check('adj1282 每个音符起点 ⇔ 它自己的中心（不再是"段内 x ∝ t"）', drift < 0.5, `drift=${drift}`)
+  check(
+    'adj1284 拍点处谱面正好落在该拍第一个音上（旧 adj1282 的"每个音都落位"已改为按拍，见注释）',
+    beatOnsets.length > 0 && beatDrift < 0.5,
+    `drift=${beatDrift} 拍点 ${beatOnsets.length}/${a.strip.notes.length}`,
+  )
   /**
    * adj1283（用户 2026-11-09「谱带移动比合成音慢」）：音符时刻必须按**小节内拍位**算，
    * 不是按"音符在小节里的 x 比例"。4/4、120bpm ⇒ 相邻四分音符正好相差 500ms。
@@ -38400,6 +38429,92 @@ Q: 1 2 3 4 |
     timeMiss.length === 0,
     `对不上 ${timeMiss.length} 个：${timeMiss.slice(0, 4).map((n) => n.t0).join(',')} vs 事件 ${evTimes.slice(0, 6).join(',')}`,
   )
+  /**
+   * adj1284（用户 2026-11-09「**从第一音就慢**，合成音走了 8 拍、谱子才走 2 拍」）：
+   * 真因不在"时刻表"（adj1283b 已证明时刻同源），而在**滚动位置的插值口径**：
+   * ① `strip.ts` 曾把不足一拍的时值钳成 1 拍（`Math.max(1, duration)`），而滚动拿 `t1 - t0`
+   *    当插值跨度 ⇒ 八分音符慢 2 倍、十六分音符慢 **4 倍**（正好是用户看到的 8 拍 vs 2 拍）；
+   * ② 插值单位是"音"而不是"拍" ⇒ 一个音到下一个音的距离≠一拍的距离，速度被音距牵着走。
+   * 现在按**拍**插值（`beatXs`）：一拍之内匀速、一拍结束时正好到下一拍。
+   */
+  const RHYTHM8 = `V: 1.0
+B: 八分
+Q: 1/ 2/ 3/ 4/ 5/ 6/ 7/ 1'/ | 2/ 3/ 4/ 5/ 6/ 7/ 1'/ 2'/ |
+`
+  const RHYTHM16 = `V: 1.0
+B: 十六分
+Q: 1// 2// 3// 4// 1// 2// 3// 4// 1// 2// 3// 4// 1// 2// 3// 4// | 1// 2// 3// 4// 1// 2// 3// 4// 1// 2// 3// 4// 1// 2// 3// 4// |
+`
+  const rhythm = (codeR: string) => {
+    const rR = parseJpsRaw(codeR)
+    const layR = layoutScore(rR, defaultPageConfig)
+    const seqR = buildPlaySequence(rR, layR, 120)
+    return buildLinearStrip(layR, seqR, defaultPageConfig)
+  }
+  const strip8 = rhythm(RHYTHM8)
+  const strip16 = rhythm(RHYTHM16)
+  const durOf = (s: typeof strip8): number[] => s.notes.map((n) => Math.round(n.t1 - n.t0))
+  const d8 = durOf(strip8)
+  const d16 = durOf(strip16)
+  check(
+    'adj1284 八分音符的时值 = 250ms（adj1283 的 max(1,时值) 会记成 500ms）',
+    d8.length >= 8 && d8.every((d) => Math.abs(d - 250) <= 2),
+    `时值=${d8.slice(0, 8).join(',')}`,
+  )
+  check(
+    'adj1284 十六分音符的时值 = 125ms（旧实现记成 500ms ⇒ 慢 4 倍）',
+    d16.length >= 8 && d16.every((d) => Math.abs(d - 125) <= 2),
+    `时值=${d16.slice(0, 8).join(',')}`,
+  )
+  /**
+   * 用户原话的复现口径：**两拍**时间里，谱带要走过 **8 个十六分音符**的宽度
+   * （= 第 9 个十六分音符的中心）。旧口径只走到第 3 个左右 —— 就是"8 拍 vs 2 拍"。
+   * 这里用**真实排版几何**（音符中心）而不是 `beatXs` 自证。
+   */
+  {
+    const ns = strip16.notes
+    const ctr = (i: number): number => ns[i].x + ns[i].w / 2
+    const moved = stripXAt(strip16, 2 * strip16.beatMs) - stripXAt(strip16, 0)
+    const span8 = ctr(8) - ctr(0)
+    check(
+      'adj1284 两拍时间谱带前进 8 个十六分音符宽（旧实现只前进 2 个 ⇒ 慢 4 倍）',
+      Math.abs(moved - span8) <= 0.5,
+      `前进 ${moved.toFixed(1)}px，8 个十六分音符宽 ${span8.toFixed(1)}px`,
+    )
+  }
+  /**
+   * 一拍之内**匀速**（用户口径：用"下一拍占宽 ÷ 一拍时值"当这一拍的速度）：
+   * 拍内 1/2 处必须正好是两拍位置的中点；八分/十六分两种密度都要成立。
+   */
+  const halfBeatErr = (s: typeof strip8): number => {
+    let worst = 0
+    for (let k = 0; k + 1 < s.beatXs.length; k++) {
+      const want = (s.beatXs[k] + s.beatXs[k + 1]) / 2
+      worst = Math.max(worst, Math.abs(stripXAt(s, (k + 0.5) * s.beatMs) - want))
+    }
+    return worst
+  }
+  const h8 = halfBeatErr(strip8)
+  const h16 = halfBeatErr(strip16)
+  check('adj1284 一拍之内匀速：半拍位置 = 两拍位置的中点（八分音符谱）', h8 < 0.05, `最差 ${h8.toFixed(3)}px`)
+  check('adj1284 一拍之内匀速：半拍位置 = 两拍位置的中点（十六分音符谱）', h16 < 0.05, `最差 ${h16.toFixed(3)}px`)
+  /**
+   * 跳跳球口径（用户：「球落下时，谱子刚好移到拍位上」）：
+   * 球每次落地 = 拍点（`stripBallAt` 的 dwell 起点），此刻谱面位置 = 该拍位置。
+   */
+  {
+    const beatMs = strip16.beatMs
+    const k = 7
+    const landAt = (k + (BALL_LANDING_TIMING.landOffsetBeats ?? 0)) * beatMs
+    const landing = stripBallAt(landAt, { beatMs, blockTop: 10 })
+    const xAtLand = stripXAt(strip16, landAt)
+    const beatW = strip16.beatXs[k + 1] - strip16.beatXs[k]
+    check(
+      'adj1284 球落地那一刻，谱面就在这一拍附近（偏差 < 1/4 拍宽）',
+      strip16.beatXs.length > k + 1 && landing.dwelling && Math.abs(xAtLand - strip16.beatXs[k]) <= Math.abs(beatW) * 0.25 + 0.5,
+      `偏差 ${(xAtLand - strip16.beatXs[k]).toFixed(1)}px / 一拍 ${beatW.toFixed(1)}px`,
+    )
+  }
   // ⑤ 单调：时间递增 ⇒ x 不减；曲末取末端
   let mono = true
   let prevX = -1

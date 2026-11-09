@@ -358,7 +358,15 @@ export function buildLinearStrip(
        * 与合成音（按播放序列的拍点渲染）同源。
        */
       const t0 = o.t0 + n.beatPos * beatMs
-      const t1 = Math.min(o.t1, t0 + Math.max(1, n.duration) * beatMs)
+      /**
+       * adj1284（用户 2026-11-09「从第一音就慢」的**真因之一**）：
+       * 这里原来写的是 `Math.max(1, duration)` —— 把**不足一拍**的时值钳成 1 拍。
+       * 八分音符（0.5 拍）的结束时刻因此被推后一倍、十六分音符（0.25 拍）推后四倍，
+       * 而滚动位置的插值跨度正是拿 `t1 - t0` 算的 ⇒ 谱带比声音慢 2 倍 / 4 倍
+       * （实测 `春庭雪` 的 `2//`：真时值 200ms，`t1 - t0` 却是 800ms）。
+       * 现在只保留"不许为 0 或负"的极小值兜底，时值是多少就是多少。
+       */
+      const t1 = Math.min(o.t1, t0 + Math.max(0.001, n.duration) * beatMs)
       notes.push({
         t0: Math.round(t0 * 10) / 10,
         t1: Math.round(t1 * 10) / 10,
@@ -547,6 +555,8 @@ export function buildLinearStrip(
   let lyricLines = 1
   for (const v of verseLines.values()) lyricLines = Math.max(lyricLines, v + 1)
 
+  const beatXs = beatPositionsOf(notes, runs.length > 0 ? runs[runs.length - 1].t1 : 0, beatMs, cursor)
+
   return {
     page: { ...page, width: Math.max(1, cursor), height },
     width: Math.max(1, cursor),
@@ -556,11 +566,73 @@ export function buildLinearStrip(
     guideQuciY,
     runs,
     notes,
+    beatXs,
     noteSize,
     pxPerBeat,
     beatMs,
     dropped: { crossMeasure: droppedCross, fragment: 0, extraVoice: droppedVoice },
   }
+}
+
+/** 同一批起点的容差（ms）：和弦音算一个"拍位" */
+const SAME_ONSET_MS = 0.5
+
+/**
+ * `adj1284`（用户 2026-11-09 的口径）：**每一拍的谱面位置**。
+ *
+ * 用户原话要点：「谱子在移动，跳跳球落下时，谱子刚好移到拍位上……由于是空间优先，
+ * 谱子的移动可能不是匀速的，而是要根据下一拍的占宽和一拍的时值来计算下一拍谱子的移动速度，
+ * 以保证一拍结束后，谱子刚好移动到下一拍，然后重算下下拍」。
+ *
+ * 所以这里按**拍**（不是按音）建表：
+ *  · 第 k 拍的位置 = 落在这一拍的**第一个音**（和弦取整组的中心）；
+ *  · 这一拍没有音（长音跨过去了/休止）⇒ 在左右两个"有位置"的拍之间**按拍数线性插值**，
+ *    仍然是一拍走一步，到下一拍精确落位；
+ *  · 拍从曲首 0 起算（`t0 / beatMs`），与合成音、跳跳球的拍点同一个时间轴。
+ */
+function beatPositionsOf(notes: StripNote[], endMs: number, beatMs: number, stripW: number): number[] {
+  /** 拍号判定的容差（拍）：时刻是 0.1ms 取整来的，`seq` 累加也可能有亚毫秒漂移 ⇒ 留千分之一拍 */
+  const EPS_BEAT = 1e-3
+  const beats = Math.max(1, Math.floor(Math.max(0, endMs) / beatMs + EPS_BEAT) + 1)
+  const xs: number[] = new Array(beats).fill(Number.NaN)
+  for (let i = 0; i < notes.length; i++) {
+    if (i > 0 && Math.abs(notes[i].t0 - notes[i - 1].t0) <= SAME_ONSET_MS) continue // 和弦里的后几个
+    const t0 = notes[i].t0
+    let lo = Number.POSITIVE_INFINITY
+    let hi = Number.NEGATIVE_INFINITY
+    for (let j = i; j < notes.length && Math.abs(notes[j].t0 - t0) <= SAME_ONSET_MS; j++) {
+      const c = notes[j].x + notes[j].w / 2
+      lo = Math.min(lo, c)
+      hi = Math.max(hi, c)
+    }
+    const k = Math.floor(t0 / beatMs + EPS_BEAT)
+    if (k >= 0 && k < beats && Number.isNaN(xs[k])) xs[k] = Math.round(((lo + hi) / 2) * 10) / 10
+  }
+  let first = -1
+  let last = -1
+  for (let k = 0; k < beats; k++) {
+    if (Number.isNaN(xs[k])) continue
+    if (first < 0) first = k
+    last = k
+  }
+  if (first < 0) {
+    // 一个音都没有：退化成整条带按拍均匀推进（仍保证"一拍一步"）
+    const w = Math.max(1, stripW)
+    for (let k = 0; k < beats; k++) xs[k] = Math.round(((w * k) / Math.max(1, beats - 1)) * 10) / 10
+    return xs
+  }
+  for (let k = 0; k < first; k++) xs[k] = xs[first]
+  for (let k = last + 1; k < beats; k++) xs[k] = xs[last]
+  let prev = first
+  for (let k = first + 1; k <= last; k++) {
+    if (Number.isNaN(xs[k])) continue
+    const steps = k - prev
+    for (let s = 1; s < steps; s++) {
+      xs[prev + s] = Math.round((xs[prev] + ((xs[k] - xs[prev]) * s) / steps) * 10) / 10
+    }
+    prev = k
+  }
+  return xs
 }
 
 /**

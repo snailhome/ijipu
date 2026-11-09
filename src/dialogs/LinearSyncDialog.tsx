@@ -26,6 +26,7 @@ import {
   buildPlaySequence,
   inferBpm,
   layoutScore,
+  pitchToMidiNote,
   resolvePracticeRange,
   stripEndMs,
   type LinearStrip,
@@ -84,6 +85,7 @@ import { bytesToBase64 } from '../export/zip'
 import { isTauriShell, tauriInvoke } from '../brand/env'
 import { dynamicVideoCopy, linearSyncCopy, syncCopy } from '../brand/copy'
 import { audioClockOf, timeLabelOf, timeScaleOf } from './syncRuler'
+import { barLabelsOf, cellRectPct, pitchHeightOf, stripCellsOf } from './noteStrip'
 import { loadSyncLayout, saveSyncLayout, normalizeSyncLayout, resizeSyncLayout, type SyncLayout } from './syncLayout'
 
 /**
@@ -95,6 +97,12 @@ const DEFAULT_BAND_SCALE = 4.5
 /** 波形画布：波形本体 + 下侧标尺 */
 const WAVE_H = 118
 const RULER_H = 18
+
+/**
+ * adj1284（用户 2026-11-09「把音符时值图搬到连续谱台面的波形下面」）：
+ * 波形下面那条「音符时值图」的高度（与对拍台同一套格子：上面 14px 是小节号，下面按音高画亮柱）。
+ */
+const NOTE_STRIP_H = 64
 
 /** 出片帧率（与 `mp4.ts` 缺省一致） */
 const FPS = 30
@@ -192,6 +200,54 @@ export function LinearSyncDialog() {
   )
   const trim = useMemo(() => doc?.trim ?? { startMs: 0, endMs: mediaMs }, [doc?.trim, mediaMs])
   const range = useMemo(() => exportRangeOf(clock, trim), [clock, trim])
+  /**
+   * adj1284（用户 2026-11-09「把音符时值图搬到连续谱台面的波形下面，复用 SyncDialog 那套」）：
+   *
+   * 那条「音符格子排」的**几何与对拍台同一份**（`dialogs/noteStrip.ts` 的
+   * `stripCellsOf` / `cellRectPct` / `pitchHeightOf` / `barLabelsOf`），横轴换成**本台面的媒体时间轴**：
+   * `mediaMs = offset + 拍 × beatMs`。所以格子左缘正对波形/谱带上的同一刻——
+   * 用户能直接看出"格子在这儿、谱带却在那儿"（本轮 `adj1284` 修的正是这类偏差）。
+   *
+   * 为什么用 `scoreSeq.events` 而不是 `strip.notes`：对拍台画的就是播放事件（合成音也由它渲染），
+   * 两处同一个来源才谈得上"对照"；`strip.notes` 是条带几何，不是发声时刻。
+   */
+  const stripFit = useMemo(
+    () => ({ beatMs: fit?.beatMs ?? scoreBeatMs, offsetMs: clock.offsetMs }),
+    [clock.offsetMs, fit?.beatMs, scoreBeatMs],
+  )
+  const noteCells = useMemo(
+    () =>
+      scoreSeq.events
+        .filter((e) => e.placed.playable && e.durationMs > 0)
+        .map((e) => {
+          const name = e.pitch ?? e.placed.audioPitch
+          const midi = typeof name === 'string' && name !== '' ? pitchToMidiNote(name) : undefined
+          return {
+            beat: e.atMs / scoreBeatMs,
+            beats: e.durationMs / scoreBeatMs,
+            ...(midi !== undefined && Number.isFinite(midi) ? { midi } : {}),
+          }
+        }),
+    [scoreSeq, scoreBeatMs],
+  )
+  const stripCells = useMemo(() => stripCellsOf(noteCells, stripFit), [noteCells, stripFit])
+  /** 全曲音高范围（亮柱高度：最低 0.1、最高 1，按半音等分——与对拍台同一口径） */
+  const midiRange = useMemo(() => {
+    let lo = Number.POSITIVE_INFINITY
+    let hi = Number.NEGATIVE_INFINITY
+    for (const c of stripCells) {
+      if (c.midi === undefined) continue
+      lo = Math.min(lo, c.midi)
+      hi = Math.max(hi, c.midi)
+    }
+    return Number.isFinite(lo) && Number.isFinite(hi) ? { lo, hi } : null
+  }, [stripCells])
+  /** 音符图上的小节线（拍 → 媒体毫秒）与小节号（缺号会补在同一根线上，见 `noteStrip.ts`） */
+  const stripBarXs = useMemo(
+    () => barStartBeats.map((b) => stripFit.offsetMs + b * stripFit.beatMs),
+    [barStartBeats, stripFit],
+  )
+  const stripBarLabels = useMemo(() => barLabelsOf(barStartBeats, barNoOf), [barStartBeats, barNoOf])
   const linearStyle = useMemo(() => doc?.linear ?? {}, [doc?.linear])
   /** adj1266：缺字段 = `auto`（跟随卡片模板），旧 sidecar 天然兼容 */
   const themeId = linearStyle.theme ?? STRIP_THEME_AUTO
@@ -332,13 +388,29 @@ export function LinearSyncDialog() {
     void ensureSynth()
   }, [ensureSynth, mix.source, synthBuf, synthState])
 
-  /** 波形用哪条音轨：外部伴奏优先，其次视频原声 */
-  const soundtrack = audio ?? videoAudio
+  /**
+   * 波形用哪条音轨（`adj1284`）：
+   *
+   * 先按**混音计划**同序（视频原声 → 伴奏 → 合成音）挑"真正在响的那一条"，再按各轨自己的媒体窗口画。
+   * 用户 2026-11-09「合成音、没加音频」时，原来这里取 `audio ?? videoAudio` 全是 null ⇒ 波形是一条空带，
+   * 时值图搬过来也没法和声音对。合成音按**谱面拍速**渲染、播放时按 `synthRate` 变速，
+   * 所以它在媒体时间轴上占 `时长 / rate`（起播点 = `clock.offsetMs`）。
+   */
+  const waveTrack = useMemo<{ buffer: AudioBuffer; startMs: number; spanMs: number } | null>(() => {
+    if (plan.video && videoAudio !== null) return { buffer: videoAudio, startMs: 0, spanMs: videoAudio.duration * 1000 }
+    if (plan.accomp && audio !== null) return { buffer: audio, startMs: 0, spanMs: audio.duration * 1000 }
+    if (plan.synth && synthBuf !== null) {
+      const rate = synthRate > 0 ? synthRate : 1
+      return { buffer: synthBuf, startMs: clock.offsetMs, spanMs: (synthBuf.duration * 1000) / rate }
+    }
+    return null
+  }, [audio, clock.offsetMs, plan.accomp, plan.synth, plan.video, synthBuf, synthRate, videoAudio])
   const peaks = useMemo(() => {
-    if (soundtrack === null) return [] as { min: number; max: number }[]
-    const chans = [0, 1].map((c) => soundtrack.getChannelData(Math.min(c, soundtrack.numberOfChannels - 1)))
+    const buf = waveTrack?.buffer ?? null
+    if (buf === null) return [] as { min: number; max: number }[]
+    const chans = [0, 1].map((c) => buf.getChannelData(Math.min(c, buf.numberOfChannels - 1)))
     return waveformPeaks(chans, 1200)
-  }, [soundtrack])
+  }, [waveTrack])
 
   // ---------- 会话（一帧合成：背景 → 谱带 → 色块 → 球；带卡片时两端各加一段） ----------
   const sessionRef = useRef<LinearSession | null>(null)
@@ -499,6 +571,11 @@ export function LinearSyncDialog() {
   const playheadRef = useRef(0)
   const [, forcePaint] = useState(0)
   const drawingRef = useRef(false)
+  /**
+   * adj1284：音符时值图上的播放头（跟波形同一个位置，百分比写进 style）。
+   * 用 ref 直接改样式而不是每帧 setState —— 播放时 60fps 重渲染整块面板会卡。
+   */
+  const stripHeadRef = useRef<HTMLDivElement | null>(null)
 
   const paintWave = useCallback(() => {
     const c = waveRef.current
@@ -517,19 +594,24 @@ export function LinearSyncDialog() {
     ctx.fillStyle = 'rgba(0,0,0,0.28)'
     ctx.fillRect(0, 0, xOf(range.startMs), WAVE_H)
     ctx.fillRect(xOf(range.endMs), 0, w - xOf(range.endMs), WAVE_H)
-    // ② 波形
+    // ② 波形（adj1284：画**实际在响的那条轨**，并按它自己的媒体窗口铺开；只有合成音时也有波形）
     const mid = WAVE_H / 2
-    ctx.strokeStyle = 'var(--jp-accent, #2f6fed)'
-    ctx.globalAlpha = 0.85
-    ctx.beginPath()
-    for (let i = 0; i < peaks.length; i++) {
-      const x = (i / Math.max(1, peaks.length - 1)) * w
-      const p = peaks[i]
-      ctx.moveTo(x, mid - p.max * mid * 0.92)
-      ctx.lineTo(x, mid - p.min * mid * 0.92)
+    const wt = waveTrack
+    if (wt !== null && peaks.length > 1) {
+      const left = xOf(wt.startMs)
+      const right = xOf(wt.startMs + wt.spanMs)
+      ctx.strokeStyle = '#6f8fd8'
+      ctx.globalAlpha = 0.9
+      ctx.beginPath()
+      for (let i = 0; i < peaks.length; i++) {
+        const x = left + (i / Math.max(1, peaks.length - 1)) * (right - left)
+        const p = peaks[i]
+        ctx.moveTo(x, mid - p.max * mid * 0.92)
+        ctx.lineTo(x, mid - p.min * mid * 0.92)
+      }
+      ctx.stroke()
+      ctx.globalAlpha = 1
     }
-    ctx.stroke()
-    ctx.globalAlpha = 1
     // ③ 保留段两端的竖线 + 标尺
     ctx.strokeStyle = 'rgba(255,255,255,0.55)'
     ctx.beginPath()
@@ -539,7 +621,7 @@ export function LinearSyncDialog() {
     ctx.lineTo(xOf(range.endMs), WAVE_H)
     ctx.stroke()
     const scale = timeScaleOf(0, total, w)
-    ctx.fillStyle = 'var(--jp-text-secondary, #aaa)'
+    ctx.fillStyle = '#9aa3b2'
     ctx.font = '10px system-ui, sans-serif'
     ctx.textBaseline = 'top'
     for (const tick of scale.ticks) {
@@ -548,7 +630,7 @@ export function LinearSyncDialog() {
       ctx.fillText(timeLabelOf(tick, scale.stepMs), x + 3, WAVE_H + 4)
     }
     // ④ 锚点（打点位置）
-    ctx.strokeStyle = 'var(--jp-warning, #e0a020)'
+    ctx.strokeStyle = '#e0a020'
     ctx.beginPath()
     for (const a of doc?.anchors ?? []) {
       const x = xOf(Math.max(0, Math.min(total, a.audioMs)))
@@ -558,14 +640,17 @@ export function LinearSyncDialog() {
     ctx.stroke()
     // ⑤ 播放头（媒体时间轴；会话时刻要换算，带卡片时播放头会先停在片头那一段）
     const px = xOf(Math.max(0, Math.min(total, mediaOfSession(playheadRef.current))))
-    ctx.strokeStyle = 'var(--jp-danger, #ff5d6c)'
+    ctx.strokeStyle = '#ff5d6c'
     ctx.lineWidth = 2
     ctx.beginPath()
     ctx.moveTo(px, 0)
     ctx.lineTo(px, WAVE_H)
     ctx.stroke()
     ctx.lineWidth = 1
-  }, [clock.totalMs, doc?.anchors, mediaOfSession, peaks, range.endMs, range.startMs])
+    // ⑥ adj1284：音符时值图上的播放头（与波形同一个媒体时刻；用百分比，缩放/换宽都对得上）
+    const head = stripHeadRef.current
+    if (head !== null) head.style.left = `${(px / Math.max(1, w)) * 100}%`
+  }, [clock.totalMs, doc?.anchors, mediaOfSession, peaks, range.endMs, range.startMs, waveTrack])
 
   const paintStage = useCallback(
     (tMs: number) => {
@@ -608,6 +693,15 @@ export function LinearSyncDialog() {
     })
     return () => cancelAnimationFrame(id)
   }, [paintAt, sessionReady])
+
+  /**
+   * adj1284：音符时值图是挂在波形**后面**的 DOM —— 第一次挂上时波形可能已经画过了，
+   * 这里补画一帧，让时值图上的播放头立刻落到正确位置（不然要等下一次播放/拖动才动）。
+   */
+  useEffect(() => {
+    const id = requestAnimationFrame(() => paintAt(playheadRef.current))
+    return () => cancelAnimationFrame(id)
+  }, [paintAt, stripCells.length])
 
   // ---------- 鼠标手势（adj1281，用户 2026-11-09） ----------
   /**
@@ -1607,7 +1701,7 @@ export function LinearSyncDialog() {
 
           <canvas
             ref={waveRef}
-            className="linear-wave"
+            className={`linear-wave${stripCells.length > 0 ? ' has-strip' : ''}`}
             data-role="linear-wave"
             style={{ height: WAVE_H + RULER_H }}
             onPointerDown={(e) => {
@@ -1623,6 +1717,71 @@ export function LinearSyncDialog() {
             }}
             title={linearSyncCopy.waveHint}
           />
+
+          {/* adj1284（用户 2026-11-09「把音符时值图搬到连续谱台面的波形下面」）：
+              与对拍台**同一套几何与样式**（`dialogs/noteStrip.ts` + `.sync-notes` 那组类）：
+              一格 = 一个主音符、宽度 = 时值、亮柱高 = 音高；小节线/小节号也画在这一排里。
+              差别只有位置（在波形**下面**）与横轴（本台面的媒体时间轴）——点一下同样跳过去。 */}
+          {stripCells.length > 0 && (
+            <div
+              className="sync-notes is-below"
+              data-role="linear-note-strip"
+              style={{ height: `${NOTE_STRIP_H}px` }}
+              title={linearSyncCopy.stripHint}
+              onPointerDown={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect()
+                const x = Math.min(Math.max(0, e.clientX - rect.left), Math.max(1, rect.width))
+                seekTo((x / Math.max(1, rect.width)) * clock.totalMs)
+              }}
+            >
+              {stripBarXs.map((ms, i) => {
+                if (ms < 0 || ms > clock.totalMs) return null
+                return (
+                  <div
+                    key={`bar-${i}`}
+                    className="sync-bar-line"
+                    style={{ left: `${(ms / Math.max(1, clock.totalMs)) * 100}%` }}
+                  />
+                )
+              })}
+              {stripBarLabels.map((lb, i) => {
+                // 与对拍台同一套抽稀：视野越长，正常号隔得越开（补号一律显示）
+                const every = clock.totalMs > 90000 ? 8 : clock.totalMs > 45000 ? 4 : clock.totalMs > 15000 ? 2 : 1
+                if (lb.stack === 0 && (lb.no - 1) % every !== 0) return null
+                const ms = stripFit.offsetMs + lb.beat * stripFit.beatMs
+                if (ms < 0 || ms > clock.totalMs) return null
+                return (
+                  <span
+                    key={`no-${lb.no}-${i}`}
+                    className={`sync-bar-no${lb.stack > 0 ? ' is-fill' : ''}`}
+                    style={{ left: `calc(${(ms / Math.max(1, clock.totalMs)) * 100}% + 3px)`, top: `${1 + lb.stack * 11}px` }}
+                  >
+                    {lb.no}
+                  </span>
+                )
+              })}
+              {stripCells.map((cell, i) => {
+                const rect = cellRectPct(cell, 0, clock.totalMs)
+                if (rect === null) return null
+                return (
+                  <button
+                    key={`${cell.beat}-${i}`}
+                    type="button"
+                    className="sync-note-cell"
+                    style={
+                      {
+                        left: `${rect.leftPct}%`,
+                        width: `${rect.widthPct}%`,
+                        '--h': String(midiRange ? pitchHeightOf(cell.midi, midiRange.lo, midiRange.hi) : 0.1),
+                      } as React.CSSProperties
+                    }
+                    title={audioClockOf(cell.audioMs)}
+                  />
+                )
+              })}
+              <div ref={stripHeadRef} className="linear-strip-head" data-role="linear-strip-head" />
+            </div>
+          )}
 
           <div className="sync-row">
             <span className="sync-label">{linearSyncCopy.audioLabel}</span>

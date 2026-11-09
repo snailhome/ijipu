@@ -1599,6 +1599,8 @@ export const linearSyncCopy = {
   tap: '打点(T)',
   tapHint: '按 T：把当前位置记成一个谱面拍点（然后确认小节:拍）',
   waveHint: '点一下/拖一下：跳到这里；压暗的两端不会被导出',
+  /** adj1284：波形下面那条「音符时值图」（与对拍台同一套几何） */
+  stripHint: '音符时值图：一格一个主音符、宽 = 时值、亮柱高 = 音高；竖线是小节线，点一下跳到那里',
   audioLabel: '伴奏',
   pickAudio: '选伴奏…',
   repickAudio: '换伴奏…',
