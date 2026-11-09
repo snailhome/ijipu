@@ -38389,6 +38389,17 @@ Q: 1 2 3 4 |
     gaps.length === 3 && gaps.every((g) => Math.abs(g - 500) <= 2),
     `间隔=${gaps.join(',')}ms`,
   )
+  /**
+   * adj1283b：**条带上的音符时刻必须与播放序列（合成音就是按它渲染的）落在同一批时刻上**。
+   * 只验"条带自己算得对不对"不够——用户听到的是合成音，两边必须同一个时间源。
+   */
+  const evTimes = (seqE.events ?? []).map((e) => e.atMs)
+  const timeMiss = stripE.notes.filter((n) => !evTimes.some((t) => Math.abs(t - n.t0) <= 2))
+  check(
+    'adj1283b 条带音符的起点与播放序列事件时刻一致（合成音同源，误差 ≤ 2ms）',
+    timeMiss.length === 0,
+    `对不上 ${timeMiss.length} 个：${timeMiss.slice(0, 4).map((n) => n.t0).join(',')} vs 事件 ${evTimes.slice(0, 6).join(',')}`,
+  )
   // ⑤ 单调：时间递增 ⇒ x 不减；曲末取末端
   let mono = true
   let prevX = -1
