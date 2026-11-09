@@ -195,6 +195,7 @@ import {
   linearCardsOf,
   /* adj1266：出片窗口（保留段 → 编多长、从媒体哪一刻起画） */
   linearExportWindowOf,
+  linearExportViewOf,
   mediaMsOfSession,
   sessionMsOfMedia,
 } from '../src/export/video/linearSync'
@@ -39491,6 +39492,23 @@ C: 一 二 三 四 五 六 七 八
     'adj1277 放大在光栅化时做（切片根宽高 × zoom、blit 坐标乘 zoom —— 矢量放大，不是拉大位图）',
     /w \* this\.zoom/.test(rasterSrc) && /const dx = \(b\.x - scrollX\) \* z/.test(rasterSrc),
     '',
+  )
+  /**
+   * adj1278：**出片取景**——只连续动态谱时只取谱带那一条；有视频/背景图时取整块画布。
+   * 用户 2026-11-09：「只是只连续动态谱时导出的视频只要谱带范围」。
+   */
+  const bandOnly = linearExportViewOf({ hasVideo: false, hasBgImage: false, outW: 1920, outH: 1080, bandH: 300, bandTop: 270 })
+  const withVideo = linearExportViewOf({ hasVideo: true, hasBgImage: false, outW: 1920, outH: 1080, bandH: 300, bandTop: 270 })
+  const withImage = linearExportViewOf({ hasVideo: false, hasBgImage: true, outW: 1920, outH: 1080, bandH: 300, bandTop: 270 })
+  check(
+    'adj1278 只连续动态谱 ⇒ 出片只取谱带（宽=画布宽、高=谱带高、上移量=谱带顶）',
+    bandOnly.cropped && bandOnly.width === 1920 && bandOnly.height === 300 && bandOnly.offsetY === 270,
+    JSON.stringify(bandOnly),
+  )
+  check(
+    'adj1278 有视频 / 有背景图 ⇒ 不裁，成片 = 整块画布',
+    !withVideo.cropped && !withImage.cropped && withVideo.height === 1080 && withVideo.offsetY === 0,
+    `${JSON.stringify(withVideo)} / ${JSON.stringify(withImage)}`,
   )
 }
 

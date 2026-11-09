@@ -70,6 +70,7 @@ import {
   linearCardsOf,
   linearClockOf,
   linearExportWindowOf,
+  linearExportViewOf,
   LINEAR_INTRO_FADE_MS,
   linearMixPlanOf,
   mediaMsAt,
@@ -1193,22 +1194,28 @@ export function LinearSyncDialog() {
       /**
        * adj1278（用户 2026-11-09）：**只连续动态谱**（没有视频、也没有背景图）时，
        * 导出的视频只取**谱带那一条** —— 预览里那块工作画布只是用来"摆位置"的。
+       * 口径收在 `linearExportViewOf`（纯函数，Node 里可断言）。
        */
-      const bandCrop = video === null && bgImage === null
-      const bandH = Math.max(48, Math.round(strip.height * bandScale))
-      const bandTop = bandTopOf(out.height, bandH, topRatio)
+      const view = linearExportViewOf({
+        hasVideo: video !== null,
+        hasBgImage: bgImage !== null,
+        outW: out.width,
+        outH: out.height,
+        bandH: Math.max(48, Math.round(strip.height * bandScale)),
+        bandTop: bandTopOf(out.height, Math.max(48, Math.round(strip.height * bandScale)), topRatio),
+      })
       const outSession = {
-        width: out.width,
-        height: bandCrop ? bandH : out.height,
+        width: view.width,
+        height: view.height,
         totalMs: exportWindow.totalMs,
         draw: (ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D, t: number): void => {
-          if (!bandCrop) {
+          if (!view.cropped) {
             s.draw(ctx, t + off)
             return
           }
-          // 把画布往上挪 `bandTop` ⇒ 编出来的那一帧正好是谱带那条
+          // 把画布往上挪 `offsetY` ⇒ 编出来的那一帧正好是谱带那条
           ctx.save()
-          ctx.translate(0, -bandTop)
+          ctx.translate(0, -view.offsetY)
           s.draw(ctx, t + off)
           ctx.restore()
         },

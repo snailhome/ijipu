@@ -385,3 +385,36 @@ export function locatorBlockWidthOf(noteSize: number, scale = 1): number {
   const w = Math.max(4, finite(noteSize, 16) * s * LOCATOR_NOTE_RATIO)
   return Math.max(6, Math.round(w))
 }
+
+/**
+ * adj1278：**出片取景**——只连续动态谱时只取谱带那一条，有背景（视频/背景图）时取整块画布。
+ *
+ * 为什么单独定口径：预览画布是"工作区"（用来摆谱带位置），成片范围是另一件事。
+ * 用户 2026-11-09：「只是只连续动态谱时导出的视频只要谱带范围」。
+ *
+ * @returns `offsetY` = 画面在画布里的上移量（裁谱带时 = 谱带顶；不裁 = 0）
+ */
+export interface LinearExportView {
+  width: number
+  height: number
+  offsetY: number
+  /** 是否按谱带裁（真 = 只取了谱带那一条） */
+  cropped: boolean
+}
+
+export function linearExportViewOf(input: {
+  hasVideo: boolean
+  hasBgImage: boolean
+  /** 画布（预览/成片）宽 */
+  outW: number
+  outH: number
+  /** 谱带在画布上的高度与顶部 y */
+  bandH: number
+  bandTop: number
+}): LinearExportView {
+  const w = Math.max(2, Math.round(finite(input.outW, 2)))
+  const h = Math.max(2, Math.round(finite(input.outH, 2)))
+  if (input.hasVideo || input.hasBgImage) return { width: w, height: h, offsetY: 0, cropped: false }
+  const bandH = Math.max(2, Math.round(finite(input.bandH, 2)))
+  return { width: w, height: bandH, offsetY: Math.max(0, Math.round(finite(input.bandTop, 0))), cropped: true }
+}
