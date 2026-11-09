@@ -176,7 +176,7 @@ import { buildLinearStrip, stripXAt, stripEndMs, stripBallAt } from '@ijipu/engi
 // adj1259：单行谱出 SVG + 配色替换 + 分块规划（纯函数，Node 里可直接断言）
 import { chunkPlanOf, stripSvgOf, stripLayoutOf, STRIP_INK_COLORS } from '../src/export/video/stripSvg'
 // adj1260：一帧的几何（定位块/球/滚动）与主题钳制——都是纯函数
-import { stripFrameAt, bandTopOf, stripCfgOf } from '../src/export/video/stripFrame'
+import { stripFrameAt, bandTopOf } from '../src/export/video/stripFrame'
 import { normalizeStripStyle, stripThemeOf, stripStyleOf, stripStyleOverrideOf, colorSwatchOf, hasStripStyleOverride, STRIP_THEMES, STRIP_THEME_AUTO, stripStyleFromCard, stripBaseStyleOf, colorLuminanceOf, isLightCard } from '../src/export/video/stripTheme'
 // adj1264：连续动态谱对拍台的纯口径（时钟映射 / 混音三档 / 偶数化 / 一个音符宽的色块）
 import {
@@ -39455,52 +39455,41 @@ C: 一 二 三 四 五 六 七 八 九 十 百 千 万 亿 兆 京
 }
 
 /**
- * adj1270（`adj1269` 看真图时发现的）：**条带上的歌词字号没跟着放大**。
+ * adj1277（用户 2026-11-09「不要重复造房子」）：条带**直接用谱面自己的排版**。
  *
- * `adj1258` 起条带用 `{...pageConfig, note_size: 64}` 排版 —— 只抬了数字字号，
- * `geci_size`（歌词字号）还是谱面原值（默认 11）。出片画布 1920 宽时，
- * 结果是"64px 的谱 + 11px 的词"，真图里歌词糊成一排小点。
- * 判据：按比例放大 + 真渲染出的 SVG 里歌词 `font-size` 真的变大了。
+ * 之前 `stripCfgOf` 会把字号抬到 64、把歌词/行距按比例放大、再换宽纸——那是"自己造一套"。
+ * 用户口径：预览出来的谱是测试过、认可的，直接拿过来；放大交给 `bandScale`（光栅化时矢量放大）。
  */
-console.log('[adj1270] 条带字号：歌词字号跟着谱面字号一起放大')
+console.log('[adj1277] 条带排版 = 谱面原样（不重算间距/字号）')
 {
-  const base = { ...defaultPageConfig }
-  const big = stripCfgOf(base, 64)
-  const ratioOf = (c: { note_size: number; geci_size: number }): number => c.geci_size / c.note_size
-  check(
-    'adj1270 抬到 64px 时歌词字号按同一比例放大（64:11 → 64:约54），比例基本不变',
-    big.note_size === 64 && big.geci_size >= 45 && Math.abs(ratioOf(big) - ratioOf(base)) < 0.06,
-    `base=${base.geci_size}/${base.note_size}=${ratioOf(base).toFixed(2)} → ${big.geci_size}/${big.note_size}=${ratioOf(big).toFixed(2)}`,
-  )
-  check(
-    'adj1270 坏输入不产生 0/NaN（`note_size` 缺省/为 0 时按 13 算，字号最小 1）',
-    stripCfgOf({ ...base, note_size: 0 }, 64).geci_size >= 1 &&
-      stripCfgOf({ ...base, geci_size: 0 }, 64).geci_size >= 1 &&
-      Number.isFinite(stripCfgOf({ ...base, note_size: 0 }, 64).note_size),
-    JSON.stringify(stripCfgOf({ ...base, note_size: 0 }, 64)),
-  )
-  /** 真渲染：歌词字在 SVG 里的 font-size 真的是放大后的值 */
   const CODE = `V: 1.0
-B: 歌词字号
-Q: 1 2 3 4 |
-C: 一 二 三 四
+B: 原样排版
+Q: 1 2 3 4 | 5 6 7 1' |
+C: 一 二 三 四 五 六 七 八
 `
   const r = parseJpsRaw(CODE)
-  const cfgBig = stripCfgOf(base, 64)
-  const lay = layoutScore(r, cfgBig)
+  const lay = layoutScore(r, defaultPageConfig)
   const seq = buildPlaySequence(r, lay, 120)
-  const stripBig = buildLinearStrip(lay, seq, cfgBig)
-  const svgBig = stripSvgOf(stripBig, cfgBig)
-  const lyricFont = /<text[^>]*font-size="([\d.]+)"[^>]*>一</.exec(svgBig)
+  const strip = buildLinearStrip(lay, seq, defaultPageConfig)
   check(
-    'adj1270 真渲染：歌词字是 ~54px（不是原来的 11px），一眼能读',
-    lyricFont !== null && Number(lyricFont[1]) >= 40,
-    lyricFont === null ? 'SVG 里没找到歌词字' : `font-size=${lyricFont[1]}`,
+    'adj1277 条带字号 = 谱面字号（不再抬到 64），歌词字号/行距也原样',
+    strip.noteSize === defaultPageConfig.note_size && strip.beatMs > 0,
+    `noteSize=${strip.noteSize}`,
   )
-  const linearSrc3 = readFileSync(join(root, 'src', 'dialogs', 'LinearSyncDialog.tsx'), 'utf8')
+  /** 台面不再引用 stripCfgOf（那个"自己造一套"的入口已删） */
+  const linearSrcNew = readFileSync(join(root, 'src', 'dialogs', 'LinearSyncDialog.tsx'), 'utf8')
   check(
-    'adj1270 台面走同一个入口（`stripCfgOf(pageConfig, STRIP_NOTE_SIZE)`，不再自己拼配置）',
-    /stripCfgOf\(pageConfig, STRIP_NOTE_SIZE\)/.test(linearSrc3) && !/note_size: STRIP_NOTE_SIZE\s*\}\)/.test(linearSrc3),
+    'adj1277 台面直接用 `pageConfig` 排版（源码里不再有 stripCfgOf / STRIP_NOTE_SIZE 那种覆盖）',
+    /const stripCfg: PageConfig = pageConfig/.test(linearSrcNew) &&
+      !/stripCfgOf/.test(linearSrcNew) &&
+      !/STRIP_NOTE_SIZE/.test(linearSrcNew),
+    '',
+  )
+  /** 放大在光栅化那一步（矢量放大），条带数据本身不带缩放 */
+  const rasterSrc = readFileSync(join(root, 'src', 'export', 'video', 'stripRaster.ts'), 'utf8')
+  check(
+    'adj1277 放大在光栅化时做（切片根宽高 × zoom、blit 坐标乘 zoom —— 矢量放大，不是拉大位图）',
+    /w \* this\.zoom/.test(rasterSrc) && /const dx = \(b\.x - scrollX\) \* z/.test(rasterSrc),
     '',
   )
 }
@@ -39564,5 +39553,51 @@ C: 一 二 三 四 五 六 七 八
     'adj1275 色块顶在谱带顶之下（竖直方向对齐到数字那一行）',
     g.blockTop > g.bandTop + 1 && g.blockBottom < g.bandTop + lay.stripH,
     `bandTop=${g.bandTop} block=${g.blockTop}..${g.blockBottom} stripH=${lay.stripH}`,
+  )
+}
+
+/**
+ * adj1276（用户 2026-11-09 的四条优化）：
+ *  ① 滚动谱**不许画水印**（`renderScoreToSvg` 的文字水印不需要图片资源，之前漏了）；
+ *  ② 音符排列**强制空间优先**，且**不再按时间拉伸小节**（照搬预览的间距）；
+ *  ③ 没有视频时输出 = 谱带自身范围（这条在台面接线里验）。
+ */
+console.log('[adj1276] 滚动谱去水印 / 强制空间优先 / 不再按时间拉伸')
+{
+  const CODE = `V: 1.0
+B: 优化
+Q: 1 2 3 4 | 5 6 7 1' |: 2 3 4 5 :|
+C: 一 二 三 四 五 六 七 八 九 十 百 千
+`
+  const cfgWm = { ...defaultPageConfig, wmEnabled: true, wmType: 'text' as const, wmText: '测试水印' }
+  const r = parseJpsRaw(CODE)
+  const lay = layoutScore(r, cfgWm)
+  const seq = buildPlaySequence(r, lay, 120)
+  const stripWm = buildLinearStrip(lay, seq, cfgWm)
+  const svgWm = stripSvgOf(stripWm, cfgWm)
+  check(
+    'adj1276 谱面开着水印时，滚动谱的 SVG 里**一个水印字都没有**（文字水印不需要图片资源，之前漏了）',
+    !svgWm.includes('测试水印'),
+    svgWm.includes('测试水印') ? 'SVG 里还有水印字' : '',
+  )
+  check(
+    'adj1276 条带排版用谱面自己的布局方式（不再强制改写 `noteSpaceLayout`——预览怎么排就怎么排）',
+    buildLinearStrip(
+      layoutScore(r, { ...defaultPageConfig, noteSpaceLayout: 'duration' }),
+      buildPlaySequence(r, layoutScore(r, { ...defaultPageConfig, noteSpaceLayout: 'duration' }), 120),
+      { ...defaultPageConfig, noteSpaceLayout: 'duration' },
+    ).runs.length > 0,
+    '',
+  )
+  /** 不按时间拉伸：每段 run 的宽度 = 源小节的自然宽（k = 1），与"每拍像素"无关 */
+  const lay64 = layoutScore(r, defaultPageConfig)
+  const seq64 = buildPlaySequence(r, lay64, 120)
+  const narrow = buildLinearStrip(lay64, seq64, defaultPageConfig, { pxPerBeat: 20 })
+  const dense = buildLinearStrip(lay64, seq64, defaultPageConfig, { pxPerBeat: 400 })
+  const stretched = buildLinearStrip(lay64, seq64, defaultPageConfig, { pxPerBeat: 400, timedStretch: true })
+  check(
+    'adj1276 默认不按时间拉伸：「每拍像素」调多大都不改变条带宽度（间距照搬预览）',
+    Math.abs(narrow.width - dense.width) < 0.5 && stretched.width > dense.width + 1,
+    `20px/拍 → ${narrow.width}；400px/拍 → ${dense.width}；按时值拉伸 → ${stretched.width}`,
   )
 }

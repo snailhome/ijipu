@@ -52,7 +52,7 @@ import {
   type StripStyle,
 } from '../export/video/stripTheme'
 import { createLinearSession, type LinearSession } from '../export/video/linearSession'
-import { stripCfgOf, bandTopOf } from '../export/video/stripFrame'
+import { bandTopOf } from '../export/video/stripFrame'
 import { CARD_TEMPLATES, resolveCardStyle } from '../export/video/cardTemplates'
 import { recordCardTemplate } from '../store/syncExtras'
 import {
@@ -84,8 +84,11 @@ import { isTauriShell, tauriInvoke } from '../brand/env'
 import { dynamicVideoCopy, linearSyncCopy, syncCopy } from '../brand/copy'
 import { audioClockOf, timeLabelOf, timeScaleOf } from './syncRuler'
 
-/** 台面里谱带字号（出片宽高由视频决定；字号只决定"一屏几拍"的疏密） */
-const STRIP_NOTE_SIZE = 64
+/**
+ * adj1277：条带按**谱面原尺寸**排版（就是预览那一套），`bandScale` 默认放大 4.5 倍
+ * （13px 的字号在 1080p 成片上太小；放大在光栅化时做，矢量 ⇒ 清晰）。
+ */
+const DEFAULT_BAND_SCALE = 4.5
 
 /** 波形画布：波形本体 + 下侧标尺 */
 const WAVE_H = 118
@@ -145,10 +148,13 @@ export function LinearSyncDialog() {
     return buildPlaySequence(parseResult, lay, scoreBpm)
   }, [parseResult, pageConfig, scoreBpm])
   /**
-   * 条带的排版配置：字号固定（出片分辨率与字号无关，字号只影响"一屏几拍"）。
-   * adj1270：歌词字号跟着一起放大（只抬 `note_size` 会让歌词按原值画，真图里糊成小点）。
+   * adj1277（用户 2026-11-09「不要重复造房子」）：条带**直接用谱面自己的排版配置**。
+   *
+   * 用户口径：应用里预览出来的谱（字体/字号/音符间距/减时线/八度点/修饰符）是测试过、认可的，
+   * 直接拿过来用；条带只做"多行拼一行 + 跨行连音线重画"。
+   * 所以这里不再改 `note_size`、不换纸、不缩放间距——放大交给 `bandScale`（光栅化时矢量放大）。
    */
-  const stripCfg = useMemo<PageConfig>(() => stripCfgOf(pageConfig, STRIP_NOTE_SIZE), [pageConfig])
+  const stripCfg: PageConfig = pageConfig
   /** adj1265：排版结果留着算片头卡的文字（标题/作者/调号/拍速） */
   const scoreLayout = useMemo(() => layoutScore(parseResult, stripCfg), [parseResult, stripCfg])
   /**
@@ -162,7 +168,6 @@ export function LinearSyncDialog() {
   const lyricGap = doc?.linear?.lyricGap ?? 0
   const strip: LinearStrip = useMemo(() => {
     return buildLinearStrip(scoreLayout, scoreSeq, stripCfg, {
-      pxPerBeat: Math.round(STRIP_NOTE_SIZE * 1.6),
       lyrics: showLyrics,
       barNumbers: showBarNumbers,
       lyricGap,
@@ -190,9 +195,12 @@ export function LinearSyncDialog() {
   const themeId = linearStyle.theme ?? STRIP_THEME_AUTO
   const topRatio = linearStyle.topRatio ?? 0.25
   const blockRatio = linearStyle.blockRatio ?? 1 / 3
-  const bandScale = linearStyle.bandScale ?? 1
+  /** adj1277：谱带放大倍数（条带按谱面原尺寸排版，这里只决定"放多大"） */
+  const bandScale = linearStyle.bandScale ?? DEFAULT_BAND_SCALE
   /** adj1271：两端淡化（占画布宽的比例；缺字段 = 0.08，0 = 关） */
   const edgeFade = linearStyle.edgeFade ?? 0.08
+  /** adj1276：没有视频时的**输出宽度**（有视频时以视频宽高为准，这个值不参与） */
+  const outW = linearStyle.outW ?? 1920
   /** adj1272：无背景（透明）——第 1 层，只要谱 */
   const bgNone = linearStyle.bgNone === true
   /** 卡片样式与相机位共用模板库（sidecar 记的模板优先，没有就用当前选中的） */
@@ -255,11 +263,17 @@ export function LinearSyncDialog() {
   }, [video])
   useEffect(() => () => video?.close(), [video])
 
-  /** 出片/预览画布尺寸（视频宽高，奇数往下取偶；没视频用 9:16） */
-  const out = useMemo(
-    () => (video !== null ? evenSizeOf(video.info.width, video.info.height) : { width: 1080, height: 1920 }),
-    [video],
-  )
+  /** 出片/预览画布尺寸：有视频 = 视频宽高；**没有视频 = 谱带自己的范围**（adj1276） */
+  const out = useMemo(() => {
+    if (video !== null) return evenSizeOf(video.info.width, video.info.height)
+    /**
+     * adj1276（用户 2026-11-09）：没有导入视频时**只显示谱带范围**，输出也以谱带范围为视频范围。
+     *
+     * 原来固定 1080×1920（竖屏大画布）⇒ 谱带只占上面一条，上下全是空的；
+     * 现在：宽 = 用户设的输出宽度（默认 1920），高 = 谱带排版高 × 谱带大小（就是谱带本身）。
+     */
+    return evenSizeOf(Math.max(320, Math.round(outW)), Math.max(48, Math.round(strip.height * bandScale)))
+  }, [video, outW, strip.height, bandScale])
 
   // ---------- 合成音 ----------
   const [synthBuf, setSynthBuf] = useState<AudioBuffer | null>(null)
@@ -335,8 +349,33 @@ export function LinearSyncDialog() {
   /**
    * adj1271：**预览缩放**（1 = 适应面板；放大后可滚滚动条看细节）。
    * 只影响"看"，不影响出片分辨率（画布像素尺寸始终等于出片尺寸）。
+   *
+   * adj1276：缩放不再用 CSS `zoom`（它会被画布的 `max-width:100%` 重新按死，放大无效），
+   * 改成"按容器实测尺寸算出一个显示宽高 × 缩放"直接写到画布样式上 —— 放大后才真的能滚。
    */
   const [stageZoom, setStageZoom] = useState(1)
+  const stageBoxRef = useRef<HTMLDivElement | null>(null)
+  const [stageBox, setStageBox] = useState({ w: 0, h: 0 })
+  useEffect(() => {
+    const el = stageBoxRef.current
+    if (el === null) return
+    const measure = (): void => setStageBox({ w: el.clientWidth, h: Math.round(window.innerHeight * 0.46) })
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    window.addEventListener('resize', measure)
+    return () => {
+      ro.disconnect()
+      window.removeEventListener('resize', measure)
+    }
+  }, [])
+  /** 适应面板时的显示尺寸（再乘 `stageZoom` 写进 style） */
+  const fitted = useMemo(() => {
+    const maxW = stageBox.w > 0 ? stageBox.w : 1200
+    const maxH = stageBox.h > 0 ? stageBox.h : 600
+    const s = Math.min(maxW / Math.max(1, out.width), maxH / Math.max(1, out.height))
+    return { w: Math.max(1, Math.round(out.width * s)), h: Math.max(1, Math.round(out.height * s)) }
+  }, [stageBox, out.width, out.height])
 
   useEffect(() => {
     let alive = true
@@ -569,7 +608,7 @@ export function LinearSyncDialog() {
     const onWheel = (e: WheelEvent): void => {
       e.preventDefault()
       const cur = wheelRef.current
-      const next = Math.max(0.3, Math.min(3, cur.bandScale - Math.sign(e.deltaY) * 0.05))
+      const next = Math.max(1, Math.min(12, cur.bandScale - Math.sign(e.deltaY) * 0.5))
       setExtras({ linear: { ...cur.linearStyle, bandScale: Math.round(next * 100) / 100 } })
     }
     el.addEventListener('wheel', onWheel, { passive: false })
@@ -614,7 +653,7 @@ export function LinearSyncDialog() {
         setExtras({ linear: { ...linearStyle, lyricGap: Math.round(next) } })
         return
       }
-      const next = Math.max(0.3, Math.min(3, d.base + dyCanvas / Math.max(1, strip.height)))
+      const next = Math.max(1, Math.min(12, d.base + dyCanvas / Math.max(1, strip.height)))
       setExtras({ linear: { ...linearStyle, bandScale: Math.round(next * 100) / 100 } })
     },
     [linearStyle, out.height, setExtras, strip.height, stripScale],
@@ -1242,8 +1281,8 @@ export function LinearSyncDialog() {
         </div>
 
         <div className="linear-body">
-          <div className={bgNone ? 'linear-stage linear-stage-alpha' : 'linear-stage'}>
-            <div className="linear-stage-zoom" style={{ zoom: stageZoom }}>
+          <div className={bgNone ? 'linear-stage linear-stage-alpha' : 'linear-stage'} ref={stageBoxRef}>
+            <div className="linear-stage-zoom">
               <div className="linear-stage-wrap">
                 <canvas
                   ref={stageRef}
@@ -1252,6 +1291,10 @@ export function LinearSyncDialog() {
                   height={out.height}
                   data-role="linear-stage"
                   title={linearSyncCopy.stageHint}
+                  style={{
+                    width: `${Math.round(fitted.w * stageZoom)}px`,
+                    height: `${Math.round(fitted.h * stageZoom)}px`,
+                  }}
                   onPointerDown={onStageDown}
                   onPointerMove={onStageMove}
                   onPointerUp={onStageUp}
@@ -1378,6 +1421,26 @@ export function LinearSyncDialog() {
               />
               {linearSyncCopy.bgNone}
             </label>
+            {/* adj1276：没有视频时，输出范围 = 谱带本身（宽可调；高 = 谱带大小 × 谱带排版高） */}
+            {video === null && (
+              <>
+                <span className="sync-label" title={linearSyncCopy.outWidthHint}>
+                  {linearSyncCopy.outWidth}
+                </span>
+                <input
+                  className="sync-num"
+                  type="number"
+                  min={320}
+                  max={4096}
+                  step={2}
+                  value={outW}
+                  data-role="linear-outw"
+                  aria-label={linearSyncCopy.outWidth}
+                  title={linearSyncCopy.outWidthHint}
+                  onChange={(e) => setExtras({ linear: { ...linearStyle, outW: Number(e.target.value) } })}
+                />
+              </>
+            )}
             {bgNone && <span className="sync-dim">{linearSyncCopy.bgNoneTag}</span>}
             {video !== null && (
               <span className="sync-dim">
@@ -1581,9 +1644,9 @@ export function LinearSyncDialog() {
             <input
               className="sync-mix-range"
               type="range"
-              min={0.5}
-              max={2}
-              step={0.05}
+              min={1}
+              max={12}
+              step={0.25}
               value={bandScale}
               aria-label={linearSyncCopy.bandScale}
               onChange={(e) => setExtras({ linear: { ...linearStyle, bandScale: Number(e.target.value) } })}

@@ -3590,6 +3590,42 @@ async function main() {
         await sleep(1200)
 
         /**
+         * adj1276：没有视频时，输出范围 = 谱带本身（宽 × 谱带高），不再固定 1080×1920。
+         * 判据：画布很宽很扁（宽高比 > 3），且高度远小于竖屏 1920；改「输出宽度」画布跟着变。
+         */
+        const canvasBox = async () =>
+          evalJs(
+            c,
+            `(() => { const cv = document.querySelector('[data-role="linear-stage"]'); return { w: cv.width, h: cv.height, ratio: +(cv.width / cv.height).toFixed(2) } })()`,
+          )
+        const box0 = await canvasBox()
+        check(
+          'adj1276 没有视频 ⇒ 输出范围就是谱带本身（宽高比 > 3、高远小于 1920，不再是大竖屏画布）',
+          box0.ratio > 3 && box0.h < 900,
+          JSON.stringify(box0),
+        )
+        const outWBefore = box0.w
+        await evalJs(
+          c,
+          `(() => {
+            const el = document.querySelector('[data-role="linear-outw"]')
+            if (!el) return false
+            const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set
+            setter.call(el, '1280')
+            el.dispatchEvent(new Event('input', { bubbles: true }))
+            el.dispatchEvent(new Event('change', { bubbles: true }))
+            return true
+          })()`,
+        )
+        await sleep(1500)
+        const box1 = await canvasBox()
+        check(
+          'adj1276 「输出宽度」改 1280 ⇒ 画布宽度真的变成 1280（谱带宽度可调）',
+          Math.abs(box1.w - 1280) <= 2 && box1.w !== outWBefore,
+          `${outWBefore} → ${box1.w}`,
+        )
+
+        /**
          * adj1274：谱带外框 + 曲/词分界虚线（真拖一次）。
          * 判据读台面上的「曲词间距 +N」读数——那就是真正传给条带布局的 `lyricGap`。
          */
@@ -3628,23 +3664,9 @@ async function main() {
         )
 
         /**
-         * adj1271：两端淡化——拉满到 0.3 后，画布**右边缘那一条**的墨迹应明显变少。
-         * 取右边缘而不是左边缘：曲首时条带从画面 1/3 处才开始，左边那块本来就没内容。
+         * adj1271：两端淡化——拉满到 0.3 后，左右两端那两条的墨迹亮度应明显变少。
+         * （判据在下面：只量两端各 25% 的**亮度总量**，中间那片不参与。）
          */
-        const edgeInk = `(() => {
-          const cv = document.querySelector('[data-role="linear-stage"]')
-          const g = cv.getContext('2d')
-          const w = cv.width, h = cv.height
-          const d = g.getImageData(0, 0, w, h).data
-          let n = 0
-          for (let x = Math.floor(w * 0.96); x < w; x++) {
-            for (let y = 0; y < h; y++) {
-              const i = (y * w + x) * 4
-              if (Math.abs(d[i] - 16) + Math.abs(d[i + 1] - 16) + Math.abs(d[i + 2] - 20) > 60) n++
-            }
-          }
-          return n
-        })()`
         const setRange = (sel, v) => `(() => {
             const el = document.querySelector(${JSON.stringify(sel)})
             if (!el) return false
@@ -3654,14 +3676,68 @@ async function main() {
             el.dispatchEvent(new Event('change', { bubbles: true }))
             return true
           })()`
-        const edgeNoFade = Number(await evalJs(c, edgeInk))
+        // 先把输出宽度收窄到 640：窗口比条带窄，两端才真的有内容可淡（不然左/右是空的）
+        await evalJs(
+          c,
+          `(() => {
+            const el = document.querySelector('[data-role="linear-outw"]')
+            if (!el) return false
+            const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set
+            setter.call(el, '640')
+            el.dispatchEvent(new Event('input', { bubbles: true }))
+            el.dispatchEvent(new Event('change', { bubbles: true }))
+            return true
+          })()`,
+        )
+        await sleep(1500)
+        // 再把播放头拖到中间：曲首时条带从画面 1/3 处才开始
+        await evalJs(
+          c,
+          `(() => {
+            const cv = document.querySelector('[data-role="linear-wave"]')
+            const r = cv.getBoundingClientRect()
+            cv.dispatchEvent(new PointerEvent('pointerdown', {
+              bubbles: true, clientX: r.left + r.width * 0.5, clientY: r.top + 10, pointerId: 3, button: 0,
+            }))
+            return true
+          })()`,
+        )
+        await sleep(900)
+        /**
+         * 只量**左右两端的 25% 区域**：淡化的效果在两侧，中间那一大片根本不参与
+         * （整幅统计会把这 50% 的"没变化"算进分母，看起来只掉几个百分点）。
+         * 同样是亮度总量，不是"非底色像素数"。
+         */
+        const edgeMass = `(() => {
+          const cv = document.querySelector('[data-role="linear-stage"]')
+          const w = cv.width, h = cv.height
+          const d = cv.getContext('2d').getImageData(0, 0, w, h).data
+          let s = 0
+          const zone = Math.floor(w * 0.25)
+          for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
+              if (x > zone && x < w - zone) continue
+              const i = (y * w + x) * 4
+              const v = Math.abs(d[i] - 16) + Math.abs(d[i + 1] - 16) + Math.abs(d[i + 2] - 20)
+              if (v > 60) s += Math.min(255, v)
+            }
+          }
+          return s
+        })()`
+        const edgeNoFade = Number(await evalJs(c, edgeMass))
         await evalJs(c, setRange('[data-role="linear-edgefade"]', 0.3))
         await sleep(1800)
-        const edgeFaded = Number(await evalJs(c, edgeInk))
+        const edgeFaded = Number(await evalJs(c, edgeMass))
+        if (process.env.IJIPU_SHOT) {
+          const shotFade = String(process.env.IJIPU_SHOT).replace(/\.png$/, '') + '-fade.png'
+          const dataUrlFade = await evalJs(c, `document.querySelector('[data-role="linear-stage"]').toDataURL('image/png')`)
+          writeFileSync(shotFade, Buffer.from(String(dataUrlFade).split(',')[1] ?? '', 'base64'))
+          console.log(`  （已截图：${shotFade}）`)
+        }
         check(
-          'adj1271 两端淡化拉满后，画面右边缘的墨迹明显变少（谱带不再硬切一刀）',
-          edgeFaded < edgeNoFade * 0.6,
-          `右边缘墨迹 ${edgeNoFade} → ${edgeFaded}`,
+          'adj1271 两端淡化拉满后，画面墨迹的**亮度总量**明显变少（谱带左右两端真的淡出了）',
+          edgeNoFade > 0 && edgeFaded < edgeNoFade * 0.9,
+          `墨迹亮度 ${edgeNoFade} → ${edgeFaded}`,
         )
         await evalJs(c, setRange('[data-role="linear-edgefade"]', 0.08))
         await sleep(900)

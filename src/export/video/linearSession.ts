@@ -114,10 +114,16 @@ function drawCover(ctx: DrawCtx, src: CanvasImageSource, sw: number, sh: number,
 export async function createLinearSession(opts: CreateLinearSessionOptions): Promise<LinearSession> {
   const style = normalizeStripStyle(opts.style)
   const svg = stripSvgOf(opts.strip, opts.cfg, style.ink)
-  const bandScale = Math.min(3, Math.max(0.3, opts.bandScale ?? 1))
+  const bandScale = Math.min(12, Math.max(0.3, opts.bandScale ?? 1))
   const stripH = Math.round(opts.strip.height * bandScale)
-  const cache = new StripRasterCache(svg, opts.strip.width * bandScale, stripH, {
-    chunkW: Math.max(480, Math.round(opts.width)),
+  /**
+   * adj1277（用户 2026-11-09「不要重复造房子」）：条带按**谱面原尺寸**排版，
+   * 放大在光栅化这一步做（`zoom` = bandScale，SVG 矢量放大 ⇒ 清晰）。
+   * 所以缓存的坐标全是"排版坐标"，`blit` 的 scrollX 要除以 bandScale。
+   */
+  const cache = new StripRasterCache(svg, opts.strip.width, opts.strip.height, {
+    chunkW: Math.max(240, Math.round(opts.width / bandScale)),
+    zoom: bandScale,
     style,
   })
   const lay = { ...(opts.lay ?? {}), viewW: opts.width, viewH: opts.height, stripH }
@@ -189,12 +195,14 @@ export async function createLinearSession(opts: CreateLinearSessionOptions): Pro
   /** 把谱带贴到 `(0, bandTop)`；有淡化时先过一遍遮罩 */
   const blitBand = (ctx: DrawCtx, g: StripFrameGeom): void => {
     const bc = bandCtx()
+    // adj1277：`g.scrollX` 是画布坐标，缓存里是排版坐标 ⇒ 除以 zoom
+    const sx = g.scrollX / bandScale
     if (bc === null) {
-      cache.blit(ctx, g.scrollX, g.bandTop)
+      cache.blit(ctx, sx, g.bandTop)
       return
     }
     bc.clearRect(0, 0, opts.width, stripH)
-    cache.blit(bc, g.scrollX, 0)
+    cache.blit(bc, sx, 0)
     bc.globalCompositeOperation = 'destination-out'
     const left = bc.createLinearGradient(0, 0, fadeW, 0)
     left.addColorStop(0, 'rgba(0,0,0,1)')
@@ -272,7 +280,8 @@ export async function createLinearSession(opts: CreateLinearSessionOptions): Pro
     mediaMsOf: (tMs) => mediaMsOfSession(timeline, tMs),
     warm: (tMs) => {
       const mediaMs = mediaMsOfSession(timeline, tMs)
-      return cache.ensure(stripFrameAt(mediaMs, opts.strip, lay).scrollX, opts.width)
+      // adj1277：缓存的坐标是排版坐标 ⇒ 视口宽度也要除以 bandScale
+      return cache.ensure(stripFrameAt(mediaMs, opts.strip, lay).scrollX / bandScale, opts.width / bandScale)
     },
     draw(ctx, tMs) {
       const f = linearCardFrameAt(tMs, timeline)

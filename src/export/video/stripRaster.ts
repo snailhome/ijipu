@@ -28,13 +28,21 @@ export interface StripStyleLike {
 }
 
 export interface RasterOptions {
-  /** 块宽（CSS px） */
+  /** 块宽（**条带排版坐标** px） */
   chunkW?: number
   /** 光栅倍数（缺省按 devicePixelRatio 与 2 取小，至少 1） */
   scale?: number
   style?: StripStyleLike
   /** 同时缓存几块（缺省 6） */
   maxChunks?: number
+  /**
+   * adj1277：**条带在画布上的放大倍数**（`bandScale`）。
+   *
+   * 条带按**谱面原尺寸**排版（13px 也好、20px 也好，就是预览那一套），
+   * 画到视频里要放大几倍 —— 放大在**光栅化**这一步做（SVG 是矢量，放大后仍然清晰），
+   * 不是把位图拉大。所有几何量都在"排版坐标"里，只有这里乘 zoom。
+   */
+  zoom?: number
 }
 
 const DEFAULT_STYLE: StripStyleLike = {
@@ -69,12 +77,15 @@ export class StripRasterCache {
   private readonly svg: string
   private readonly h: number
   private readonly totalW: number
+  /** adj1277：条带在画布上的放大倍数（排版坐标 → 画布坐标） */
+  private readonly zoom: number
   private loading = new Set<number>()
 
   constructor(svg: string, width: number, height: number, opts: RasterOptions = {}) {
     this.svg = svg
     this.totalW = Math.max(1, width)
     this.h = Math.max(1, height)
+    this.zoom = Math.max(0.1, opts.zoom ?? 1)
     this.chunkW = Math.max(64, Math.round(opts.chunkW ?? 960))
     const dpr = typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1
     this.scale = Math.max(1, Math.min(opts.scale ?? Math.min(2, dpr), 3))
@@ -118,8 +129,18 @@ export class StripRasterCache {
       const w = Math.min(this.chunkW, this.totalW - x)
       if (w <= 0) return
       const one = applyRangeToSvg(this.svg, { x, y: 0, w, h: this.h })
-      const img = await svgToImage(one)
-      const ink = paint(img, w, this.h, this.scale)
+      /**
+       * adj1277：把切片的**根宽高**改成"目标尺寸"（= 排版宽 × zoom）。
+       *
+       * 为什么要改写：浏览器画 SVG 图片时按**固有尺寸**光栅化再缩放 —— 固有尺寸还是 427×65 的话，
+       * 放大 4.5 倍就是一张糊图（截图里字形边缘全是锯齿）。改写成 1922×292 后，
+       * 浏览器直接在目标分辨率渲染矢量 ⇒ 清晰。
+       */
+      const scaled = one
+        .replace(/width="[\d.]+"/, `width="${Math.round(w * this.zoom)}"`)
+        .replace(/height="[\d.]+"/, `height="${Math.round(this.h * this.zoom)}"`)
+      const img = await svgToImage(scaled)
+      const ink = paint(img, w * this.zoom, this.h * this.zoom, this.scale)
       const halo = this.style.haloWidth > 0 ? silhouette(ink, this.style.halo) : null
       this.bitmaps.set(index, { x, w, ink, halo })
       this.order.push(index)
@@ -146,25 +167,32 @@ export class StripRasterCache {
    */
   blit(ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D, scrollX: number, dstY: number): void {
     const s = this.style
+    const z = this.zoom
     for (const [, b] of this.bitmaps) {
-      const dx = b.x - scrollX
-      const dw = b.w
+      // adj1277：块坐标是排版坐标，画到画布上要乘 zoom
+      const dx = (b.x - scrollX) * z
+      const dw = b.w * z
+      const dh = this.h * z
       if (dx > ctx.canvas.width || dx + dw < 0) continue
       if (b.halo !== null) {
+        /**
+         * ⚠ 描边粗细 / 阴影模糊是**画布像素**（用户调的是"看起来多粗"），不随 zoom 放大。
+         * 早先这里乘了 zoom（4.5×）⇒ 描边变成 13px 的大黑边，字形被糊成一团（看真图才发现）。
+         */
         const hw = Math.max(1, s.haloWidth)
         for (let i = 0; i < 8; i++) {
           const ang = (i * Math.PI) / 4
-          ctx.drawImage(b.halo, dx + Math.cos(ang) * hw, dstY + Math.sin(ang) * hw, dw, this.h)
+          ctx.drawImage(b.halo, dx + Math.cos(ang) * hw, dstY + Math.sin(ang) * hw, dw, dh)
         }
       }
       if (s.shadowBlur > 0) {
         ctx.save()
         ctx.shadowColor = s.shadow
         ctx.shadowBlur = s.shadowBlur
-        ctx.drawImage(b.ink, dx, dstY, dw, this.h)
+        ctx.drawImage(b.ink, dx, dstY, dw, dh)
         ctx.restore()
       }
-      ctx.drawImage(b.ink, dx, dstY, dw, this.h)
+      ctx.drawImage(b.ink, dx, dstY, dw, dh)
     }
   }
 }

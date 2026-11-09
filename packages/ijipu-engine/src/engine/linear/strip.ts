@@ -330,9 +330,17 @@ export function buildLinearStrip(
     if (src.length === 0) continue
 
     const srcW = Math.max(0.5, m.x1 - m.x0)
-    const timeW = ((o.t1 - o.t0) / beatMs) * pxPerBeat
-    // 只放大不压缩：密集小节按自己的自然宽走（宁可这一段慢一点，也不让字叠在一起）
-    const k = Math.max(1, timeW / srcW)
+    /**
+     * adj1276（用户 2026-11-09）：**默认不再按时间拉伸小节**（`k = 1`）。
+     *
+     * 用户口径："音符的排列…直接参考应用的预览…不用再重新算各音符间距"。
+     * 原来的 `k = max(1, 每拍像素 × 拍数 / 小节自然宽)` 会把音符间距按时间重算一遍：
+     * 短小节被拉宽、密集小节保持原样 —— 看起来和预览不是同一张谱。
+     * 现在条带 = 预览里那一行按演奏顺序接起来，x 只做平移。
+     * （`timedStretch: true` 保留旧行为，供对照/以后需要"按拍等宽"时用。）
+     */
+    const k =
+      opts.timedStretch === true ? Math.max(1, (((o.t1 - o.t0) / beatMs) * pxPerBeat) / srcW) : 1
     const yShift = baselineY - m.baselineY
     const x0 = cursor
     const x1 = x0 + srcW * k

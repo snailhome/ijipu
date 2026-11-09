@@ -6823,15 +6823,10 @@ span.ws-check {
   border-radius: 8px;
 }
 
-/* 画布像素尺寸 = 出片尺寸；这里只做等比缩放（宽/高都不许超） */
+/* 画布像素尺寸 = 出片尺寸；显示尺寸由台面按容器实测算好写进 style（adj1276：放大后能滚） */
 .linear-stage-canvas {
   display: block;
   margin: 0 auto;
-  width: auto;
-  height: auto;
-  max-width: 100%;
-  max-height: 46vh;
-  object-fit: contain;
   /* adj1271：在画布上按住上下拖 = 调谱带纵向位置 */
   cursor: ns-resize;
   touch-action: none;

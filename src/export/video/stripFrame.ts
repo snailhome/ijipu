@@ -9,7 +9,7 @@
  *  · 谱带纵向位置**可调**，默认**上 1/4**；
  *  · 球在**色块的固定位置**弹。
  */
-import { stripBallAt, stripXAt, type LinearStrip, type PageConfig, type StripBall } from '@ijipu/engine'
+import { stripBallAt, stripXAt, type LinearStrip, type StripBall } from '@ijipu/engine'
 import { locatorBlockWidthOf } from './linearSync'
 
 export interface StripLayOptions {
@@ -106,32 +106,13 @@ export function stripFrameAt(tMs: number, strip: LinearStrip, o: StripLayOptions
 }
 
 /**
- * adj1270：**条带的排版配置**——把"谱面字号"抬到条带字号时，字号类配置要**一起按比例放大**。
+ * adj1277（用户 2026-11-09「不要重复造房子」）：条带**不再改谱面的排版配置**。
  *
- * 为什么不能只改 `note_size`（`adj1258` 起就是这么干的）：`note_size` 只决定数字/减时线/高八度点，
- * **歌词字号 `geci_size` 是独立一项**。出片画布 1920 宽时 13px 的谱太小，所以要抬到 64px；
- * 但只抬 `note_size` 的结果是"64px 的谱 + 11px 的词"——真图里歌词糊成一排小点（`adj1269` 截图发现）。
- *
- * 只放大**与字号同量纲**的那几项；`height_*` 这类行间距只影响行与行的距离，
- * 而条带把所有行压到同一条基线上，抬不抬都不影响条带上的样子（抬了反而会改动行判定）。
+ * 原来这里有 `stripCfgOf(cfg, 64)`：把字号抬到 64、并把歌词/行距按比例放大。
+ * 用户明确要求：应用里预览出来的谱（字体/字号/音符间距/减时线/八度点/修饰符）是测试过、认可的，
+ * **直接拿过来用**；条带只做"多行拼一行 + 跨行连音线重画"。
+ * 放大改由 `bandScale` 在**光栅化**时做（SVG 矢量放大 ⇒ 清晰），不再动排版。
  */
-export function stripCfgOf(cfg: PageConfig, noteSize: number): PageConfig {
-  const from = cfg.note_size > 0 ? cfg.note_size : 13
-  const scale = Math.max(0.1, noteSize / from)
-  const scaled = (v: number): number => Math.round(v * scale)
-  /**
-   * adj1273（"谱的显示效果与预览还有差距"）：**字号 + 间距一起按比例放大**，条带才像"预览放大版"。
-   * 只放大字号时，谱与歌词之间的间距 (`height_quci`) 还是原值 ⇒ 歌词贴着数字（预览里不是这样）。
-   * 行间距 (`height_*`) 只用于"行与行"，条带把行压平了，抬不抬都不影响外观。
-   */
-  return {
-    ...cfg,
-    note_size: Math.max(1, Math.round(noteSize)),
-    geci_size: Math.max(1, scaled(cfg.geci_size)),
-    height_quci: scaled(cfg.height_quci),
-    height_cici: scaled(cfg.height_cici),
-  }
-}
 
 /**
  * adj1271：**两端淡化**的宽度（px）。

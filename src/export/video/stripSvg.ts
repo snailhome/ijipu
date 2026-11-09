@@ -67,9 +67,19 @@ export function tintSvg(svg: string, ink: string): string {
 
 /** 单行谱 → 合成布局（`renderScoreToSvg` 要的壳） */
 export function stripLayoutOf(strip: LinearStrip, cfg: PageConfig): ScoreLayout {
-  // 不覆盖 `page_width`：`PageConfig` 的纸张尺寸由 `page` 决定（没有独立宽高字段），
-  // 条带宽度只体现在 `page.width` 上，渲染端读的是它。
-  return { pages: [strip.page], config: cfg, configKey: 'linear' }
+  /**
+   * ⚠ adj1276（用户 2026-11-09「滚动谱还有水印，没有取消，去掉」）：
+   * 条带**一律不画谱面水印/背景层**。
+   *
+   * 为什么会漏：`renderScoreToSvg` 的水印层只要 `wmEnabled !== false` 就会画**文字水印**
+   * （不需要图片资源），所以"没传 assets"只挡住了背景图和图片水印。用户谱里开着水印时，
+   * 滚动谱就会带着一排半透明的「爱记谱・iJipu」。
+   */
+  return {
+    pages: [strip.page],
+    config: { ...cfg, wmEnabled: false, bgEnabled: false },
+    configKey: 'linear',
+  }
 }
 
 /**

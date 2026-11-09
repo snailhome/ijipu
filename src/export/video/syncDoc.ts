@@ -113,6 +113,13 @@ export interface SyncLinear {
    * 只影响这条连续谱的观感（不改 `.jps` 里的 `height_quci`，那是谱面级设置）。
    */
   lyricGap?: number
+  /**
+   * adj1276：**没有导入视频时**的输出宽度（px，默认 1920）。
+   *
+   * 没有视频时，输出的视频范围 = 谱带本身（宽 = 这个值，高 = 谱带排版高 × 谱带大小）。
+   * 有视频时以视频宽高为准，这个值不参与。
+   */
+  outW?: number
 }
 
 export interface SyncDoc {
@@ -499,6 +506,11 @@ export function parseSyncDoc(text: string): { doc: SyncDoc | null; error?: strin
     if (l.lyricGap !== undefined && l.lyricGap !== null) {
       const n = finiteOr(l.lyricGap, Number.NaN)
       if (Number.isFinite(n)) out.lyricGap = Math.round(Math.min(400, Math.max(-200, n)))
+    }
+    // adj1276：没有视频时的输出宽度（320 ~ 4096，偶数化交给 out 那边）
+    if (l.outW !== undefined && l.outW !== null) {
+      const n = finiteOr(l.outW, Number.NaN)
+      if (Number.isFinite(n)) out.outW = Math.round(Math.min(4096, Math.max(320, n)))
     }
     if (Object.keys(out).length > 0) linear = out
   }
