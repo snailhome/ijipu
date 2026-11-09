@@ -3432,11 +3432,14 @@ async function main() {
           '',
         )
         /**
-         * adj1284（用户 2026-11-09「把音符时值图搬到连续谱台面的波形下面，复用 SyncDialog 那套，
-         * 含波形」）：真点一遍，守三件源码级断言拦不住的事——
-         *  ① 时值图真的在**波形下面**、与波形**同宽**（同一时间轴，格子和波形才对得上）；
-         *  ② 格子的确是按主音符画出来的（数得出来，且有小节线）；
-         *  ③ 点一格 ⇒ 播放头/读数真的跳过去（不是画着玩的），时值图上的红线也跟着到中点。
+         * adj1284/1285（用户 2026-11-09/10「音符格图形放在波形上面，显示小节线贯穿到波形图」
+         * 「在音符格或波形图上鼠标滚动缩放，两者同步缩放」「波形放大时，波形图下横向滚动条」）：
+         * 真点一遍，守源码级断言拦不住的事——
+         *  ① 时值图在波形**上面**、与波形**同宽**（同一时间轴）；
+         *  ② 小节线确实**贯穿到波形**（在画布上沿同一个 x 采样到那条线）；
+         *  ③ 滚轮缩放：两排一起缩（格子的 left 变了、下方出现滚动条）；
+         *  ④ 拖/点滚动条能平移；双击波形回整曲（滚动条消失）；
+         *  ⑤ 点时值图 ⇒ 播放头跳过去（红线跟着到中点）。
          */
         const stripUi = await evalJs(
           c,
@@ -3451,21 +3454,156 @@ async function main() {
               cells: s.querySelectorAll('.sync-note-cell').length,
               bars: s.querySelectorAll('.sync-bar-line').length,
               head: !!s.querySelector('[data-role="linear-strip-head"]'),
-              below: sr.top >= wr.top + wr.height - 2,
+              above: sr.bottom <= wr.top + 2,
               sameW: Math.abs(sr.width - wr.width) <= 4,
               h: Math.round(sr.height),
+              // 用**小节线**当缩放探针：格子会被窗口裁（左缘夹到 0%），小节线不会
+              firstBarLeft: s.querySelector('.sync-bar-line')?.style.left ?? '',
             }
           })()`,
         )
         check(
-          'adj1284 音符时值图在波形**下面**、与波形同宽（同一时间轴）',
-          stripUi.strip === true && stripUi.below === true && stripUi.sameW === true && stripUi.h >= 40 && stripUi.head === true,
+          'adj1285 音符时值图在波形**上面**、与波形同宽（同一时间轴）',
+          stripUi.strip === true && stripUi.above === true && stripUi.sameW === true && stripUi.h >= 40 && stripUi.head === true,
           JSON.stringify(stripUi),
         )
         check(
-          'adj1284 时值图的每格 = 一个主音符（还有小节线，不是空框）',
+          'adj1285 时值图的每格 = 一个主音符（还有小节线，不是空框）',
           Number(stripUi.cells) >= 8 && Number(stripUi.bars) >= 4,
           JSON.stringify(stripUi),
+        )
+        /**
+         * adj1285（用户 2026-11-10「整道曲子只显示了 10 个小节」）：
+         * 台面要写出"谱带拼了几小节 / 全曲几小节"；这份 4 小节样例必须 **4/4 且没有警告**。
+         */
+        const stripInfo = await evalJs(
+          c,
+          `(() => {
+            const el = document.querySelector('[data-role="linear-strip-info"]')
+            return {
+              text: el ? el.textContent : '',
+              warn: !!document.querySelector('[data-role="linear-strip-warn"]'),
+            }
+          })()`,
+        )
+        check(
+          'adj1285 台面写出「谱带 N / M 小节」，4 小节样例是 4/4 且没有"只拼到"的警告',
+          String(stripInfo.text).includes('4 / 4') && stripInfo.warn === false,
+          JSON.stringify(stripInfo),
+        )
+        /**
+         * 小节线贯穿到波形：取时值图里第 2 根线的横坐标，到波形画布**顶边**那条像素列上找蓝色线。
+         * 采样顶边 0~6px：波形峰值很少能顶到那里（`mid - max*mid*0.92`），所以那里有蓝线就是小节线。
+         */
+        const barThrough = await evalJs(
+          c,
+          `(() => {
+            const s = document.querySelector('[data-role="linear-note-strip"]')
+            const wv = document.querySelector('[data-role="linear-wave"]')
+            const lines = [...s.querySelectorAll('.sync-bar-line')]
+            if (!wv || lines.length < 2) return { ok: false, why: 'no-line', n: lines.length }
+            const line = lines[1].getBoundingClientRect()
+            const wr = wv.getBoundingClientRect()
+            const sx = (line.left - wr.left) * (wv.width / Math.max(1, wr.width))
+            const g = wv.getContext('2d')
+            // 只采顶边 2px：波形峰值最高也只在 ~5px 处（mid − mid×0.92），不会混进来
+            const top = Math.max(1, Math.round(2 * (wv.width / Math.max(1, wr.width))))
+            for (let dx = -2; dx <= 2; dx++) {
+              const x = Math.round(sx) + dx
+              if (x < 0 || x >= wv.width) continue
+              const d = g.getImageData(x, 0, 1, top).data
+              for (let i = 0; i < d.length; i += 4) {
+                // 小节线 = rgba(150,210,255,0.55) 叠在深底上 ⇒ 偏蓝、且蓝明显大于红
+                if (d[i + 2] > 100 && d[i + 2] > d[i] + 20 && d[i + 1] > d[i] + 10) return { ok: true, x }
+              }
+            }
+            return { ok: false, why: 'no-blue', sx }
+          })()`,
+        )
+        check('adj1285 小节线贯穿到波形（波形画布顶边采样到同一条线）', barThrough.ok === true, JSON.stringify(barThrough))
+        /**
+         * 滚轮缩放：在**时值图**上滚一下（两排共用同一个视野），
+         * 判据 = 格子的 left 变了 + 下方出现横向滚动条（整曲时它是隐藏的）。
+         */
+        const zoomed = await evalJs(
+          c,
+          `(() => {
+            const s = document.querySelector('[data-role="linear-note-strip"]')
+            const r = s.getBoundingClientRect()
+            s.dispatchEvent(
+              new WheelEvent('wheel', {
+                bubbles: true,
+                cancelable: true,
+                deltaY: -120,
+                clientX: r.left + r.width / 2,
+                clientY: r.top + r.height / 2,
+              }),
+            )
+            return true
+          })()`,
+        )
+        await sleep(500)
+        const zoomUi = await evalJs(
+          c,
+          `(() => {
+            const s = document.querySelector('[data-role="linear-note-strip"]')
+            const bar = document.querySelector('[data-role="linear-wave-scroll"]')
+            const thumb = bar ? bar.querySelector('.sync-scroll-thumb') : null
+            return {
+              barLeft: s?.querySelector('.sync-bar-line')?.style.left ?? '',
+              cells: s ? s.querySelectorAll('.sync-note-cell').length : -1,
+              scroll: !!bar,
+              thumbW: thumb ? parseFloat(thumb.style.width) : -1,
+            }
+          })()`,
+        )
+        check(
+          'adj1285 在时值图上滚轮 ⇒ 波形/时值图一起放大（小节线重新排布 + 下方出现横向滚动条）',
+          zoomed === true &&
+            zoomUi.scroll === true &&
+            zoomUi.barLeft !== stripUi.firstBarLeft &&
+            zoomUi.thumbW > 0 &&
+            zoomUi.thumbW < 100,
+          `首根小节线 left ${stripUi.firstBarLeft} → ${zoomUi.barLeft}；滚动条 ${zoomUi.scroll}；滑块宽 ${zoomUi.thumbW}%`,
+        )
+        // 点滚动条右半边 ⇒ 视野往后挪（小节线再挪一次）
+        const beforePan = String(zoomUi.barLeft)
+        await evalJs(
+          c,
+          `(() => {
+            const bar = document.querySelector('[data-role="linear-wave-scroll"]')
+            const r = bar.getBoundingClientRect()
+            bar.dispatchEvent(
+              new PointerEvent('pointerdown', { bubbles: true, clientX: r.left + r.width * 0.97, clientY: r.top + 6, pointerId: 1, button: 0 }),
+            )
+            bar.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 1 }))
+            return true
+          })()`,
+        )
+        await sleep(400)
+        const afterPan = String(
+          await evalJs(c, `document.querySelector('[data-role="linear-note-strip"] .sync-bar-line')?.style.left ?? ''`),
+        )
+        check('adj1285 点滚动条空白处 ⇒ 视野平移（时值图跟着动）', afterPan !== beforePan, `${beforePan} → ${afterPan}`)
+        // 双击波形 ⇒ 回整曲，滚动条收起
+        await evalJs(
+          c,
+          `(() => {
+            const wv = document.querySelector('[data-role="linear-wave"]')
+            const r = wv.getBoundingClientRect()
+            wv.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, clientX: r.left + r.width / 2, clientY: r.top + 10 }))
+            return true
+          })()`,
+        )
+        await sleep(400)
+        const resetUi = await evalJs(
+          c,
+          `(() => ({ scroll: !!document.querySelector('[data-role="linear-wave-scroll"]'), barLeft: document.querySelector('[data-role="linear-note-strip"] .sync-bar-line')?.style.left ?? '' }))()`,
+        )
+        check(
+          'adj1285 双击波形 ⇒ 回整曲（滚动条收起、小节线回到没缩放的位置）',
+          resetUi.scroll === false && resetUi.barLeft === stripUi.firstBarLeft,
+          JSON.stringify(resetUi),
         )
         const posBefore = String(await evalJs(c, `document.querySelector('[data-role="linear-pos"]')?.textContent ?? ''`))
         await evalJs(

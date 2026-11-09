@@ -46,7 +46,7 @@ import type {
 import type { PlaySequence } from '../playback/sequence'
 import { BAR_NUMBER_BOTTOM_GAP, barNumberBoxH } from '../layout/spacing'
 import { extractMeasures, type SrcMeasure } from './measures'
-import type { LinearStrip, LinearStripOptions, StripNote, StripRun } from './types'
+import type { LinearStrip, LinearStripOptions, StripNote, StripOnset, StripRun } from './types'
 
 /** 一次演奏（一个小节的一条） */
 interface Occurrence {
@@ -282,8 +282,35 @@ export function buildLinearStrip(
   const pxPerBeat = opts.pxPerBeat ?? Math.round(noteSize * 1.6)
 
   const measures = extractMeasures(layout, cfg)
+  /**
+   * `adj1285`（用户 2026-11-10「整道曲子只显示了 10 个小节，实际 62 小节」）：
+   * **演奏序列的小节号 ≠ 排版里小节的序号**，不能再按"号相等"来配。
+   *
+   * 为什么：多声部谱（`Q1:`/`Q2:`/`Q3:`）里，引擎的小节号是**按各声部各自数**的
+   * （实测 `scores-library/score-x57z`：序列号是 `1-8, 25-33, 52-60, 79-87`），
+   * 而 `extractMeasures` 给的是阅读顺序 `1..35`。按号配 ⇒ 只有碰巧相等的几段配上，
+   * 后半首**静默丢掉**（实测条带只覆盖全曲的 48.6%，用户看到的就是"只显示了几小节"）。
+   *
+   * 现在按**首次出现顺序**配：演奏顺序里第 k 个不同的源小节号 → 排版里第 k 个小节。
+   *  · 反复：不同号只在第一次出现时入表 ⇒ 顺序仍是阅读顺序 ✓；
+   *  · 空小节（没有音符、序列里也没有条目的）两边会**同时缺席** ⇒ 顺序仍然对齐 ✓；
+   *  · `&ds` 跳回前面（号已出现过）不改变顺序 ✓。
+   * 配不上的（排版里确实缺）计入 `dropped.missingBar`，由台面显示，不再静默。
+   */
+  const barOrder: number[] = []
+  {
+    const seenBar = new Set<number>()
+    for (const no of seq.barNos ?? []) {
+      if (seenBar.has(no)) continue
+      seenBar.add(no)
+      barOrder.push(no)
+    }
+  }
   const byNo = new Map<number, SrcMeasure>()
-  for (const m of measures) if (!byNo.has(m.no)) byNo.set(m.no, m)
+  for (let i = 0; i < barOrder.length; i++) {
+    const m = measures[i]
+    if (m !== undefined) byNo.set(barOrder[i], m)
+  }
   /** 每条曲行有几段歌词（`adj1267`；没有多段就是 0） */
   const verseLines = verseLinesOfRows(measures)
 
@@ -318,13 +345,18 @@ export function buildLinearStrip(
   let noteIdx = 0
   let droppedVoice = 0
   let droppedCross = 0
+  /** adj1285：演奏序列里有、但排版里配不上的源小节（不再静默丢，见 `dropped.missingBar`） */
+  let droppedMissing = 0
   /** 歌词最下沿（按"要不要画"都算一份，见循环里的说明） */
   let lyricBottom = 0
 
   for (let i = 0; i < occ.length; i++) {
     const o = occ[i]
     const m = byNo.get(o.no)
-    if (m === undefined) continue
+    if (m === undefined) {
+      droppedMissing += 1
+      continue
+    }
     const { notes: src, skipped } = mainNotesOf(m)
     droppedVoice += skipped
     if (src.length === 0) continue
@@ -555,7 +587,7 @@ export function buildLinearStrip(
   let lyricLines = 1
   for (const v of verseLines.values()) lyricLines = Math.max(lyricLines, v + 1)
 
-  const beatXs = beatPositionsOf(notes, runs.length > 0 ? runs[runs.length - 1].t1 : 0, beatMs, cursor)
+  const onsets = onsetsOf(notes)
 
   return {
     page: { ...page, width: Math.max(1, cursor), height },
@@ -566,38 +598,30 @@ export function buildLinearStrip(
     guideQuciY,
     runs,
     notes,
-    beatXs,
+    onsets,
     noteSize,
     pxPerBeat,
     beatMs,
-    dropped: { crossMeasure: droppedCross, fragment: 0, extraVoice: droppedVoice },
+    dropped: { crossMeasure: droppedCross, fragment: 0, extraVoice: droppedVoice, missingBar: droppedMissing },
   }
 }
 
-/** 同一批起点的容差（ms）：和弦音算一个"拍位" */
+/** 同一批起点的容差（ms）：和弦音算一个"落点" */
 const SAME_ONSET_MS = 0.5
 
 /**
- * `adj1284`（用户 2026-11-09 的口径）：**每一拍的谱面位置**。
+ * `adj1285`（用户 2026-11-09 晚复核后的口径）：**每个发声起点**的谱面位置。
  *
- * 用户原话要点：「谱子在移动，跳跳球落下时，谱子刚好移到拍位上……由于是空间优先，
- * 谱子的移动可能不是匀速的，而是要根据下一拍的占宽和一拍的时值来计算下一拍谱子的移动速度，
- * 以保证一拍结束后，谱子刚好移动到下一拍，然后重算下下拍」。
- *
- * 所以这里按**拍**（不是按音）建表：
- *  · 第 k 拍的位置 = 落在这一拍的**第一个音**（和弦取整组的中心）；
- *  · 这一拍没有音（长音跨过去了/休止）⇒ 在左右两个"有位置"的拍之间**按拍数线性插值**，
- *    仍然是一拍走一步，到下一拍精确落位；
- *  · 拍从曲首 0 起算（`t0 / beatMs`），与合成音、跳跳球的拍点同一个时间轴。
+ * 用户原话：「合成音演奏到哪个音符，谱子应相应的音符移到定位色块处，这个音形要对齐」。
+ * 于是滚动按**音**落位（`adj1284` 曾按拍建表，拍里的第二/三个十六分音符会被"滑过去"）：
+ *  · 同一时刻的和弦算一个起点，取整组中心（否则色块会在和弦音之间来回跳）；
+ *  · 起点顺序 = 演奏顺序（`notes` 本来就是按 run / 小节 / 音的顺序排的）。
  */
-function beatPositionsOf(notes: StripNote[], endMs: number, beatMs: number, stripW: number): number[] {
-  /** 拍号判定的容差（拍）：时刻是 0.1ms 取整来的，`seq` 累加也可能有亚毫秒漂移 ⇒ 留千分之一拍 */
-  const EPS_BEAT = 1e-3
-  const beats = Math.max(1, Math.floor(Math.max(0, endMs) / beatMs + EPS_BEAT) + 1)
-  const xs: number[] = new Array(beats).fill(Number.NaN)
+function onsetsOf(notes: StripNote[]): StripOnset[] {
+  const out: StripOnset[] = []
   for (let i = 0; i < notes.length; i++) {
-    if (i > 0 && Math.abs(notes[i].t0 - notes[i - 1].t0) <= SAME_ONSET_MS) continue // 和弦里的后几个
     const t0 = notes[i].t0
+    if (i > 0 && Math.abs(t0 - notes[i - 1].t0) <= SAME_ONSET_MS) continue // 和弦里的后几个
     let lo = Number.POSITIVE_INFINITY
     let hi = Number.NEGATIVE_INFINITY
     for (let j = i; j < notes.length && Math.abs(notes[j].t0 - t0) <= SAME_ONSET_MS; j++) {
@@ -605,34 +629,9 @@ function beatPositionsOf(notes: StripNote[], endMs: number, beatMs: number, stri
       lo = Math.min(lo, c)
       hi = Math.max(hi, c)
     }
-    const k = Math.floor(t0 / beatMs + EPS_BEAT)
-    if (k >= 0 && k < beats && Number.isNaN(xs[k])) xs[k] = Math.round(((lo + hi) / 2) * 10) / 10
+    out.push({ t: t0, x: Math.round(((lo + hi) / 2) * 10) / 10 })
   }
-  let first = -1
-  let last = -1
-  for (let k = 0; k < beats; k++) {
-    if (Number.isNaN(xs[k])) continue
-    if (first < 0) first = k
-    last = k
-  }
-  if (first < 0) {
-    // 一个音都没有：退化成整条带按拍均匀推进（仍保证"一拍一步"）
-    const w = Math.max(1, stripW)
-    for (let k = 0; k < beats; k++) xs[k] = Math.round(((w * k) / Math.max(1, beats - 1)) * 10) / 10
-    return xs
-  }
-  for (let k = 0; k < first; k++) xs[k] = xs[first]
-  for (let k = last + 1; k < beats; k++) xs[k] = xs[last]
-  let prev = first
-  for (let k = first + 1; k <= last; k++) {
-    if (Number.isNaN(xs[k])) continue
-    const steps = k - prev
-    for (let s = 1; s < steps; s++) {
-      xs[prev + s] = Math.round((xs[prev] + ((xs[k] - xs[prev]) * s) / steps) * 10) / 10
-    }
-    prev = k
-  }
-  return xs
+  return out
 }
 
 /**

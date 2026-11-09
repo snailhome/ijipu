@@ -108,6 +108,15 @@ export interface CreateLinearSessionOptions {
   mediaTotalMs?: number
   /** 卡片；不传 = 不带片头片尾（行为与 adj1264 完全一致） */
   cards?: LinearCardSetup
+  /**
+   * `adj1285`（用户 2026-11-10「合成音演奏到哪个音符，谱子应相应的音符移到定位色块处」）：
+   * **媒体时刻 → 谱面时刻**（缺省恒等）。
+   *
+   * 为什么需要：条带的时间轴是**谱面**时间（`strip.onsets` 的时刻），而预览/出片喂进来的是
+   * **媒体**时刻。有保留段起点 / 对拍锚点时两者差一个 `offsetMs`（以前直接把媒体时刻当谱面时刻，
+   * 谱带会整体跑偏）。预览与出片必须传同一个函数 —— 否则音画/球位对不上。
+   */
+  scoreMsOf?: (mediaMs: number) => number
 }
 
 /** 把谱带按 cover 方式铺到画布（背景图用） */
@@ -136,6 +145,8 @@ export async function createLinearSession(opts: CreateLinearSessionOptions): Pro
   /** adj1280：谱带在画布上的宽度（比例 → 像素）；预览与出片都用它 */
   const bandW = Math.max(64, Math.round(opts.width * Math.min(1, Math.max(0.2, opts.bandWidth ?? 1))))
   const lay = { ...(opts.lay ?? {}), viewW: bandW, viewH: opts.height, stripH }
+  /** adj1285：条带按**谱面时刻**滚动（媒体时刻可能差一个保留段起点/锚点偏移） */
+  const scoreMsOf = opts.scoreMsOf ?? ((ms: number): number => ms)
   const stripEndMs = opts.strip.runs.length === 0 ? 0 : opts.strip.runs[opts.strip.runs.length - 1].t1
 
   /**
@@ -230,7 +241,7 @@ export async function createLinearSession(opts: CreateLinearSessionOptions): Pro
 
   /** 画"谱面那一帧"（背景 → 色块 → 谱带 → 球）；`alpha<1` 用于片头卡的最后一段交叉淡化 */
   const drawMusic = (ctx: DrawCtx, mediaMs: number, alpha = 1): StripFrameGeom => {
-    const g = stripFrameAt(mediaMs, opts.strip, lay)
+    const g = stripFrameAt(scoreMsOf(mediaMs), opts.strip, lay)
     if (alpha < 1) {
       ctx.save()
       ctx.globalAlpha = Math.max(0, Math.min(1, alpha))
@@ -300,7 +311,7 @@ export async function createLinearSession(opts: CreateLinearSessionOptions): Pro
     warm: (tMs) => {
       const mediaMs = mediaMsOfSession(timeline, tMs)
       // adj1277：缓存的坐标是排版坐标 ⇒ 视口宽度也要除以 bandScale
-      return cache.ensure(stripFrameAt(mediaMs, opts.strip, lay).scrollX / bandScale, opts.width / bandScale)
+      return cache.ensure(stripFrameAt(scoreMsOf(mediaMs), opts.strip, lay).scrollX / bandScale, opts.width / bandScale)
     },
     draw(ctx, tMs) {
       const f = linearCardFrameAt(tMs, timeline)
@@ -312,14 +323,14 @@ export async function createLinearSession(opts: CreateLinearSessionOptions): Pro
         ctx.clearRect(0, 0, opts.width, opts.height)
         if (f.introFade > 0) drawMusic(ctx, f.mediaMs, f.introFade)
         painter?.intro(ctx, opts.width, opts.height, tMs, 1 - f.introFade, cardSetup?.meta ?? null, cardSetup?.bpm ?? 0)
-        return stripFrameAt(f.mediaMs, opts.strip, lay)
+        return stripFrameAt(scoreMsOf(f.mediaMs), opts.strip, lay)
       }
       if (f.phase === 'end') {
         // 片尾：先画最后一帧，再把品牌落版淡上来（音乐已经停了）
         drawMusic(ctx, f.mediaMs, 1)
         const endT = tMs - (timeline.introMs + timeline.musicMs)
         painter?.end(ctx, opts.width, opts.height, Math.max(0, endT), f.endFade, cardSetup?.shortCode ?? '')
-        return stripFrameAt(f.mediaMs, opts.strip, lay)
+        return stripFrameAt(scoreMsOf(f.mediaMs), opts.strip, lay)
       }
       return drawMusic(ctx, f.mediaMs, 1)
     },

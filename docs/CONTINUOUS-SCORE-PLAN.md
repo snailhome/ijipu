@@ -75,12 +75,14 @@
 // engine/linear/types.ts
 interface StripRun { sourceBar: number; pass: number; t0: number; t1: number; x0: number; x1: number; pageIndex: number; rowIndex: number }
 interface StripNote { t0: number; t1: number; x: number; w: number; sourceBar: number }
+interface StripOnset { t: number; x: number }   // adj1285：每个发声起点（和弦算一个）的时刻与谱面位置
 interface LinearStrip {
   page: ScorePage          // 合成的一整页（宽 = 全曲、高 = 一行）
   width: number; height: number; baselineY: number
-  runs: StripRun[]; notes: StripNote[]
+  runs: StripRun[]; notes: StripNote[]; onsets: StripOnset[]
   noteSize: number; pxPerBeat: number; beatMs: number
-  dropped: { crossMeasure: number; fragment: number; extraVoice: number }  // 丢了什么，不许静默
+  // 丢了什么，不许静默（adj1285 起 `missingBar` 也记 + 台面显示）
+  dropped: { crossMeasure: number; fragment: number; extraVoice: number; missingBar: number }
 }
 ```
 
@@ -337,29 +339,49 @@ CSS `zoom` 被 `max-width` 按死、描边乘 zoom 会把字糊掉。
 `adj1283b` 的断言（条带音符时刻 = 播放序列事件时刻 ≤ 2ms）全绿却仍慢，是因为它量的是**时刻表**，
 用户看到的是**位移**——时刻对、跨度错，照样慢。**这一轮的教训：判据必须量"滚动位移"。**
 
-**新口径（用户 2026-11-09 定）**：按**拍**滚动，不按音、不按小节。
+**口径两次修正（用户复核后的最终版，`adj1285`）**：
 
-- `LinearStrip.beatXs[k]` = 第 k 拍的谱面位置（这一拍**第一个音**的中心；和弦取整组中心）；
-- 本拍 → 下一拍之间**匀速**（速度 = 两拍占宽 ÷ 一拍时值），**逐拍重算**；
-- 于是"跳跳球落地那一刻，谱子正好走到这一拍"，与 A4 预览里"球落到拍位"同一套拍点；
-- 时值不再参与插值（`t1` 只表示"这个音多长"）。
+- 第一次（`adj1284`）按**拍**匀速：`beatXs[k]` = 第 k 拍第一个音的位置，一拍之内匀速。
+  用户 2026-11-09 晚复核：「合成音演奏到哪个音符，谱子应相应的音符移到定位色块处，这个音形要对齐」
+  —— 按拍匀速时，一拍里的第 2/3/4 个十六分音符是被**滑过去**的，所以仍不对齐。
+- 最终（`adj1285`）按**音**落位：`LinearStrip.onsets[]` = 每个发声起点（和弦算一个）的时刻 + 该音中心；
+  `stripXAt(t)` 在 `onsets[k].t` 时刻**正好**等于 `onsets[k].x`，相邻起点之间匀速。
+  一拍里有两个十六分音符，就在 1/2 拍处经过第 2 个音。
+- `t1`（时值）不再参与插值，只表示"这个音多长"（供时值图/诊断）。
 
-**音符时值图（用户：复用 `SyncDialog` 那套，含波形）**：
+**音符时值图 + 波形（用户 2026-11-10 的四条，`adj1285`）**：
 
-- 连续谱台面波形**下面**加一条与对拍台**同一套几何与样式**的格子排
-  （`dialogs/noteStrip.ts` 的 `stripCellsOf / cellRectPct / pitchHeightOf / barLabelsOf`；
-  类名 `.sync-notes / .sync-note-cell / .sync-bar-line / .sync-bar-no`），
-  横轴 = 本台面的媒体时间轴（`offset + 拍 × beatMs`），与波形/谱带同一刻；点一下跳过去；
+| 用户要求 | 做法 |
+|---|---|
+| 音符格放波形**上面**，小节线贯穿到波形 | 两排包在 `.sync-wave-group`（gap:0），顺序 [时值图][波形]；**两排都画小节线**（画布那排用同一个 x、同一套颜色），看起来是一条线穿下去 |
+| 在音符格或波形上滚轮缩放，两者同步 | 两排共用同一个视野 `viewWin`（`syncRuler.ts` 的 `viewWindow / zoomView / panView / clampView`）；原生 `wheel` 监听挂在公共容器上（React 的 wheel 是被动的，`preventDefault` 无效）；无修饰键 = 缩放（鼠标处不动）、Shift = 平移、Ctrl/⌘/Alt 不接管 |
+| 放大后波形下面出横向滚动条 | `.sync-scroll`（与对拍台同一套）：拖滑块平移、点空白跳过去、整曲时隐藏；双击波形回整曲 |
+| 谱子要和合成音对齐（音形） | 见上（按音落位）；另外 `createLinearSession` 新增 `scoreMsOf`：条带按**谱面时刻**滚动（预览/出片同一个映射），有保留段起点/锚点时不再整体跑偏 |
+
+- 时值图与波形同一套几何与样式（`dialogs/noteStrip.ts` 的 `stripCellsOf / cellRectPct / pitchHeightOf / barLabelsOf`；
+  类名 `.sync-notes / .sync-note-cell / .sync-bar-line / .sync-bar-no`），点一下跳到那里；
   时值图上还有一条与波形同步的红色播放头。
-- **波形**顺手修了两处（`E-2026-577`）：① 只有合成音时（用户这次就是）原来取
+- **波形**另外修了两处（`E-2026-577`）：① 只有合成音时（用户这次就是）原来取
   `audio ?? videoAudio` 全是 null ⇒ 一条空带；现在按**混音计划**取实际在响的那条轨
   （视频原声 → 伴奏 → 合成音，合成音按 `offset` / `rate` 折算到媒体时间轴）。
   ② canvas 不认 CSS 变量：`strokeStyle = 'var(--jp-accent)'` 是非法值、被静默忽略（画成黑色），
   已改实色，并有源码闸门（再写 `var(` 就红灯）。
 
-**没做（留档，不是静默）**：有对拍锚点、且拍速与谱面不同（`fit.beatMs ≠ scoreBeatMs`）时，
-谱带的滚动位置仍直接吃**媒体时刻**，没有按 `scoreBeatMs / fit.beatMs` 折算——这是既有口径，本轮不动
-（新加的时值图会用真实时间轴把这个偏差**暴露出来**，以后要修时一眼能看见）。
+**还没做（留档，不是静默）**：对拍锚点的**拍速**与谱面不同（`fit.beatMs ≠ scoreBeatMs`）时，
+合成音会被 `synthRate` 变速，而谱带的谱面时刻只做了 `offset` 折算、没有再按拍速比缩放；
+这种情况目前要靠"拍速与谱面一致"（正常情况下就是一致的）。
+
+**追加：用户 2026-11-10「整道曲子只显示了 10 个小节，实际曲子有 62 小节」（`E-2026-578`，已修）**：
+
+- **真因**：条带按**小节号相等**配源小节，而**多声部谱里引擎的小节号是按各声部各数的**
+  （实测 `scores-library/score-x57z`：序列号 `1-8, 25-33, 52-60, 79-87`，排版小节是阅读顺序 `1..35`），
+  只有碰巧相等的段配上，其余在循环里 `continue` **静默丢弃** ⇒ 条带只铺到全曲的 48.6%。
+- **量出来的影响面**：`scores-library/` 29 份真谱里 **16 份**的条带结束早于曲末。
+- **修法**：按**首次出现顺序**配（第 k 个不同源小节号 ↔ 第 k 个排版小节）——反复只入表一次、
+  空小节两边同时缺席、`&ds` 跳回已出现过的号不改顺序；配不上的计入 `dropped.missingBar`。
+- **可见性**：台面写出「谱带 N / M 小节」，缺了就红字说明（不再"静默少半首"）。
+- **闸门**：冒烟新增两条合成断言（多声部跳号 / 62 小节长谱）＋ 一条**曲库扫描**
+  （`scores-library/*/score.jps` 条带必须铺满全曲；修前 16/29 红、修后 0）。
 
 
 
@@ -629,5 +651,36 @@ CSS `zoom` 被 `max-width` 按死、描边乘 zoom 会把字糊掉。
    这一条是靠"按混音计划取轨"的单一判据 + 单元断言保证的，**没有截图核对**；
 ② 有对拍锚点且拍速与谱面不同时（`fit.beatMs ≠ scoreBeatMs`）谱带仍按媒体时刻滚动（§6.15 末尾
    的留档项），本轮**没改**，也就没验。
+
+### 9.10 `adj1285` 实测判据（音符格挪到波形上面 / 贯穿 / 缩放 / 按音对齐）
+
+用户 2026-11-10 的四条（见 §6.15 的表）。前三条是台面交互，第四条是"慢"的第二次修正。
+
+| 判据 | 怎么验的 | 结果 |
+|---|---|---|
+| **每个音开始发声那一刻，色块就在这个音上** | `smoke`：全部音起点 vs 该音（和弦取整组）中心 | drift < 0.5px（覆盖全部音，不是只拍点） |
+| 一拍里的第 2/3/4 个十六分音符也落位 | `smoke`：16 分音符样例的每个音 | 最差 < 0.5px |
+| 相邻两音之间匀速（位移比例 = 时间比例） | `smoke`：1/4、1/2、3/4 三个采样点 | 最差 ≤ 0.02（旧口径此处只有 0.125） |
+| 两拍前进 8 个十六分音符 | `smoke`：量**位移** | 通过（旧实现只前进 2 个） |
+| 球落地时拍上的音在色块附近 | `smoke`：`stripBallAt` 落地时刻 + `stripXAt` | 偏差 < 1/4 个音距 |
+| 时值图在波形**上面**、与波形同宽 | `verify:app-ui` 真点 + `getBoundingClientRect` | `{cells:14, bars:5, h:64, above:true, sameW:true}` |
+| **小节线贯穿到波形** | `verify:app-ui`：取时值图里第 2 根线的 x，到波形画布**顶边**采样 | 找到那条蓝线（x=172） |
+| **在时值图上滚轮 ⇒ 两排一起缩放** | `verify:app-ui`：派真 `WheelEvent` | 首根小节线 `0% → 5.36%`；滑块宽 80%；读数/画布同步 |
+| **放大后出现横向滚动条** | 同上 | 滚动条出现（整曲时隐藏） |
+| 点滚动条空白 ⇒ 平移 | `verify:app-ui` | 首根小节线 `5.36% → 28.57%` |
+| 双击波形 ⇒ 回整曲 | `verify:app-ui` | 滚动条收起、小节线回 `0%` |
+| 条带按**谱面时刻**滚动（保留段/锚点不再整体跑偏） | `createLinearSession` 新增 `scoreMsOf`，预览/出片同一个映射 | 代码单一口径；本轮无锚点用例，未单独造例验 |
+| **多声部谱（小节号跳号）条带铺满全曲** | `smoke`：`Q1/Q2/Q3` 夹具（引擎号 `1,2,7,8`） | runs=4、missing=0、条带结束 = 曲末 |
+| **62 小节长谱不截断** | `smoke`：生成的 62 小节谱 | 条带 62 小节、结束时刻 = 曲末 |
+| **曲库回归**（真谱语料） | `smoke`：扫 `scores-library/*/score.jps` 29 份 | 修前 **16/29** 铺不满（最惨 48.6%）；修后 **0/29** |
+| 台面写出「谱带 N / M 小节」+ 缺失警告 | `verify:app-ui` 读 DOM | 4 小节样例 = `4 / 4`，无警告 |
+
+**本轮四道门**：`smoke` 全绿（✓ 5134 / ✗ 0，含 187 条 CLI）、`lint` 0 error（72 条 warning，
+同 §9.9）、`tsc -b` 通过、`verify:app-ui` **207/0**（新增 5 条）、`verify:video` **28/28**
+（春庭雪真机素材：解码 / 播放 / 截 2s 出片 997 KB / 读回 0:02.02）。
+
+**没验的（如实写）**：① 无头里没有合成音（音源要下载），"只有合成音时的波形 + 时值图"没有真音频可对；
+② 滚轮缩放后的**播放跟手**没单独验（播放头会跑出视野时不自动跟随，和对拍台一样）；
+③ 拍速与谱面不一致时（`fit.beatMs ≠ scoreBeatMs`）的谱面时刻缩放仍未做（§6.15 末尾留档）。
 
 

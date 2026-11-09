@@ -32,28 +32,24 @@ export function stripRunAt(strip: LinearStrip, tMs: number): number {
 /**
  * `t` 时刻谱面走到哪（条带坐标 x）。
  *
- * ## 口径（`adj1284`，用户 2026-11-09 定稿）
+ * ## 口径（`adj1285`，用户 2026-11-09 晚复核后定稿）
  *
- * > 「谱子在移动，跳跳球落下时，谱子刚好移到拍位上……由于是空间优先，谱子的移动可能不是匀速的，
- * >  而是要根据下一拍的占宽和一拍的时值来计算下一拍谱子的移动速度，以保证一拍结束后，
- * >  谱子刚好移动到下一拍，然后重算下下拍」
+ * > 「合成音演奏到哪个音符，谱子应相应的音符移到定位色块处，这个音形要对齐」
  *
- * 所以**按拍**插值，不按音符、也不按小节：
- *  · `strip.beatXs[k]` = 第 k 拍的谱面位置（该拍第一个音的中心；由 `strip.ts` 建表）；
- *  · 本拍到下一拍之间**匀速**：`f = 拍内进度`，`x = beatXs[k] + (beatXs[k+1] − beatXs[k]) × f`；
- *  · 于是每一拍结束时（球落地那一刻）谱面**正好**到下一拍，速度逐拍重算。
+ * 所以按**音**落位：`strip.onsets[k]` 是第 k 个发声起点（和弦算一个）的时刻与谱面位置；
+ * 两个相邻起点之间**匀速**走过去 ⇒ **每个音在它开始发声的那一刻正好压在定位色块上**。
  *
- * ## 这条为什么必须机器化（走过的两次错）
+ * ## 走过的三次错（都记在方案 §6.15，别再回退）
  *
- * · `adj1282` 按"音符"插值：每到一个音就落位，但一个音符的**起点**并不是拍点
- *   （十六分音符的起点在拍中间），滚动速度被音距牵着走；
- * · `adj1283` 把音符时刻改成按拍位算，可插值跨度还是"本音时值"，且 `strip.ts` 把不足一拍的
- *   时值钳成了 1 拍 ⇒ 八分音符慢 2 倍、十六分音符慢 **4 倍**，用户看到「合成音走了 8 拍、
- *   谱子才走 2 拍」。现在时值不再参与插值（它只表示"这个音多长"），拍点才是唯一的时间锚。
+ * · `adj1282` 按"音符"插值，但跨度用**本音时值**、且 `strip.ts` 把不足一拍的时值钳成 1 拍
+ *   ⇒ 八分慢 2 倍、十六分慢 **4 倍**（用户「合成音走了 8 拍、谱子才走 2 拍」）；
+ * · `adj1284` 改成"按拍匀速"，16 分音符段里第 2/3/4 个音会被**匀速滑过去**，
+ *   用户仍看到"音形没对齐"；
+ * · 现在：起点表（`onsets`）由 `strip.ts` 一次建好，插值区间 = 相邻起点，时值不再参与。
  */
 export function stripXAt(strip: LinearStrip, tMs: number): number {
-  const bx = strip.beatXs
-  if (bx.length === 0) {
+  const on = strip.onsets
+  if (on.length === 0) {
     // 兜底（历史数据/空条带）：仍按段内 x ∝ t，绝不返回 NaN
     const runs = strip.runs
     if (runs.length === 0) return 0
@@ -66,13 +62,25 @@ export function stripXAt(strip: LinearStrip, tMs: number): number {
     const f = Math.min(1, Math.max(0, (tMs - r.t0) / span))
     return r.x0 + (r.x1 - r.x0) * f
   }
-  const beatMs = strip.beatMs > 1 ? strip.beatMs : 1
-  const beat = tMs / beatMs
-  if (beat <= 0) return bx[0]
-  const k = Math.floor(beat)
-  if (k >= bx.length - 1) return bx[bx.length - 1]
-  const f = beat - k
-  return bx[k] + (bx[k + 1] - bx[k]) * f
+  if (tMs <= on[0].t) return on[0].x
+  const lastIdx = on.length - 1
+  if (tMs >= on[lastIdx].t) return on[lastIdx].x
+  // 二分：最后一个 t <= tMs 的起点
+  let lo = 0
+  let hi = lastIdx
+  let ans = 0
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1
+    if (on[mid].t <= tMs) {
+      ans = mid
+      lo = mid + 1
+    } else {
+      hi = mid - 1
+    }
+  }
+  const span = Math.max(1, on[ans + 1].t - on[ans].t)
+  const f = Math.min(1, Math.max(0, (tMs - on[ans].t) / span))
+  return on[ans].x + (on[ans + 1].x - on[ans].x) * f
 }
 
 /** 条带总时长（= 最后一段的结束时刻） */

@@ -6927,17 +6927,9 @@ span.ws-check {
   touch-action: none;
 }
 
-/* adj1284：波形下面挂了音符时值图 ⇒ 波形只留上圆角，两排贴住（与对拍台 `.sync-wave-group` 同观感） */
+/* adj1284/1285：音符时值图在波形**上面** ⇒ 波形只留下圆角，两排贴住（与对拍台 `.sync-wave-group` 同观感） */
 .linear-wave.has-strip {
-  border-radius: 6px 6px 0 0;
-}
-
-/* adj1284（用户 2026-11-09「把音符时值图搬到波形下面」）：
-   复用对拍台的 `.sync-notes` 那套格子（几何见 `dialogs/noteStrip.ts`），只把边框/圆角翻到下面 */
-.sync-notes.is-below {
-  border-top: 0;
-  border-bottom: 1px solid var(--jp-border);
-  border-radius: 0 0 4px 4px;
+  border-radius: 0 0 6px 6px;
 }
 
 /* 时值图上的播放头：与波形同一个媒体时刻（位置由 `paintWave` 写百分比） */

@@ -84,7 +84,7 @@ import { canUseDynamicVideo } from '../export/video/capability'
 import { bytesToBase64 } from '../export/zip'
 import { isTauriShell, tauriInvoke } from '../brand/env'
 import { dynamicVideoCopy, linearSyncCopy, syncCopy } from '../brand/copy'
-import { audioClockOf, timeLabelOf, timeScaleOf } from './syncRuler'
+import { audioClockOf, timeLabelOf, timeScaleOf, VIEW_ALL, clampView, panView, scrollThumb, viewWindow, zoomView, type WaveView } from './syncRuler'
 import { barLabelsOf, cellRectPct, pitchHeightOf, stripCellsOf } from './noteStrip'
 import { loadSyncLayout, saveSyncLayout, normalizeSyncLayout, resizeSyncLayout, type SyncLayout } from './syncLayout'
 
@@ -248,6 +248,13 @@ export function LinearSyncDialog() {
     [barStartBeats, stripFit],
   )
   const stripBarLabels = useMemo(() => barLabelsOf(barStartBeats, barNoOf), [barStartBeats, barNoOf])
+  /**
+   * `adj1285`（用户 2026-11-10「整道曲子只显示了 10 个小节，实际曲子有 62 小节」）：
+   * 条带到底拼进了几小节、有没有丢，**写在台面上**——以前这类"静默少了半首"只能靠肉眼发现。
+   */
+  const stripBarCount = useMemo(() => new Set(strip.runs.map((r) => r.sourceBar)).size, [strip])
+  const seqBarCount = useMemo(() => new Set(scoreSeq.barNos ?? []).size, [scoreSeq])
+  const stripTruncated = stripBarCount < seqBarCount || strip.dropped.missingBar > 0
   const linearStyle = useMemo(() => doc?.linear ?? {}, [doc?.linear])
   /** adj1266：缺字段 = `auto`（跟随卡片模板），旧 sidecar 天然兼容 */
   const themeId = linearStyle.theme ?? STRIP_THEME_AUTO
@@ -523,6 +530,11 @@ export function LinearSyncDialog() {
       bandWidth,
       edgeFade,
       mediaTotalMs: clock.totalMs,
+      /**
+       * adj1285：条带按**谱面时刻**滚动 —— 预览/出片都传同一个映射，
+       * 有保留段起点/对拍锚点时谱带不会整体跑偏（用户「音形要对齐」）。
+       */
+      scoreMsOf: (ms: number) => scoreMsAt(clock, ms),
       ...(cardsOn
         ? {
             cards: {
@@ -546,7 +558,7 @@ export function LinearSyncDialog() {
       sessionRef.current = null
       setSessionReady(false)
     }
-  }, [bgColor, bgImage, bgNone, bandScale, bandWidth, cardBpm, cardMeta, cards, cardsOn, clock.totalMs, edgeFade, linearCardStyle, linearStripStyle, out.height, out.width, range.endMs, range.startMs, strip, stripCfg, video])
+  }, [bgColor, bgImage, bgNone, bandScale, bandWidth, cardBpm, cardMeta, cards, cardsOn, clock, edgeFade, linearCardStyle, linearStripStyle, out.height, out.width, range.endMs, range.startMs, strip, stripCfg, video])
 
   /** 位置只改会话内参数（见 `layRef`），不重建 */
   useEffect(() => {
@@ -576,6 +588,16 @@ export function LinearSyncDialog() {
    * 用 ref 直接改样式而不是每帧 setState —— 播放时 60fps 重渲染整块面板会卡。
    */
   const stripHeadRef = useRef<HTMLDivElement | null>(null)
+  /**
+   * adj1285（用户 2026-11-10「在音符格或波形图上鼠标滚动缩放，两者同步」）：
+   * 波形/时值图**共用同一个视野**（`viewWindow`）——滚轮缩放、Shift+滚轮平移、
+   * 放大后下方出横向滚动条。纯口径全部复用对拍台的 `syncRuler.ts`。
+   */
+  const [view, setView] = useState<WaveView>(VIEW_ALL)
+  const waveGroupRef = useRef<HTMLDivElement | null>(null)
+  const durMs = Math.max(1, clock.totalMs)
+  const viewWin = useMemo(() => viewWindow(view, durMs), [view, durMs])
+  const thumb = useMemo(() => scrollThumb(view, durMs), [view, durMs])
 
   const paintWave = useCallback(() => {
     const c = waveRef.current
@@ -589,11 +611,16 @@ export function LinearSyncDialog() {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     ctx.clearRect(0, 0, w, WAVE_H + RULER_H)
     const total = Math.max(1, clock.totalMs)
-    const xOf = (ms: number): number => (ms / total) * w
+    /** adj1285：所有横坐标都走**当前视野**（整曲 or 放大后的一段），与音符时值图同一口径 */
+    const v0 = viewWin.v0
+    const winMs = Math.max(1, viewWin.winMs)
+    const xOf = (ms: number): number => ((ms - v0) / winMs) * w
     // ① 保留段之外压暗（"只导这一段"一眼可见）
     ctx.fillStyle = 'rgba(0,0,0,0.28)'
-    ctx.fillRect(0, 0, xOf(range.startMs), WAVE_H)
-    ctx.fillRect(xOf(range.endMs), 0, w - xOf(range.endMs), WAVE_H)
+    const xStart = Math.max(0, Math.min(w, xOf(range.startMs)))
+    const xEnd = Math.max(0, Math.min(w, xOf(range.endMs)))
+    ctx.fillRect(0, 0, xStart, WAVE_H)
+    ctx.fillRect(xEnd, 0, w - xEnd, WAVE_H)
     // ② 波形（adj1284：画**实际在响的那条轨**，并按它自己的媒体窗口铺开；只有合成音时也有波形）
     const mid = WAVE_H / 2
     const wt = waveTrack
@@ -605,6 +632,7 @@ export function LinearSyncDialog() {
       ctx.beginPath()
       for (let i = 0; i < peaks.length; i++) {
         const x = left + (i / Math.max(1, peaks.length - 1)) * (right - left)
+        if (x < -2 || x > w + 2) continue
         const p = peaks[i]
         ctx.moveTo(x, mid - p.max * mid * 0.92)
         ctx.lineTo(x, mid - p.min * mid * 0.92)
@@ -612,15 +640,26 @@ export function LinearSyncDialog() {
       ctx.stroke()
       ctx.globalAlpha = 1
     }
-    // ③ 保留段两端的竖线 + 标尺
+    // ③ 小节线**贯穿到波形**（adj1285，用户：「显示小节线贯穿到波形图」）——
+    //    与音符时值图上的 `.sync-bar-line` 同一个 x、同一套颜色，两排看起来是一条线。
+    ctx.strokeStyle = 'rgba(150,210,255,0.55)'
+    ctx.beginPath()
+    for (const ms of stripBarXs) {
+      if (ms < v0 || ms > v0 + winMs) continue
+      const x = xOf(ms)
+      ctx.moveTo(x, 0)
+      ctx.lineTo(x, WAVE_H)
+    }
+    ctx.stroke()
+    // ④ 保留段两端的竖线 + 标尺
     ctx.strokeStyle = 'rgba(255,255,255,0.55)'
     ctx.beginPath()
-    ctx.moveTo(xOf(range.startMs), 0)
-    ctx.lineTo(xOf(range.startMs), WAVE_H)
-    ctx.moveTo(xOf(range.endMs), 0)
-    ctx.lineTo(xOf(range.endMs), WAVE_H)
+    ctx.moveTo(xStart, 0)
+    ctx.lineTo(xStart, WAVE_H)
+    ctx.moveTo(xEnd, 0)
+    ctx.lineTo(xEnd, WAVE_H)
     ctx.stroke()
-    const scale = timeScaleOf(0, total, w)
+    const scale = timeScaleOf(v0, v0 + winMs, w)
     ctx.fillStyle = '#9aa3b2'
     ctx.font = '10px system-ui, sans-serif'
     ctx.textBaseline = 'top'
@@ -629,7 +668,7 @@ export function LinearSyncDialog() {
       ctx.fillRect(x, WAVE_H, 1, 3)
       ctx.fillText(timeLabelOf(tick, scale.stepMs), x + 3, WAVE_H + 4)
     }
-    // ④ 锚点（打点位置）
+    // ⑤ 锚点（打点位置）
     ctx.strokeStyle = '#e0a020'
     ctx.beginPath()
     for (const a of doc?.anchors ?? []) {
@@ -638,7 +677,7 @@ export function LinearSyncDialog() {
       ctx.lineTo(x, WAVE_H)
     }
     ctx.stroke()
-    // ⑤ 播放头（媒体时间轴；会话时刻要换算，带卡片时播放头会先停在片头那一段）
+    // ⑥ 播放头（媒体时间轴；会话时刻要换算，带卡片时播放头会先停在片头那一段）
     const px = xOf(Math.max(0, Math.min(total, mediaOfSession(playheadRef.current))))
     ctx.strokeStyle = '#ff5d6c'
     ctx.lineWidth = 2
@@ -647,10 +686,10 @@ export function LinearSyncDialog() {
     ctx.lineTo(px, WAVE_H)
     ctx.stroke()
     ctx.lineWidth = 1
-    // ⑥ adj1284：音符时值图上的播放头（与波形同一个媒体时刻；用百分比，缩放/换宽都对得上）
+    // ⑦ 音符时值图上的播放头（与波形同一个媒体时刻；用百分比，缩放/换宽都对得上）
     const head = stripHeadRef.current
     if (head !== null) head.style.left = `${(px / Math.max(1, w)) * 100}%`
-  }, [clock.totalMs, doc?.anchors, mediaOfSession, peaks, range.endMs, range.startMs, waveTrack])
+  }, [clock.totalMs, doc?.anchors, mediaOfSession, peaks, range.endMs, range.startMs, stripBarXs, viewWin, waveTrack])
 
   const paintStage = useCallback(
     (tMs: number) => {
@@ -702,6 +741,77 @@ export function LinearSyncDialog() {
     const id = requestAnimationFrame(() => paintAt(playheadRef.current))
     return () => cancelAnimationFrame(id)
   }, [paintAt, stripCells.length])
+
+  /**
+   * adj1285（用户 2026-11-10）：**在音符格或波形上滚轮 = 缩放**，两排同步（共用 `viewWin`）。
+   *
+   * 口径照抄对拍台（`SyncDialog`）：无修饰键 = 缩放（鼠标那一处不动）、Shift = 左右平移、
+   * Ctrl/⌘/Alt 一律不接管（那是页面缩放）。
+   * 必须用原生监听：React 的 `onWheel` 是被动事件，`preventDefault` 无效，页面会跟着滚。
+   */
+  useEffect(() => {
+    const group = waveGroupRef.current
+    const c = waveRef.current
+    if (group === null || c === null) return
+    const onWheelNative = (e: WheelEvent): void => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return
+      e.preventDefault()
+      const rect = c.getBoundingClientRect()
+      const width = Math.max(1, rect.width)
+      if (e.shiftKey) {
+        const d = e.deltaY !== 0 ? e.deltaY : e.deltaX
+        setView((v) => {
+          const { winMs } = viewWindow(v, durMs)
+          return panView(v, durMs, (d * winMs) / width)
+        })
+        return
+      }
+      const x = Math.min(Math.max(0, e.clientX - rect.left), width)
+      setView((v) => {
+        const { v0, winMs } = viewWindow(v, durMs)
+        const anchor = v0 + (x / width) * winMs
+        return zoomView(v, durMs, e.deltaY > 0 ? 1.25 : 0.8, anchor)
+      })
+    }
+    group.addEventListener('wheel', onWheelNative, { passive: false })
+    return () => group.removeEventListener('wheel', onWheelNative)
+  }, [durMs])
+
+  /** 视野一变就要重画（波形/标尺/播放头都按新窗口算） */
+  useEffect(() => {
+    const id = requestAnimationFrame(() => paintAt(playheadRef.current))
+    return () => cancelAnimationFrame(id)
+  }, [paintAt, view])
+
+  /**
+   * adj1285（用户 2026-11-10「波形放大时，波形图下横向滚动条」）：
+   * 拖滑块 = 平移；点轨道空白 = 把视野中心挪过去（与对拍台同一套手感）。
+   */
+  const scrollDragRef = useRef<{ x: number; baseStart: number; width: number } | null>(null)
+  const onScrollPointerDown = (e: React.PointerEvent<HTMLDivElement>): void => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const t = scrollThumb(view, durMs)
+    const x = e.clientX - rect.left
+    const leftPx = (t.leftPct / 100) * rect.width
+    const rightPx = leftPx + (t.widthPct / 100) * rect.width
+    if (x < leftPx || x > rightPx) {
+      const centerMs = (Math.min(Math.max(0, x), rect.width) / Math.max(1, rect.width)) * durMs
+      const span = view.spanMs > 0 ? view.spanMs : durMs
+      setView(clampView({ spanMs: span, startMs: centerMs - span / 2 }, durMs))
+      return
+    }
+    scrollDragRef.current = { x: e.clientX, baseStart: viewWin.v0, width: Math.max(1, rect.width) }
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }
+  const onScrollPointerMove = (e: React.PointerEvent<HTMLDivElement>): void => {
+    const d = scrollDragRef.current
+    if (d === null) return
+    const dx = e.clientX - d.x
+    setView((v) => clampView({ spanMs: v.spanMs, startMs: d.baseStart + (dx / d.width) * durMs }, durMs))
+  }
+  const onScrollPointerUp = (): void => {
+    scrollDragRef.current = null
+  }
 
   // ---------- 鼠标手势（adj1281，用户 2026-11-09） ----------
   /**
@@ -1567,6 +1677,15 @@ export function LinearSyncDialog() {
               <span className="sync-meta" data-role="linear-total">
                 {audioClockOf(playheadRef.current)} / {audioClockOf(sessionTotalMs)}
               </span>
+              {/* adj1285：条带拼了几小节（用户「只显示了 10 个小节」的可见诊断） */}
+              <span className="sync-dim" data-role="linear-strip-info" title={linearSyncCopy.stripBarsHint}>
+                {linearSyncCopy.stripBars(stripBarCount, seqBarCount)}
+              </span>
+              {stripTruncated && (
+                <span className="sync-warn" data-role="linear-strip-warn">
+                  {linearSyncCopy.stripTruncated(stripBarCount, seqBarCount)}
+                </span>
+              )}
               <span className="sync-dim">
                 {out.width}×{out.height} · {FPS}fps
               </span>
@@ -1699,89 +1818,110 @@ export function LinearSyncDialog() {
             </span>
           </div>
 
-          <canvas
-            ref={waveRef}
-            className={`linear-wave${stripCells.length > 0 ? ' has-strip' : ''}`}
-            data-role="linear-wave"
-            style={{ height: WAVE_H + RULER_H }}
-            onPointerDown={(e) => {
-              const rect = e.currentTarget.getBoundingClientRect()
-              const x = Math.min(Math.max(0, e.clientX - rect.left), Math.max(1, rect.width))
-              seekTo((x / Math.max(1, rect.width)) * clock.totalMs)
-            }}
-            onPointerMove={(e) => {
-              if (e.buttons !== 1) return
-              const rect = e.currentTarget.getBoundingClientRect()
-              const x = Math.min(Math.max(0, e.clientX - rect.left), Math.max(1, rect.width))
-              seekTo((x / Math.max(1, rect.width)) * clock.totalMs)
-            }}
-            title={linearSyncCopy.waveHint}
-          />
+          {/* adj1285（用户 2026-11-10「音符格图形放在波形上面，显示小节线贯穿到波形图」）：
+              两排包在 `.sync-wave-group`（gap:0）里 —— 上面是音符时值图（对拍台同一套几何/样式），
+              下面是波形；小节线在**两排**都画（画布那排用同一个 x），看起来是一条线穿下去。
+              滚轮缩放/滑块平移都挂在公共容器上，两排共用同一个 `viewWin` ⇒ 同步缩放。 */}
+          <div className="sync-wave-group" ref={waveGroupRef}>
+            {stripCells.length > 0 && (
+              <div
+                className="sync-notes"
+                data-role="linear-note-strip"
+                style={{ height: `${NOTE_STRIP_H}px` }}
+                title={linearSyncCopy.stripHint}
+                onPointerDown={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect()
+                  const x = Math.min(Math.max(0, e.clientX - rect.left), Math.max(1, rect.width))
+                  seekTo(viewWin.v0 + (x / Math.max(1, rect.width)) * viewWin.winMs)
+                }}
+              >
+                {stripBarXs.map((ms, i) => {
+                  if (ms < viewWin.v0 || ms > viewWin.v0 + viewWin.winMs) return null
+                  return (
+                    <div
+                      key={`bar-${i}`}
+                      className="sync-bar-line"
+                      style={{ left: `${((ms - viewWin.v0) / Math.max(1, viewWin.winMs)) * 100}%` }}
+                    />
+                  )
+                })}
+                {stripBarLabels.map((lb, i) => {
+                  // 与对拍台同一套抽稀：视野越长，正常号隔得越开（补号一律显示）
+                  const every = viewWin.winMs > 90000 ? 8 : viewWin.winMs > 45000 ? 4 : viewWin.winMs > 15000 ? 2 : 1
+                  if (lb.stack === 0 && (lb.no - 1) % every !== 0) return null
+                  const ms = stripFit.offsetMs + lb.beat * stripFit.beatMs
+                  if (ms < viewWin.v0 || ms > viewWin.v0 + viewWin.winMs) return null
+                  return (
+                    <span
+                      key={`no-${lb.no}-${i}`}
+                      className={`sync-bar-no${lb.stack > 0 ? ' is-fill' : ''}`}
+                      style={{
+                        left: `calc(${((ms - viewWin.v0) / Math.max(1, viewWin.winMs)) * 100}% + 3px)`,
+                        top: `${1 + lb.stack * 11}px`,
+                      }}
+                    >
+                      {lb.no}
+                    </span>
+                  )
+                })}
+                {stripCells.map((cell, i) => {
+                  const rect = cellRectPct(cell, viewWin.v0, viewWin.winMs)
+                  if (rect === null) return null
+                  return (
+                    <button
+                      key={`${cell.beat}-${i}`}
+                      type="button"
+                      className="sync-note-cell"
+                      style={
+                        {
+                          left: `${rect.leftPct}%`,
+                          width: `${rect.widthPct}%`,
+                          '--h': String(midiRange ? pitchHeightOf(cell.midi, midiRange.lo, midiRange.hi) : 0.1),
+                        } as React.CSSProperties
+                      }
+                      title={audioClockOf(cell.audioMs)}
+                    />
+                  )
+                })}
+                <div ref={stripHeadRef} className="linear-strip-head" data-role="linear-strip-head" />
+              </div>
+            )}
 
-          {/* adj1284（用户 2026-11-09「把音符时值图搬到连续谱台面的波形下面」）：
-              与对拍台**同一套几何与样式**（`dialogs/noteStrip.ts` + `.sync-notes` 那组类）：
-              一格 = 一个主音符、宽度 = 时值、亮柱高 = 音高；小节线/小节号也画在这一排里。
-              差别只有位置（在波形**下面**）与横轴（本台面的媒体时间轴）——点一下同样跳过去。 */}
-          {stripCells.length > 0 && (
-            <div
-              className="sync-notes is-below"
-              data-role="linear-note-strip"
-              style={{ height: `${NOTE_STRIP_H}px` }}
-              title={linearSyncCopy.stripHint}
+            <canvas
+              ref={waveRef}
+              className={`linear-wave${stripCells.length > 0 ? ' has-strip' : ''}`}
+              data-role="linear-wave"
+              style={{ height: WAVE_H + RULER_H }}
               onPointerDown={(e) => {
                 const rect = e.currentTarget.getBoundingClientRect()
                 const x = Math.min(Math.max(0, e.clientX - rect.left), Math.max(1, rect.width))
-                seekTo((x / Math.max(1, rect.width)) * clock.totalMs)
+                seekTo(viewWin.v0 + (x / Math.max(1, rect.width)) * viewWin.winMs)
               }}
-            >
-              {stripBarXs.map((ms, i) => {
-                if (ms < 0 || ms > clock.totalMs) return null
-                return (
-                  <div
-                    key={`bar-${i}`}
-                    className="sync-bar-line"
-                    style={{ left: `${(ms / Math.max(1, clock.totalMs)) * 100}%` }}
-                  />
-                )
-              })}
-              {stripBarLabels.map((lb, i) => {
-                // 与对拍台同一套抽稀：视野越长，正常号隔得越开（补号一律显示）
-                const every = clock.totalMs > 90000 ? 8 : clock.totalMs > 45000 ? 4 : clock.totalMs > 15000 ? 2 : 1
-                if (lb.stack === 0 && (lb.no - 1) % every !== 0) return null
-                const ms = stripFit.offsetMs + lb.beat * stripFit.beatMs
-                if (ms < 0 || ms > clock.totalMs) return null
-                return (
-                  <span
-                    key={`no-${lb.no}-${i}`}
-                    className={`sync-bar-no${lb.stack > 0 ? ' is-fill' : ''}`}
-                    style={{ left: `calc(${(ms / Math.max(1, clock.totalMs)) * 100}% + 3px)`, top: `${1 + lb.stack * 11}px` }}
-                  >
-                    {lb.no}
-                  </span>
-                )
-              })}
-              {stripCells.map((cell, i) => {
-                const rect = cellRectPct(cell, 0, clock.totalMs)
-                if (rect === null) return null
-                return (
-                  <button
-                    key={`${cell.beat}-${i}`}
-                    type="button"
-                    className="sync-note-cell"
-                    style={
-                      {
-                        left: `${rect.leftPct}%`,
-                        width: `${rect.widthPct}%`,
-                        '--h': String(midiRange ? pitchHeightOf(cell.midi, midiRange.lo, midiRange.hi) : 0.1),
-                      } as React.CSSProperties
-                    }
-                    title={audioClockOf(cell.audioMs)}
-                  />
-                )
-              })}
-              <div ref={stripHeadRef} className="linear-strip-head" data-role="linear-strip-head" />
-            </div>
-          )}
+              onPointerMove={(e) => {
+                if (e.buttons !== 1) return
+                const rect = e.currentTarget.getBoundingClientRect()
+                const x = Math.min(Math.max(0, e.clientX - rect.left), Math.max(1, rect.width))
+                seekTo(viewWin.v0 + (x / Math.max(1, rect.width)) * viewWin.winMs)
+              }}
+              onDoubleClick={() => setView(VIEW_ALL)}
+              title={linearSyncCopy.waveHint}
+            />
+
+            {/* adj1285（用户 2026-11-10「波形放大时，波形图下横向滚动条」）：整曲时隐藏 */}
+            {thumb.visible && (
+              <div
+                className="sync-scroll"
+                data-role="linear-wave-scroll"
+                onPointerDown={onScrollPointerDown}
+                onPointerMove={onScrollPointerMove}
+                onPointerUp={onScrollPointerUp}
+                onPointerCancel={onScrollPointerUp}
+                title={syncCopy.scrollHint}
+              >
+                <div className="sync-scroll-thumb" style={{ left: `${thumb.leftPct}%`, width: `${thumb.widthPct}%` }} />
+              </div>
+            )}
+          </div>
 
           <div className="sync-row">
             <span className="sync-label">{linearSyncCopy.audioLabel}</span>

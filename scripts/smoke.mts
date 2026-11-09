@@ -38371,24 +38371,18 @@ Q: 1 2 3 4 | 5 6 7 1' |: 2 3 4 5 :|
     (b) => (b.type === '|' || b.type === '||') && b.marks === undefined && b.voltaStart === undefined && b.voltaEnd === undefined,
   )
   check('adj1258 条带上没有反复/跳房子/&ds 等修饰线（只剩 | 与 ||）', cleanBars, '')
-  // ④ 时刻 → x：拍点处精确落在该拍的音上
+  // ④ 时刻 → x：每个音开始发声那一刻，谱面正好把它送到定位色块
   /**
-   * **口径改动（`adj1284`，用户 2026-11-09 拍板；不是放宽断言）**：
+   * **口径（`adj1285`，用户 2026-11-09 晚复核；前两轮的口径都不作数了）**：
    *
-   * 旧口径（`adj1282`）是"**每个音符**起点 ⇔ 它自己的中心"——按音插值。
-   * 用户原话：「谱子在移动，跳跳球落下时，谱子刚好移到拍位上……由于是空间优先，谱子的移动
-   * 可能不是匀速的，而是要根据下一拍的占宽和一拍的时值来计算下一拍谱子的移动速度，
-   * 以保证一拍结束后，谱子刚好移动到下一拍，然后重算下下拍」。
+   * 用户原话：「合成音演奏到哪个音符，谱子应相应的音符移到定位色块处，这个音形要对齐」。
    *
-   * ⇒ 现在按**拍**插值（`strip.beatXs`），只保证**拍点**上的落位；
-   *   拍中间的音不单独设锚（它们按本拍的速度匀速经过，这也正是"与预览里球落拍位"对齐的代价）。
-   *   所以这条断言从"每个音"收窄成"每个拍点"——**收窄的是口径，不是阈值**。
+   *  · `adj1282`：每个音起点 ⇔ 它的中心（跨度用本音时值 ⇒ 被"钳成 1 拍"放大成 2/4 倍慢）；
+   *  · `adj1284`：改成按**拍**匀速（拍里第 2/3/4 个十六分音符会被滑过去，用户仍说没对齐）；
+   *  · 现在（`adj1285`）：**按音**落位 —— 每个发声起点 ⇔ 该音（和弦取整组）的中心，
+   *    相邻起点之间匀速。这条断言直接量用户看到的那件事，覆盖**所有**音（不是只拍点）。
    */
-  const beatOnsets = a.strip.notes.filter((n) => {
-    const b = n.t0 / a.strip.beatMs
-    return Math.abs(b - Math.round(b)) <= 1e-3
-  })
-  const beatDrift = beatOnsets.reduce((mx, n) => {
+  const onsetDrift = a.strip.notes.reduce((mx, n) => {
     const same = a.strip.notes.filter((m) => Math.abs(m.t0 - n.t0) < 0.5)
     const lo = Math.min(...same.map((m) => m.x + m.w / 2))
     const hi = Math.max(...same.map((m) => m.x + m.w / 2))
@@ -38396,9 +38390,9 @@ Q: 1 2 3 4 | 5 6 7 1' |: 2 3 4 5 :|
     return Math.max(mx, x < lo - 0.5 ? lo - x : x > hi + 0.5 ? x - hi : 0)
   }, 0)
   check(
-    'adj1284 拍点处谱面正好落在该拍第一个音上（旧 adj1282 的"每个音都落位"已改为按拍，见注释）',
-    beatOnsets.length > 0 && beatDrift < 0.5,
-    `drift=${beatDrift} 拍点 ${beatOnsets.length}/${a.strip.notes.length}`,
+    'adj1285 每个音开始发声那一刻，谱面正好把它送到定位色块（起点 ⇔ 该音中心，覆盖全部音）',
+    a.strip.notes.length > 0 && onsetDrift < 0.5,
+    `drift=${onsetDrift}（${a.strip.notes.length} 个音）`,
   )
   /**
    * adj1283（用户 2026-11-09「谱带移动比合成音慢」）：音符时刻必须按**小节内拍位**算，
@@ -38430,12 +38424,11 @@ Q: 1 2 3 4 |
     `对不上 ${timeMiss.length} 个：${timeMiss.slice(0, 4).map((n) => n.t0).join(',')} vs 事件 ${evTimes.slice(0, 6).join(',')}`,
   )
   /**
-   * adj1284（用户 2026-11-09「**从第一音就慢**，合成音走了 8 拍、谱子才走 2 拍」）：
+   * adj1284/1285（用户 2026-11-09「**从第一音就慢**，合成音走了 8 拍、谱子才走 2 拍」）：
    * 真因不在"时刻表"（adj1283b 已证明时刻同源），而在**滚动位置的插值口径**：
    * ① `strip.ts` 曾把不足一拍的时值钳成 1 拍（`Math.max(1, duration)`），而滚动拿 `t1 - t0`
    *    当插值跨度 ⇒ 八分音符慢 2 倍、十六分音符慢 **4 倍**（正好是用户看到的 8 拍 vs 2 拍）；
-   * ② 插值单位是"音"而不是"拍" ⇒ 一个音到下一个音的距离≠一拍的距离，速度被音距牵着走。
-   * 现在按**拍**插值（`beatXs`）：一拍之内匀速、一拍结束时正好到下一拍。
+   * ② 插值单位：`adj1284` 按拍（拍里细分音被滑过去）；`adj1285` 按**音**（每个音起点精确落位）。
    */
   const RHYTHM8 = `V: 1.0
 B: 八分
@@ -38469,7 +38462,7 @@ Q: 1// 2// 3// 4// 1// 2// 3// 4// 1// 2// 3// 4// 1// 2// 3// 4// | 1// 2// 3//
   /**
    * 用户原话的复现口径：**两拍**时间里，谱带要走过 **8 个十六分音符**的宽度
    * （= 第 9 个十六分音符的中心）。旧口径只走到第 3 个左右 —— 就是"8 拍 vs 2 拍"。
-   * 这里用**真实排版几何**（音符中心）而不是 `beatXs` 自证。
+   * 这里用**真实排版几何**（音符中心），不是拿 `onsets` 自证。
    */
   {
     const ns = strip16.notes
@@ -38483,37 +38476,153 @@ Q: 1// 2// 3// 4// 1// 2// 3// 4// 1// 2// 3// 4// 1// 2// 3// 4// | 1// 2// 3//
     )
   }
   /**
-   * 一拍之内**匀速**（用户口径：用"下一拍占宽 ÷ 一拍时值"当这一拍的速度）：
-   * 拍内 1/2 处必须正好是两拍位置的中点；八分/十六分两种密度都要成立。
+   * 相邻两个音起点之间**位移比例 = 时间比例**（匀速走过去）。
+   * 旧口径在十六分音符段的中点只走到 0.125（应 0.5，即慢 4 倍）；现在应在 ±0.02 内。
    */
-  const halfBeatErr = (s: typeof strip8): number => {
+  const progressErr = (s: typeof strip8): { worst: number; at: string } => {
+    const ns = s.notes
+    const ctr = (i: number): number => ns[i].x + ns[i].w / 2
     let worst = 0
-    for (let k = 0; k + 1 < s.beatXs.length; k++) {
-      const want = (s.beatXs[k] + s.beatXs[k + 1]) / 2
-      worst = Math.max(worst, Math.abs(stripXAt(s, (k + 0.5) * s.beatMs) - want))
+    let at = ''
+    for (let i = 0; i + 1 < ns.length; i++) {
+      const gap = ns[i + 1].t0 - ns[i].t0
+      const dx = ctr(i + 1) - ctr(i)
+      if (gap < 20 || Math.abs(dx) < 0.5) continue
+      for (const f of [0.25, 0.5, 0.75]) {
+        const got = (stripXAt(s, ns[i].t0 + gap * f) - ctr(i)) / dx
+        const err = Math.abs(got - f)
+        if (err > worst) {
+          worst = err
+          at = `#${i} f=${f} 实际=${got.toFixed(3)}`
+        }
+      }
     }
-    return worst
+    return { worst, at }
   }
-  const h8 = halfBeatErr(strip8)
-  const h16 = halfBeatErr(strip16)
-  check('adj1284 一拍之内匀速：半拍位置 = 两拍位置的中点（八分音符谱）', h8 < 0.05, `最差 ${h8.toFixed(3)}px`)
-  check('adj1284 一拍之内匀速：半拍位置 = 两拍位置的中点（十六分音符谱）', h16 < 0.05, `最差 ${h16.toFixed(3)}px`)
+  const p8 = progressErr(strip8)
+  const p16 = progressErr(strip16)
+  check(
+    'adj1285 相邻两音之间匀速：谱带位移比例 = 时间比例（八分音符，±0.02）',
+    p8.worst <= 0.02,
+    `最差 ${p8.worst.toFixed(3)}（${p8.at}）`,
+  )
+  check(
+    'adj1285 相邻两音之间匀速：谱带位移比例 = 时间比例（十六分音符，旧口径此处只走 0.125）',
+    p16.worst <= 0.02,
+    `最差 ${p16.worst.toFixed(3)}（${p16.at}）`,
+  )
   /**
-   * 跳跳球口径（用户：「球落下时，谱子刚好移到拍位上」）：
-   * 球每次落地 = 拍点（`stripBallAt` 的 dwell 起点），此刻谱面位置 = 该拍位置。
+   * **十六分音符的每一个音**都要落在色块上（`adj1285` 的核心判据）：
+   * 旧口径（按拍匀速）在这一段会依次落后 1/4、1/2、3/4 个音距。
+   */
+  {
+    const ns = strip16.notes
+    let worst = 0
+    let worstAt = -1
+    for (let i = 0; i < Math.min(16, ns.length); i++) {
+      const d = Math.abs(stripXAt(strip16, ns[i].t0) - (ns[i].x + ns[i].w / 2))
+      if (d > worst) {
+        worst = d
+        worstAt = i
+      }
+    }
+    check(
+      'adj1285 一拍里的第 2/3/4 个十六分音符也都精确落位（不是被匀速滑过去）',
+      worst < 0.5,
+      `最差 ${worst.toFixed(3)}px（第 ${worstAt} 个）`,
+    )
+  }
+  /**
+   * 跳跳球口径（用户：「球落地时，谱子刚好移到拍位上」）：
+   * 球每次落地 = 拍点（`stripBallAt` 的 dwell 起点），此刻拍上那个音应在色块处。
    */
   {
     const beatMs = strip16.beatMs
     const k = 7
     const landAt = (k + (BALL_LANDING_TIMING.landOffsetBeats ?? 0)) * beatMs
     const landing = stripBallAt(landAt, { beatMs, blockTop: 10 })
-    const xAtLand = stripXAt(strip16, landAt)
-    const beatW = strip16.beatXs[k + 1] - strip16.beatXs[k]
+    const ns = strip16.notes
+    const i = ns.findIndex((n) => Math.abs(n.t0 - k * beatMs) < 0.5)
+    const xNote = i >= 0 ? ns[i].x + ns[i].w / 2 : Number.NaN
+    const gapPx = i >= 0 && i + 1 < ns.length ? Math.abs(ns[i + 1].x + ns[i + 1].w / 2 - xNote) : 0
+    const off = Math.abs(stripXAt(strip16, landAt) - xNote)
     check(
-      'adj1284 球落地那一刻，谱面就在这一拍附近（偏差 < 1/4 拍宽）',
-      strip16.beatXs.length > k + 1 && landing.dwelling && Math.abs(xAtLand - strip16.beatXs[k]) <= Math.abs(beatW) * 0.25 + 0.5,
-      `偏差 ${(xAtLand - strip16.beatXs[k]).toFixed(1)}px / 一拍 ${beatW.toFixed(1)}px`,
+      'adj1285 球落地那一刻，拍上的音就在定位色块附近（偏差 < 1/4 个音距）',
+      i >= 0 && landing.dwelling && off <= gapPx * 0.25 + 0.5,
+      `偏差 ${off.toFixed(1)}px / 音距 ${gapPx.toFixed(1)}px`,
     )
+  }
+  /**
+   * `adj1285`（用户 2026-11-10「整道曲子只显示了 10 个小节，实际曲子有 62 小节」）：
+   *
+   * **多声部谱的小节号是跳号的**（引擎按各声部各自计数，实测 `scores-library/score-x57z`
+   * 的序列号是 `1-8, 25-33, 52-60, 79-87`），而排版小节是阅读顺序 `1..35`。
+   * 以前按"号相等"配源小节 ⇒ 只有碰巧相等的几段配上，**后半首静默丢掉**
+   * （实测条带只铺到全曲的 48.6%）。现在按"首次出现顺序"配，这两条守住它。
+   */
+  const ENSEMBLE = `V: 1.0
+B: 合奏
+Q1: 1 2 3 4 | 5 6 7 1' |
+Q2: 0 0 | 0 0 |
+Q3: 3 3 | 3 3 |
+Q1: 2 3 4 5 | 6 7 1' 2' |
+Q2: 0 0 | 0 0 |
+Q3: 3 3 | 3 3 |
+`
+  {
+    const rEn = parseJpsRaw(ENSEMBLE)
+    const layEn = layoutScore(rEn, defaultPageConfig)
+    const seqEn = buildPlaySequence(rEn, layEn, 120)
+    const stripEn = buildLinearStrip(layEn, seqEn, defaultPageConfig)
+    check(
+      'adj1285 多声部谱（小节号跳号）条带也铺满全曲（不是只拼上前面几小节）',
+      stripEn.runs.length === 4 && stripEn.dropped.missingBar === 0 && Math.abs(stripEndMs(stripEn) - seqEn.totalMs) < 1,
+      `runs=${stripEn.runs.length} missing=${stripEn.dropped.missingBar} stripEnd=${stripEndMs(stripEn)} seq=${seqEn.totalMs} barNos=${(seqEn.barNos ?? []).join(',')}`,
+    )
+  }
+  {
+    const LONGQ = `V: 1.0
+B: 长
+Q: ${Array.from({ length: 62 }, () => '1 2 3 4').join(' | ')} |
+`
+    const rL = parseJpsRaw(LONGQ)
+    const layL = layoutScore(rL, defaultPageConfig)
+    const seqL = buildPlaySequence(rL, layL, 75)
+    const stripL = buildLinearStrip(layL, seqL, defaultPageConfig)
+    const barsL = new Set(stripL.runs.map((r) => r.sourceBar)).size
+    check(
+      'adj1285 62 小节的长谱：条带小节数 = 62、结束时刻 = 曲末（不能只铺前面一部分）',
+      barsL === 62 && stripL.dropped.missingBar === 0 && Math.abs(stripEndMs(stripL) - seqL.totalMs) < 1,
+      `bars=${barsL} missing=${stripL.dropped.missingBar} stripEnd=${stripEndMs(stripL)} seq=${seqL.totalMs}`,
+    )
+  }
+  /**
+   * `adj1285` **曲库回归**：`scores-library/` 里的每一份谱，条带都必须铺满全曲。
+   *
+   * 为什么用真曲库当语料：这条 bug（多声部号跳号 ⇒ 静默丢掉后半首）就是它扫出来的——
+   * 修前 **16/29 份**铺不满（最惨的 `score-x57z` 只有 48.6%），修后 0 份。
+   * 合成的短样例永远造不出这种结构，少了这条闸门下次还会退回去。
+   */
+  {
+    const lib = join(process.cwd(), 'scores-library')
+    if (existsSync(lib)) {
+      const badLib: string[] = []
+      for (const d of readdirSync(lib)) {
+        const p = join(lib, d, 'score.jps')
+        if (!existsSync(p)) continue
+        const rl = parseJpsRaw(readFileSync(p, 'utf8'))
+        const layR = layoutScore(rl, defaultPageConfig)
+        const seqR = buildPlaySequence(rl, layR, inferBpm(rl))
+        const stR = buildLinearStrip(layR, seqR, defaultPageConfig)
+        const ratio = seqR.totalMs > 0 ? stripEndMs(stR) / seqR.totalMs : 1
+        if (ratio < 0.995 || stR.dropped.missingBar > 0) badLib.push(`${d} ${(ratio * 100).toFixed(0)}%`)
+      }
+      check(
+        'adj1285 曲库里每份谱的条带都铺满全曲（修前 16/29 份只铺了一部分 ⇒ 用户"只显示了几小节"）',
+        badLib.length === 0,
+        badLib.join('；'),
+      )
+    }
   }
   // ⑤ 单调：时间递增 ⇒ x 不减；曲末取末端
   let mono = true

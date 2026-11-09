@@ -1601,6 +1601,11 @@ export const linearSyncCopy = {
   waveHint: '点一下/拖一下：跳到这里；压暗的两端不会被导出',
   /** adj1284：波形下面那条「音符时值图」（与对拍台同一套几何） */
   stripHint: '音符时值图：一格一个主音符、宽 = 时值、亮柱高 = 音高；竖线是小节线，点一下跳到那里',
+  /** adj1285：条带拼了几小节（台面上可见，不再"静默少半首"） */
+  stripBars: (shown: number, total: number) => `谱带 ${shown} / ${total} 小节`,
+  stripBarsHint: '这条横滚谱一共拼进了多少小节（右 = 全曲小节数）',
+  stripTruncated: (shown: number, total: number) =>
+    `条带只拼到 ${shown} / ${total} 小节：有源小节没排进条带（谱面结构问题，不是显示问题）`,
   audioLabel: '伴奏',
   pickAudio: '选伴奏…',
   repickAudio: '换伴奏…',
