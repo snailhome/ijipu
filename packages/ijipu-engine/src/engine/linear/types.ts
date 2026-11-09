@@ -14,7 +14,12 @@ import type { ScorePage } from '../types'
 export interface StripRun {
   /** 源小节号（1 起；与 `PlaySequence.barNos` 同一个编号） */
   sourceBar: number
-  /** 第几遍（1 起，便于排查与"第 N 遍换歌词"以后用） */
+  /**
+   * 这个源小节第几次被演奏（1 起）。
+   *
+   * `adj1267`：多段歌词按它换行（第 2 次演奏用第 2 条 `C:` 行）。
+   * 注意是**按小节**统计的 —— 不是"整首第几遍"（只反复一小段时，后面的段落也处在第 2 遍里）。
+   */
   pass: number
   /** 这一小节在时间轴上的起止（ms；已含片头位移） */
   t0: number
@@ -60,6 +65,13 @@ export interface LinearStrip {
   width: number
   /** 条带高（px；含高低八度点、歌词） */
   height: number
+  /**
+   * 源谱里最多有**几段歌词**（`adj1267`）。
+   *
+   * 1 = 只有一条 `C:` 行（多遍唱同一段词）；>1 = 一个曲行下有多条 `C:` 行 ⇒
+   * 条带按**这个源小节第几次被演奏**换行（第 2 次演奏显示第 2 行）。
+   */
+  lyricLines: number
   /** 主基线在条带里的 y（数字基线） */
   baselineY: number
   runs: StripRun[]
@@ -81,6 +93,14 @@ export interface LinearStripOptions {
   pxPerBeat?: number
   /** 主基线 y（缺省 = 字号 × 2.2，给上方高八度点与装饰记号留位） */
   baselineY?: number
-  /** 是否带歌词（缺省 true；v1 只画第 1 条 C 行） */
+  /**
+   * 是否带歌词（缺省 true）。
+   *
+   * `adj1267`：**多段歌词按演奏遍次自动换行** —— 第 k 次演奏这个源小节就用第 k 条 `C:` 行
+   * （超过段数就停在最后一段）。只画**主声部**那几行：第二声部的歌词行不参与换行，
+   * 免得"第 2 遍"把另一个声部的词搬到主旋律下面。
+   *
+   * 关掉只**少画字**，不缩谱带（`height` 不变）——否则一按开关整条带跟着缩、字号也变了。
+   */
   lyrics?: boolean
 }

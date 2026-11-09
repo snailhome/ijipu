@@ -39113,3 +39113,152 @@ console.log('[adj1266] M5：谱带配色随卡片模板（auto = 卡片调色板
     '',
   )
 }
+
+/**
+ * adj1267（用户 P2 的后续，`CONTINUOUS-SCORE-PLAN.md` §9.3 第 1 条）：
+ * **谱带上的歌词按演奏遍次换行** + 歌词可关。
+ *
+ * 用户 2026-11-08 的 P2 原文是「歌词可开关，默认只显示第 1 条 C: 行；第 N 遍显示对应歌词行以后再做」。
+ * 现在补上后半句，并把"第 N 遍"的口径钉死：
+ *
+ *  · **N = 这个源小节第几次被演奏**，不是"整首第几遍"——
+ *    只反复一小段时（`… |: 3 :| 4`），第 4 小节也处在"整首第 2 遍"里，那段只唱一次，
+ *    拿整首 pass 换行会把它的词也换成第 2 段（真实歌曲里很常见：主歌反复两遍 + 副歌唱一次）。
+ *  · **只看主声部**那几行歌词：`C1:`/`C2:` 是分声部的词，也占 `line` 序号，
+ *    不筛声部的话"第 2 遍"会把第二声部的词搬到主旋律下面。
+ *  · **按行统计段数**而不是按小节：某小节只有一个长音、第 2 段词在那儿没有新字时，
+ *    按小节算会让那一小节退回第 1 段词（同一句前后两段串词）。
+ *  · 关掉歌词只少画字、**不缩谱带**（否则开关一按，整条带连同字号一起跳一下）。
+ */
+console.log('[adj1267] 谱带歌词：多段按演奏遍次换行 / 可关 / sidecar 只记"关掉"这一笔')
+{
+  const buildLyric = (code: string, opts: { lyrics?: boolean } = {}) => {
+    const r = parseJpsRaw(code)
+    const lay = layoutScore(r, defaultPageConfig)
+    const seq = buildPlaySequence(r, lay, 120)
+    return { lay, seq, strip: buildLinearStrip(lay, seq, defaultPageConfig, opts) }
+  }
+  /**
+   * 4 小节：第 3 小节带反复（唱两遍），第 4 小节在反复之后、只唱一遍。
+   * 两段词用**互不相同的字**，条带上一看就知道画的是哪一段。
+   */
+  const MULTI = `V: 1.0
+B: 两段词
+Q: 1 2 3 4 | 5 6 7 1' |: 2 3 4 5 :| 6 7 1' 2' |
+C: 一 二 三 四 五 六 七 八 九 十 百 千 万 亿 兆 京
+C: 甲 乙 丙 丁 戊 己 庚 辛 壬 癸 子 丑 寅 卯 辰 巳
+`
+  const multi = buildLyric(MULTI)
+  const s = multi.strip
+  /** 某一段 run 上的歌词（按 x 排；字是居中放在数字下的，左缘可能比小节起点还左一点 ⇒ 留 2px 容差） */
+  const charsOfRun = (i: number): string =>
+    s.page.lyrics
+      .filter((l) => l.x >= s.runs[i].x0 - 2 && l.x < s.runs[i].x1 - 0.5)
+      .sort((a, b) => a.x - b.x)
+      .map((l) => l.char.text)
+      .join('')
+
+  check(
+    'adj1267 演奏顺序 = [1,2,3,3,4]，且 pass 记的是"这个小节第几次"（第 4 小节只唱一次 ⇒ pass 仍是 1）',
+    JSON.stringify(s.runs.map((r) => r.sourceBar)) === JSON.stringify([1, 2, 3, 3, 4]) &&
+      JSON.stringify(s.runs.map((r) => r.pass)) === JSON.stringify([1, 1, 1, 2, 1]),
+    `bars=${s.runs.map((r) => r.sourceBar).join(',')} pass=${s.runs.map((r) => r.pass).join(',')}`,
+  )
+  check(
+    'adj1267 这首歌被认出有 2 段歌词（界面据此提示"按演奏遍次自动换行"）',
+    s.lyricLines === 2,
+    `lyricLines=${s.lyricLines}`,
+  )
+  check(
+    'adj1267 全曲第 1 个歌词字也在条带上、且不被裁到负数（`E-2026-569`：字居中放在数字下方，按字的 x 归小节会把它丢掉）',
+    s.page.lyrics[0]?.char.text === '一' && s.page.lyrics[0].x >= 0,
+    `${s.page.lyrics[0]?.char.text}@${Math.round(s.page.lyrics[0]?.x ?? -1)}`,
+  )
+  check(
+    'adj1267 第 1 遍画第 1 段词、反复那遍画第 2 段词（不再两遍都唱第 1 段）',
+    charsOfRun(0) === '一二三四' && charsOfRun(2) === '九十百千' && charsOfRun(3) === '壬癸子丑',
+    `${charsOfRun(0)} / ${charsOfRun(2)} / ${charsOfRun(3)}`,
+  )
+  check(
+    'adj1267 反复之后的小节**不会**被换成第 2 段词（pass 按小节算，不是"整首第几遍"）',
+    charsOfRun(4) === '万亿兆京',
+    charsOfRun(4),
+  )
+  /**
+   * 负对照：只有一段词时，反复两遍必须都画同一段（不许"第二遍没词了就空着"）。
+   */
+  const ONE = `V: 1.0
+B: 一段词
+Q: 1 2 3 4 | 5 6 7 1' |: 2 3 4 5 :|
+C: 一 二 三 四 五 六 七 八 九 十 百 千
+`
+  const one = buildLyric(ONE)
+  const oneChars = one.strip.page.lyrics.length
+  const oneRuns = one.strip.runs
+  const charsOfRun1 = (i: number): string =>
+    one.strip.page.lyrics
+      .filter((l) => l.x >= oneRuns[i].x0 - 2 && l.x < oneRuns[i].x1 - 0.5)
+      .sort((a, b) => a.x - b.x)
+      .map((l) => l.char.text)
+      .join('')
+  check(
+    'adj1267 只有一段词 ⇒ 反复两遍画同一段（负对照：段数判错就会在这里空掉）',
+    one.strip.lyricLines === 1 && oneChars > 0 && charsOfRun1(2) === charsOfRun1(3) && charsOfRun1(3) === '九十百千',
+    `lyricLines=${one.strip.lyricLines} 第1遍=${charsOfRun1(2)} 第2遍=${charsOfRun1(3)}`,
+  )
+  /**
+   * 歌词开关：关掉只少画字，**谱带高度不变**（条带在画布上的缩放按 height 算，
+   * 一变整幅画面跟着跳，包括字号）。
+   */
+  const off = buildLyric(MULTI, { lyrics: false })
+  check(
+    'adj1267 关掉歌词 ⇒ 条带上一个字都不画，但谱带高度/音符几何不变（开关不会让字号跳）',
+    off.strip.page.lyrics.length === 0 &&
+      off.strip.height === s.height &&
+      JSON.stringify(off.strip.notes) === JSON.stringify(s.notes),
+    `lyrics=${off.strip.page.lyrics.length} h=${off.strip.height}/${s.height}`,
+  )
+  check(
+    'adj1267 关掉歌词不影响小节线/音符（只是少一层字，不是把整页重排）',
+    JSON.stringify(off.strip.page.barlines) === JSON.stringify(s.page.barlines) && off.strip.width === s.width,
+    `w=${off.strip.width}/${s.width}`,
+  )
+
+  /* ---- sidecar：只记"关掉"这一笔，旧文件天然是"画" ---- */
+  const offDoc = makeSyncDoc({
+    audio: '',
+    audioDurationMs: 0,
+    anchors: [],
+    linear: { lyrics: false },
+    code: MULTI,
+  })
+  const offBack = parseSyncDoc(serializeSyncDoc(offDoc)).doc
+  check(
+    'adj1267 sidecar 记住"关掉歌词"（这个开关跟着这首歌走，不是本机偏好）',
+    offBack?.linear?.lyrics === false,
+    JSON.stringify(offBack?.linear),
+  )
+  const onDoc = makeSyncDoc({ audio: '', audioDurationMs: 0, anchors: [], linear: { theme: 'gold' }, code: MULTI })
+  check(
+    'adj1267 歌词开着时不往 sidecar 写 `true`（缺字段就是画；旧文件形状不被改写）',
+    onDoc.linear?.lyrics === undefined && !serializeSyncDoc(onDoc).includes('"lyrics"'),
+    serializeSyncDoc(onDoc).slice(0, 60),
+  )
+  const junkLyrics = parseSyncDoc(JSON.stringify({ version: 1, audio: '', linear: { lyrics: 'no' } })).doc
+  check(
+    'adj1267 sidecar 里歌词字段不是布尔值 ⇒ 当没写（不猜、不把坏值传进渲染）',
+    junkLyrics?.linear?.lyrics === undefined,
+    JSON.stringify(junkLyrics?.linear),
+  )
+
+  /* ---- 界面接线：开关 → 条带；选"歌词"时读 `doc.linear.lyrics` ---- */
+  const linearSrc = readFileSync(join(root, 'src', 'dialogs', 'LinearSyncDialog.tsx'), 'utf8')
+  check(
+    'adj1267 台面接线：歌词开关真的进条带（`lyrics: showLyrics`），关掉时删字段而不是写 true',
+    /lyrics: showLyrics/.test(linearSrc) &&
+      /doc\?\.linear\?\.lyrics !== false/.test(linearSrc) &&
+      /delete next\.lyrics/.test(linearSrc) &&
+      /data-role="linear-lyrics"/.test(linearSrc),
+    '',
+  )
+}

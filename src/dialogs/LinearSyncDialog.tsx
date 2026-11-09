@@ -147,9 +147,17 @@ export function LinearSyncDialog() {
   const stripCfg = useMemo<PageConfig>(() => ({ ...pageConfig, note_size: STRIP_NOTE_SIZE }), [pageConfig])
   /** adj1265：排版结果留着算片头卡的文字（标题/作者/调号/拍速） */
   const scoreLayout = useMemo(() => layoutScore(parseResult, stripCfg), [parseResult, stripCfg])
+  /**
+   * adj1267：谱带画不画歌词（缺字段 = 画；只记"关掉"这一笔）。
+   * 直接读 `doc.linear` 而不是等到下面那份 `linearStyle`——谱带在这之前就要建好。
+   */
+  const showLyrics = doc?.linear?.lyrics !== false
   const strip: LinearStrip = useMemo(() => {
-    return buildLinearStrip(scoreLayout, scoreSeq, stripCfg, { pxPerBeat: Math.round(STRIP_NOTE_SIZE * 1.6) })
-  }, [scoreLayout, stripCfg, scoreSeq])
+    return buildLinearStrip(scoreLayout, scoreSeq, stripCfg, {
+      pxPerBeat: Math.round(STRIP_NOTE_SIZE * 1.6),
+      lyrics: showLyrics,
+    })
+  }, [scoreLayout, stripCfg, scoreSeq, showLyrics])
   const scoreEndMs = useMemo(() => stripEndMs(strip), [strip])
   const barStartBeats = useMemo(() => (scoreSeq.barStartsMs ?? []).map((ms) => ms / scoreBeatMs), [scoreSeq, scoreBeatMs])
   const barNoOf = useCallback((i: number): number => scoreSeq.barNos?.[i] ?? i + 1, [scoreSeq])
@@ -784,6 +792,20 @@ export function LinearSyncDialog() {
     [linearStyle, setExtras],
   )
 
+  /**
+   * adj1267：歌词开关。**只记"关掉"这一笔**（缺字段 = 画）——与 `theme` 缺省即 `auto` 同一个口径：
+   * 旧 sidecar 天然兼容，也不为一个默认值往每份文件里写 `true`。
+   */
+  const setLyricsOn = useCallback(
+    (on: boolean) => {
+      const next = { ...linearStyle }
+      if (on) delete next.lyrics
+      else next.lyrics = false
+      setExtras({ linear: next })
+    },
+    [linearStyle, setExtras],
+  )
+
   const barBeatLabel = useCallback(
     (b: number): string => {
       for (let i = barStartBeats.length - 1; i >= 0; i--) {
@@ -1301,6 +1323,21 @@ export function LinearSyncDialog() {
               aria-label={linearSyncCopy.bandScale}
               onChange={(e) => setExtras({ linear: { ...linearStyle, bandScale: Number(e.target.value) } })}
             />
+            <label className="sync-label" title={linearSyncCopy.lyricsHint}>
+              <input
+                type="checkbox"
+                checked={showLyrics}
+                data-role="linear-lyrics"
+                aria-label={linearSyncCopy.lyrics}
+                onChange={(e) => setLyricsOn(e.target.checked)}
+              />
+              {linearSyncCopy.lyrics}
+            </label>
+            {showLyrics && strip.lyricLines > 1 && (
+              <span className="sync-dim" data-role="linear-lyrics-multi">
+                {linearSyncCopy.lyricsMulti(strip.lyricLines)}
+              </span>
+            )}
             <span className="sync-grow" />
             <label className="sync-label" title={linearSyncCopy.cardsHint}>
               <input

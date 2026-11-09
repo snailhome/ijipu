@@ -3341,7 +3341,11 @@ async function main() {
      */
     console.log('[verify-app-ui] adj1264：连续动态谱对拍台（横滚）')
     {
-      const syncCode = `V: 1.0\nB: 连续谱\nQ: 1 2 3 4 | 5 6 7 1' | 2 3 4 5 |\n`
+      /**
+       * adj1267：给这份样例谱加**两段歌词**——台面的歌词开关与"多段按遍次换行"要有东西可验。
+       * 两段字完全不同，条带上画的是哪一段一眼能对上（源码级判据在 smoke 里）。
+       */
+      const syncCode = `V: 1.0\nB: 连续谱\nQ: 1 2 3 4 | 5 6 7 1' | 2 3 4 5 |\nC: 一 二 三 四 | 五 六 七 八 | 九 十 百 千\nC: 甲 乙 丙 丁 | 戊 己 庚 辛 | 壬 癸 子 丑\n`
       await c.send('Page.navigate', { url: `${origin}/app/?jps=${encodeURIComponent(syncCode)}` })
       await waitFor(c, `!!document.querySelector('.app')`, '应用首屏（连续谱用例）')
       await sleep(800)
@@ -3415,6 +3419,56 @@ async function main() {
           'adj1264 台面写明"没有视频：用纯色背景"（兜底不是静默的）',
           await evalJs(c, `document.body.innerText.includes('没有视频：用纯色背景')`),
           '',
+        )
+        /**
+         * adj1267：歌词开关 + 多段歌词（真点一遍）。
+         *
+         * 判据用"离底色的像素数"而不是"白色像素数"：`adj1267` 起关掉歌词**不缩谱带**
+         * （`height` 与音符几何都不变）⇒ 画布上除歌词外一字不差，墨迹像素必然变少。
+         */
+        const lyricInk = `(() => {
+          const cv = document.querySelector('[data-role="linear-stage"]')
+          const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data
+          let n = 0
+          for (let i = 0; i < d.length; i += 4) {
+            if (Math.abs(d[i] - 16) + Math.abs(d[i + 1] - 16) + Math.abs(d[i + 2] - 20) > 60) n++
+          }
+          return n
+        })()`
+        const lyricsUi = await evalJs(
+          c,
+          `(() => {
+            const box = document.querySelector('[data-role="linear-lyrics"]')
+            return {
+              box: !!box,
+              checked: box ? box.checked : null,
+              multi: !!document.querySelector('[data-role="linear-lyrics-multi"]'),
+              hint: document.body.innerText.includes('这首歌有 2 段歌词'),
+            }
+          })()`,
+        )
+        check(
+          'adj1267 台面有「歌词」开关（默认勾上），两段词的谱会写出"这首歌有 2 段歌词"',
+          lyricsUi.box && lyricsUi.checked === true && lyricsUi.multi && lyricsUi.hint,
+          JSON.stringify(lyricsUi),
+        )
+        const inkWithLyrics = Number(await evalJs(c, lyricInk))
+        await evalJs(c, `(document.querySelector('[data-role="linear-lyrics"]')?.click(), true)`)
+        await sleep(1800)
+        const inkNoLyrics = Number(await evalJs(c, lyricInk))
+        check(
+          'adj1267 关掉歌词后画布上真的少了一层字（谱带其余部分不变 ⇒ 墨迹像素变少）',
+          inkNoLyrics < inkWithLyrics && inkWithLyrics - inkNoLyrics > 300,
+          `墨迹像素 ${inkWithLyrics} → ${inkNoLyrics}`,
+        )
+        // 再打开（开关不是单向的），免得后面的用例在"没有歌词"的画面上跑
+        await evalJs(c, `(document.querySelector('[data-role="linear-lyrics"]')?.click(), true)`)
+        await sleep(1200)
+        const inkBack = Number(await evalJs(c, lyricInk))
+        check(
+          'adj1267 再打开 ⇒ 歌词回来（同一个开关来回都生效）',
+          inkBack >= inkWithLyrics * 0.95,
+          `${inkNoLyrics} → ${inkBack}（原 ${inkWithLyrics}）`,
         )
         /**
          * adj1265（M4）：主题编辑器与片头片尾卡——真浏览器里点一遍。

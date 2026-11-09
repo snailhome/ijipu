@@ -77,6 +77,14 @@ export interface SyncLinear {
   style?: StripStyleOverride
   /** adj1265：出片带片头/片尾卡（默认不带；卡片样式复用 `card.template`） */
   cards?: boolean
+  /**
+   * adj1267：**谱带画不画歌词**。
+   *
+   * 缺字段 = 画（旧 sidecar 天然兼容）；`false` = 不画。只记"关掉"这一笔，
+   * 打开时不往文件里写 `true`（与 `theme` 缺省即 `auto` 同一个口径）。
+   * 歌词本身是**多段按演奏遍次自动换行**，不需要单独存行号。
+   */
+  lyrics?: boolean
 }
 
 export interface SyncDoc {
@@ -448,6 +456,8 @@ export function parseSyncDoc(text: string): { doc: SyncDoc | null; error?: strin
       }
     }
     if (typeof l.cards === 'boolean') out.cards = l.cards
+    // adj1267：歌词开关只认布尔值（缺字段 = 画；别的类型当没写，不猜）
+    if (typeof l.lyrics === 'boolean') out.lyrics = l.lyrics
     if (Object.keys(out).length > 0) linear = out
   }
   const doc: SyncDoc = {

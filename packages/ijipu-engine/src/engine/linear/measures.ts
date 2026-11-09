@@ -7,7 +7,9 @@
  * 跨 Q 行、跨页都会重新起算，直接拿来当"全曲小节号"会错。这里改用**几何**判：
  *  - 行 = `rowSpansOfPage()`（与试听/相机同一套曲行判定，不靠间距猜）；
  *  - 小节边界 = 该行内小节线的 x（去重、排序）；
- *  - 元素归属 = 看它的 x 落在哪两个边界之间。
+ *  - **音符**归属 = 看它的 x 落在哪两个边界之间；
+ *  - **歌词**归属 = 看它挂的那个音符落在哪一小节（`adj1267`：按字的 x 判会丢掉全曲第 1 个字，
+ *    因为字是居中放在数字下方的，左缘比数字左缘更靠左）。
  *
  * ⚠ 行首小节线（用户 2026-11-08 特别点出的坑）：
  *  · 普通 `|` 在行首**不画**（`layout/index.ts:2101`，"行从边距开始"）；
@@ -121,23 +123,54 @@ function splitRow(
 
   const out: SrcMeasure[] = []
   let no = startNo
+  /** 先按 x 切出各小节的音符，再统一分配歌词（adj1267：歌词要按"它的音符在哪个小节"认） */
+  const bars: { x0: number; x1: number; notes: PlacedToken[] }[] = []
   for (let i = 0; i + 1 < bounds.length; i++) {
     const x0 = bounds[i]
     const x1 = bounds[i + 1]
     const inside = notes.filter((n) => n.x >= x0 - 0.5 && n.x < x1 - 0.5)
     // 行首空小节（`Q: |/ ...` 解析出的那一段）没有音符 ⇒ 不是小节，跳过
     if (inside.length === 0) continue
+    bars.push({ x0, x1, notes: inside })
+  }
+  /**
+   * adj1267（`E-2026-569`）：歌词**按它挂的那个音符**归小节，不再按字左缘的 x。
+   *
+   * 为什么：`LyricChar` 是居中放在音符数字下方的，字左缘比数字左缘还要往左
+   * （`x = note.x + 半个数字宽 − 半个歌词字宽`）。全曲**第 1 个字**的字左缘因此落在
+   * 内容左缘之外，按 x 判就被这一行过滤掉了 —— 实测整首歌的第一个字永远不显示。
+   * 挂在行首小节线上的字（小节最后一字的字尾越界）同理。`id` 才是"这个字属于哪个音"
+   * （与 `layout/index.ts` 的 `sameNote` 同一口径）。
+   */
+  const barOfNote = new Map<string, number>()
+  const idKey = (id: PlacedToken['id']): string => `${id.page}|${id.voice}|${id.group}|${id.index}`
+  bars.forEach((b, i) => {
+    for (const n of b.notes) barOfNote.set(idKey(n.id), i)
+  })
+  const lyricsOfBar: PlacedLyric[][] = bars.map(() => [])
+  for (const l of lyrics) {
+    const bi = barOfNote.get(idKey(l.id))
+    if (bi !== undefined) {
+      lyricsOfBar[bi].push(l)
+      continue
+    }
+    // 落不回音符（旧数据 / 音被挤掉）⇒ 退回按字左缘的 x 判，宁可偏也不丢
+    const i = bars.findIndex((b) => l.x >= b.x0 - 0.5 && l.x < b.x1 - 0.5)
+    if (i >= 0) lyricsOfBar[i].push(l)
+  }
+  for (let i = 0; i < bars.length; i++) {
+    const b = bars[i]
     out.push({
       no,
       pageIndex,
       rowIndex,
-      x0,
-      x1,
+      x0: b.x0,
+      x1: b.x1,
       baselineY,
-      ...(lineTypeAt(lines, x0) === undefined ? {} : { leadType: lineTypeAt(lines, x0) }),
-      ...(lineTypeAt(lines, x1) === undefined ? {} : { endType: lineTypeAt(lines, x1) }),
-      notes: inside,
-      lyrics: lyrics.filter((l) => l.x >= x0 - 0.5 && l.x < x1 - 0.5),
+      ...(lineTypeAt(lines, b.x0) === undefined ? {} : { leadType: lineTypeAt(lines, b.x0) }),
+      ...(lineTypeAt(lines, b.x1) === undefined ? {} : { endType: lineTypeAt(lines, b.x1) }),
+      notes: b.notes,
+      lyrics: lyricsOfBar[i],
     })
     no += 1
   }
