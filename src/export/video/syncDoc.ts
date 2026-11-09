@@ -85,6 +85,13 @@ export interface SyncLinear {
    * 歌词本身是**多段按演奏遍次自动换行**，不需要单独存行号。
    */
   lyrics?: boolean
+  /**
+   * adj1268：**谱带画不画小节号**（画在小节线正上方）。
+   *
+   * 缺字段 = 不画（用户 P3 的默认）；`true` = 画。与 `lyrics` 相反的方向记：
+   * 这个默认是"关"，所以只记"打开"这一笔。
+   */
+  barNumbers?: boolean
 }
 
 export interface SyncDoc {
@@ -458,6 +465,8 @@ export function parseSyncDoc(text: string): { doc: SyncDoc | null; error?: strin
     if (typeof l.cards === 'boolean') out.cards = l.cards
     // adj1267：歌词开关只认布尔值（缺字段 = 画；别的类型当没写，不猜）
     if (typeof l.lyrics === 'boolean') out.lyrics = l.lyrics
+    // adj1268：小节号默认不画，只认布尔值
+    if (typeof l.barNumbers === 'boolean') out.barNumbers = l.barNumbers
     if (Object.keys(out).length > 0) linear = out
   }
   const doc: SyncDoc = {

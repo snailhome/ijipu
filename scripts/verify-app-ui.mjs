@@ -3344,8 +3344,10 @@ async function main() {
       /**
        * adj1267：给这份样例谱加**两段歌词**——台面的歌词开关与"多段按遍次换行"要有东西可验。
        * 两段字完全不同，条带上画的是哪一段一眼能对上（源码级判据在 smoke 里）。
+       * adj1268/adj1269：再加一条跨小节连音线 `( 1 2 | 3 4 )` 与一条跨小节渐强 `6< … 3!`，
+       * 让"号画在线上方""线跨过小节线"这两件在真浏览器里也走一遍（截图核对用 `IJIPU_SHOT`）。
        */
-      const syncCode = `V: 1.0\nB: 连续谱\nQ: 1 2 3 4 | 5 6 7 1' | 2 3 4 5 |\nC: 一 二 三 四 | 五 六 七 八 | 九 十 百 千\nC: 甲 乙 丙 丁 | 戊 己 庚 辛 | 壬 癸 子 丑\n`
+      const syncCode = `V: 1.0\nB: 连续谱\nQ: ( 1 2 | 3 4 ) 5 6< | 7 1' 2 3! | 4 5 6 7 |\nC: 一 二 三 四 五 六 七 八 九 十 百 千 万 亿 兆 京\nC: 甲 乙 丙 丁 戊 己 庚 辛 壬 癸 子 丑 寅 卯 辰 巳\n`
       await c.send('Page.navigate', { url: `${origin}/app/?jps=${encodeURIComponent(syncCode)}` })
       await waitFor(c, `!!document.querySelector('.app')`, '应用首屏（连续谱用例）')
       await sleep(800)
@@ -3396,6 +3398,15 @@ async function main() {
         )
         // 谱带是异步光栅的（SVG → 位图块），等它出来再数墨迹像素
         await sleep(1800)
+        /**
+         * 画出来的东西要**亲眼看**（`adj1263` 的教训：四条断言全绿、肉眼看才现形的硬伤）。
+         * 设 `IJIPU_SHOT=<png 路径>` 就把台面画布存一张图，人工核对用；平时不写盘。
+         */
+        if (process.env.IJIPU_SHOT) {
+          const dataUrl = await evalJs(c, `document.querySelector('[data-role="linear-stage"]').toDataURL('image/png')`)
+          writeFileSync(process.env.IJIPU_SHOT, Buffer.from(String(dataUrl).split(',')[1] ?? '', 'base64'))
+          console.log(`  （已截图：${process.env.IJIPU_SHOT}）`)
+        }
         const ink = await evalJs(
           c,
           `(() => {
@@ -3470,6 +3481,36 @@ async function main() {
           inkBack >= inkWithLyrics * 0.95,
           `${inkNoLyrics} → ${inkBack}（原 ${inkWithLyrics}）`,
         )
+        /**
+         * adj1268（用户 2026-11-09）：「小节号」默认不画，勾上后画在小节线正上方。
+         * 判据同样用墨迹像素：序号框 + 数字是实打实画上去的，像素必然变多。
+         */
+        const numUi = await evalJs(
+          c,
+          `(() => {
+            const box = document.querySelector('[data-role="linear-barnumbers"]')
+            return { box: !!box, checked: box ? box.checked : null }
+          })()`,
+        )
+        check('adj1268 台面有「小节号」开关且默认不勾（P3：默认不画）', numUi.box && numUi.checked === false, JSON.stringify(numUi))
+        const inkBeforeNums = Number(await evalJs(c, lyricInk))
+        await evalJs(c, `(document.querySelector('[data-role="linear-barnumbers"]')?.click(), true)`)
+        await sleep(1800)
+        const inkWithNums = Number(await evalJs(c, lyricInk))
+        if (process.env.IJIPU_SHOT) {
+          const shot2 = String(process.env.IJIPU_SHOT).replace(/\.png$/, '') + '-bars.png'
+          const dataUrl2 = await evalJs(c, `document.querySelector('[data-role="linear-stage"]').toDataURL('image/png')`)
+          writeFileSync(shot2, Buffer.from(String(dataUrl2).split(',')[1] ?? '', 'base64'))
+          console.log(`  （已截图：${shot2}）`)
+        }
+        check(
+          'adj1268 勾上「小节号」后画布上真的多出一排序号（不是只改了复选框）',
+          inkWithNums > inkBeforeNums + 150,
+          `墨迹像素 ${inkBeforeNums} → ${inkWithNums}`,
+        )
+        // 关回去：后面的用例仍在"不画小节号"的画面上跑
+        await evalJs(c, `(document.querySelector('[data-role="linear-barnumbers"]')?.click(), true)`)
+        await sleep(900)
         /**
          * adj1265（M4）：主题编辑器与片头片尾卡——真浏览器里点一遍。
          * 纯函数/带 sidecar 的判据在 smoke 里；这里只验"界面真的接上了、改动真的进了画布"。

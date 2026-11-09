@@ -9,7 +9,7 @@
  *  · 谱带纵向位置**可调**，默认**上 1/4**；
  *  · 球在**色块的固定位置**弹。
  */
-import { stripBallAt, stripXAt, type LinearStrip, type StripBall } from '@ijipu/engine'
+import { stripBallAt, stripXAt, type LinearStrip, type PageConfig, type StripBall } from '@ijipu/engine'
 import { locatorBlockWidthOf } from './linearSync'
 
 export interface StripLayOptions {
@@ -94,4 +94,21 @@ export function stripFrameAt(tMs: number, strip: LinearStrip, o: StripLayOptions
     squash: Math.round(ball.squash * 100) / 100,
     dwelling: ball.dwelling,
   }
+}
+
+/**
+ * adj1270：**条带的排版配置**——把"谱面字号"抬到条带字号时，字号类配置要**一起按比例放大**。
+ *
+ * 为什么不能只改 `note_size`（`adj1258` 起就是这么干的）：`note_size` 只决定数字/减时线/高八度点，
+ * **歌词字号 `geci_size` 是独立一项**。出片画布 1920 宽时 13px 的谱太小，所以要抬到 64px；
+ * 但只抬 `note_size` 的结果是"64px 的谱 + 11px 的词"——真图里歌词糊成一排小点（`adj1269` 截图发现）。
+ *
+ * 只放大**与字号同量纲**的那几项；`height_*` 这类行间距只影响行与行的距离，
+ * 而条带把所有行压到同一条基线上，抬不抬都不影响条带上的样子（抬了反而会改动行判定）。
+ */
+export function stripCfgOf(cfg: PageConfig, noteSize: number): PageConfig {
+  const from = cfg.note_size > 0 ? cfg.note_size : 13
+  const scale = Math.max(0.1, noteSize / from)
+  const scaled = (v: number): number => Math.max(1, Math.round(v * scale))
+  return { ...cfg, note_size: Math.max(1, Math.round(noteSize)), geci_size: scaled(cfg.geci_size) }
 }

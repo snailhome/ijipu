@@ -38,11 +38,13 @@ import type {
   BarlineType,
   PageConfig,
   PlacedBarline,
+  PlacedSlur,
   PlacedToken,
   ScoreLayout,
   ScorePage,
 } from '../types'
 import type { PlaySequence } from '../playback/sequence'
+import { BAR_NUMBER_BOTTOM_GAP, barNumberBoxH } from '../layout/spacing'
 import { extractMeasures, type SrcMeasure } from './measures'
 import type { LinearStrip, LinearStripOptions, StripNote, StripRun } from './types'
 
@@ -139,6 +141,69 @@ function verseLinesOfRows(measures: SrcMeasure[]): Map<string, number> {
 /** 曲行身份（页 + 行）：歌词行序号是**每个曲部**各自从 0 数的（`layout/index.ts:6377`） */
 const rowKeyOf = (m: SrcMeasure): string => `${m.pageIndex}|${m.rowIndex}`
 
+/** 一个 run（条带上的一段小节）的坐标换算：源小节坐标 → 条带坐标 */
+interface RunMap {
+  run: StripRun
+  /** 源 x → 条带 x（每小节一个横向比例 k；反复段每遍各一套） */
+  x: (v: number) => number
+  /** 源 y → 条带 y（源行基线 → 条带基线） */
+  y: (v: number) => number
+}
+
+function runMapOf(run: StripRun, m: SrcMeasure, baselineY: number): RunMap {
+  const kx = (run.x1 - run.x0) / Math.max(0.5, m.x1 - m.x0)
+  const dy = baselineY - m.baselineY
+  return {
+    run,
+    x: (v) => Math.round((run.x0 + (v - m.x0) * kx) * 10) / 10,
+    y: (v) => Math.round((v + dy) * 10) / 10,
+  }
+}
+
+/** 一条连音线在**源页**上的两端（跨行的两条半线已经合成一条） */
+interface SlurSpan {
+  x1: number
+  x2: number
+  y1: number
+  y2: number
+  src: PlacedSlur
+}
+
+/**
+ * 把一页的连音线整理成"两端对齐的整条线"。
+ *
+ * 为什么不直接用 `page.slurs`：跨行的线在 A4 里是**两条半条**
+ * （`half:'l'` 收在行末、`half:'r'` 从行首起）。条带把各曲行拼成一条线，
+ * 两条半条会首尾相接 —— 不合并就是"两个半圆接在一起、接口一个台阶"（用户 2026-11-09 点出）。
+ * 配对口径：同一 group/voice、右半条在左半条的**后面一行**（`row`）。
+ */
+function slurSpansOfPage(p: ScorePage): SlurSpan[] {
+  const usedL = new Set<number>()
+  const usedR = new Set<number>()
+  const out: SlurSpan[] = []
+  for (let i = 0; i < p.slurs.length; i++) {
+    const s = p.slurs[i]
+    if (s.half !== 'l' || usedL.has(i)) continue
+    for (let j = i + 1; j < p.slurs.length; j++) {
+      const r = p.slurs[j]
+      if (r.half !== 'r' || usedR.has(j)) continue
+      if ((r.group ?? -1) !== (s.group ?? -1) || (r.voice ?? -1) !== (s.voice ?? -1)) continue
+      if ((r.row ?? -1) <= (s.row ?? -1)) continue
+      usedL.add(i)
+      usedR.add(j)
+      out.push({ x1: s.x1, y1: s.y, x2: r.x2, y2: r.y, src: s })
+      break
+    }
+  }
+  // 没配上的（本来就不跨行、或找不到另一半）：按自己的两端整条画
+  for (let i = 0; i < p.slurs.length; i++) {
+    if (usedL.has(i) || usedR.has(i)) continue
+    const s = p.slurs[i]
+    out.push({ x1: s.x1, y1: s.y, x2: s.x2, y2: s.y, src: s })
+  }
+  return out
+}
+
 /**
  * 克隆一个音符：x/占宽/拍段按 k 缩放、y 平移到条带基线。
  *
@@ -203,7 +268,18 @@ export function buildLinearStrip(
   opts: LinearStripOptions = {},
 ): LinearStrip {
   const noteSize = cfg.note_size
-  const baselineY = opts.baselineY ?? Math.round(noteSize * 2.2)
+  /**
+   * adj1268（用户 2026-11-09 拍板「小节号可放在小节线上方」）：序号框画在**小节线正上方**，
+   * 框底贴住小节线顶端。默认基线（字号 × 2.2）上方只留了 0.45 × 字号，
+   * 小字号时放不下一个序号框 ⇒ 打开这个开关时整条带往下让几像素（只在开关打开时生效）。
+   */
+  const withBarNumbers = opts.barNumbers === true
+  const barBoxH = barNumberBoxH(noteSize)
+  const baseY0 = opts.baselineY ?? Math.round(noteSize * 2.2)
+  const barNumberPad = withBarNumbers
+    ? Math.max(0, Math.ceil(barBoxH + 1 - (baseY0 - noteSize * 1.75)))
+    : 0
+  const baselineY = baseY0 + barNumberPad
   const withLyrics = opts.lyrics !== false
   const beatMs = seq.bpm > 0 ? 60000 / seq.bpm : 500
   const pxPerBeat = opts.pxPerBeat ?? Math.round(noteSize * 1.6)
@@ -245,7 +321,6 @@ export function buildLinearStrip(
   let noteIdx = 0
   let droppedVoice = 0
   let droppedCross = 0
-  const crossCounted = new Set<string>()
 
   for (let i = 0; i < occ.length; i++) {
     const o = occ[i]
@@ -318,6 +393,17 @@ export function buildLinearStrip(
     cursor = x1
   }
 
+  /**
+   * adj1268：小节号画在**小节线正上方**（框底贴小节线顶端）。
+   * 第 1 段 run 没有小节线（条带从内容开始），所以从第 2 段起画；反复段每出现一次都画。
+   */
+  if (withBarNumbers) {
+    const yBarBottom = Math.round((baselineY - noteSize * 1.75 - barBoxH - BAR_NUMBER_BOTTOM_GAP) * 10) / 10
+    for (let i = 1; i < runs.length; i++) {
+      page.barNumbers.push({ n: runs[i].sourceBar, x: runs[i].x0, yBarBottom, voice: 1, group: 1 })
+    }
+  }
+
   // 曲末的终止线（`||`）
   const lastOcc = occ[occ.length - 1]
   const lastMeasure = lastOcc ? byNo.get(lastOcc.no) : undefined
@@ -325,18 +411,71 @@ export function buildLinearStrip(
     page.barlines.push(barlineAt(cursor, baselineY - noteSize * 1.75, baselineY + noteSize * 0.55, '||'))
   }
 
-  // 跨小节的连音线/渐强：v1 不画（记数，别静默丢）
+  /**
+   * adj1269（用户 2026-11-09）：**跨小节、跨行的连音线/渐强渐弱要画出来**。
+   *
+   * 为什么必须重画：A4 版里跨行的连音线被拆成两条"半条"（`half:'l'` 收在行末、`half:'r'` 从行首起）；
+   * 条带把各曲行拼成了一条线 ⇒ 那两条半条现在**首尾相接**，必须合成一条完整的弧线，
+   * 否则接口处会出现一个台阶/两个半圆。同一小节内的线也照样按 k 缩放搬过来。
+   *
+   * 坐标怎么搬：x 走**各自所在小节**的 `run` 变换（每小节一个 k，反复段每遍各一套）；
+   * y 加上"源行基线 → 条带基线"的位移。跨行的线两端 y 位移可能不同（源行基线不同），
+   * 取**较高**的那个当统一 y（`renderSlur` 只吃一个 y；取低的会压到下面那行的数字上）。
+   */
+  const runsByBar = new Map<number, { run: StripRun; map: RunMap }[]>()
+  for (const run of runs) {
+    const m = byNo.get(run.sourceBar)
+    if (m === undefined) continue
+    const list = runsByBar.get(run.sourceBar) ?? []
+    list.push({ run, map: runMapOf(run, m, baselineY) })
+    runsByBar.set(run.sourceBar, list)
+  }
+  /**
+   * 一条连音线在条带上的落点：两端各自找"所在小节的第 k 遍"。
+   *
+   * 第 k 遍配对（而不是只画第 1 遍）：反复段里的线每遍都要有；两端的遍数取 `min`，
+   * 一端在反复段外时只画能配对上的那几遍（宁少不串）。
+   */
+  const mapMarks = (
+    pageIndex: number,
+    x1: number,
+    x2: number,
+    onPair: (a: RunMap, b: RunMap) => void,
+  ): boolean => {
+    const barA = measureOfX(measures, pageIndex, x1)
+    const barB = measureOfX(measures, pageIndex, x2)
+    if (barA < 0 || barB < 0) return false
+    const listA = runsByBar.get(barA) ?? []
+    const listB = runsByBar.get(barB) ?? []
+    const pairs = Math.min(listA.length, listB.length)
+    if (pairs === 0) return false
+    for (let k = 0; k < pairs; k++) onPair(listA[k].map, listB[k].map)
+    return true
+  }
   for (const p of layout.pages) {
-    for (const s of p.slurs) {
-      const a = measureOfX(measures, p.index, s.x1)
-      const b = measureOfX(measures, p.index, s.x2)
-      if (a !== b && a >= 0) {
-        const key = `${p.index}|${a}|${b}|${Math.round(s.x1)}`
-        if (!crossCounted.has(key)) {
-          crossCounted.add(key)
-          droppedCross += 1
-        }
-      }
+    for (const span of slurSpansOfPage(p)) {
+      const ok = mapMarks(p.index, span.x1, span.x2, (a, b) => {
+        const x1 = a.x(span.x1)
+        const x2 = b.x(span.x2)
+        if (!(x2 > x1)) return
+        page.slurs.push({
+          ...span.src,
+          x1: Math.max(0, x1),
+          x2,
+          y: Math.min(a.y(span.y1), b.y(span.y2)),
+          half: undefined,
+        })
+      })
+      if (!ok) droppedCross += 1
+    }
+    for (const d of p.dynamics) {
+      const ok = mapMarks(p.index, d.x1, d.x2, (a, b) => {
+        const x1 = a.x(d.x1)
+        const x2 = b.x(d.x2)
+        if (!(x2 > x1)) return
+        page.dynamics.push({ ...d, x1: Math.max(0, x1), x2, y: Math.min(a.y(d.y), b.y(d.y)) })
+      })
+      if (!ok) droppedCross += 1
     }
   }
 

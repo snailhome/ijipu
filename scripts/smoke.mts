@@ -176,7 +176,7 @@ import { buildLinearStrip, stripXAt, stripEndMs, stripBallAt } from '@ijipu/engi
 // adj1259：单行谱出 SVG + 配色替换 + 分块规划（纯函数，Node 里可直接断言）
 import { chunkPlanOf, stripSvgOf, stripLayoutOf, STRIP_INK_COLORS } from '../src/export/video/stripSvg'
 // adj1260：一帧的几何（定位块/球/滚动）与主题钳制——都是纯函数
-import { stripFrameAt, bandTopOf } from '../src/export/video/stripFrame'
+import { stripFrameAt, bandTopOf, stripCfgOf } from '../src/export/video/stripFrame'
 import { normalizeStripStyle, stripThemeOf, stripStyleOf, stripStyleOverrideOf, colorSwatchOf, hasStripStyleOverride, STRIP_THEMES, STRIP_THEME_AUTO, stripStyleFromCard, stripBaseStyleOf, colorLuminanceOf, isLightCard } from '../src/export/video/stripTheme'
 // adj1264：连续动态谱对拍台的纯口径（时钟映射 / 混音三档 / 偶数化 / 一个音符宽的色块）
 import {
@@ -39259,6 +39259,248 @@ C: 一 二 三 四 五 六 七 八 九 十 百 千
       /doc\?\.linear\?\.lyrics !== false/.test(linearSrc) &&
       /delete next\.lyrics/.test(linearSrc) &&
       /data-role="linear-lyrics"/.test(linearSrc),
+    '',
+  )
+}
+
+/**
+ * adj1269（用户 2026-11-09）：「跳小节线连音线，**特别是原跨行连音线**，现在不再跨行，就要重画了；
+ * 其它跨小节修饰符一样的操作」。
+ *
+ * A4 版里跨行的连音线是两条**半条**（`half:'l'` 收在行末、`half:'r'` 从行首起）；
+ * 条带把各曲行拼成一条线后，两条半条首尾相接 —— 不合并就是"两个半圆接在一起、接口一个台阶"。
+ * 这里守四条：
+ *  ① 同一行内跨小节的线，按各小节的 k 搬过来、首尾都对；
+ *  ② 跨行的两条半条**合成一条**完整的弧（条带上不再有 `half`）；
+ *  ③ 渐强/渐弱（`<`/`>` 到 `!`）跟连音线同一套搬法；
+ *  ④ 反复段里的线**每遍都画**（不是只画第 1 遍）。
+ */
+console.log('[adj1269] 条带上的跨小节 / 跨行连音线与渐强渐弱')
+{
+  const buildN = (code: string) => {
+    const r = parseJpsRaw(code)
+    const lay = layoutScore(r, defaultPageConfig)
+    const seq = buildPlaySequence(r, lay, 120)
+    return { lay, seq, strip: buildLinearStrip(lay, seq, defaultPageConfig) }
+  }
+  /** 同一行内：连音线跨第 1→2 小节；渐强跨第 2→3 小节 */
+  const SAME_ROW = `V: 1.0
+B: 跨小节
+Q: ( 1 2 | 3 4 ) 5 6 | 1< 2 3 | 4 5 6! 7 |
+`
+  const same = buildN(SAME_ROW)
+  const laySlurs = same.lay.pages[0]?.slurs ?? []
+  const stripSlurs = same.strip.page.slurs
+  check(
+    'adj1269 同一行内跨小节的连音线搬到条带上（一条，两端分别落在两个小节里）',
+    laySlurs.length === 1 &&
+      stripSlurs.length === 1 &&
+      stripSlurs[0].half === undefined &&
+      stripSlurs[0].x2 > stripSlurs[0].x1 &&
+      stripSlurs[0].x1 >= same.strip.runs[0].x0 &&
+      stripSlurs[0].x2 <= same.strip.runs[1].x1 + 0.5,
+    `lay=${laySlurs.length} strip=${stripSlurs.length} x=${stripSlurs[0]?.x1}/${stripSlurs[0]?.x2} runs=${same.strip.runs.map((r) => `${r.x0}-${r.x1}`).join(',')}`,
+  )
+  const dyn = same.strip.page.dynamics
+  check(
+    'adj1269 跨小节的渐强记号也搬过来（`<` 起、`!` 止；两端跨小节）',
+    dyn.length === 1 && dyn[0].type === 'crescendo' && dyn[0].x2 > dyn[0].x1,
+    JSON.stringify(dyn),
+  )
+  check(
+    'adj1269 正常的跨小节修饰符不再计入"丢掉了什么"（dropped.crossMeasure = 0）',
+    same.strip.dropped.crossMeasure === 0,
+    `dropped=${same.strip.dropped.crossMeasure}`,
+  )
+
+  /** 跨行：16 小节排成两行，连音线从第 1 小节第一个音一直连到第 9 小节最后一个音 */
+  const CROSS_ROW = `V: 1.0
+B: 跨行连音
+Q: (1 2 3 4 | 5 6 7 1' | 2 3 4 5 | 6 7 1' 2' | 3 4 5 6 | 7 1' 2' 3' | 4 5 6 7 | 1' 2' 3' 4' | 5 6 7 1' | 2 3 4 5')
+`
+  /**
+   * 用一条长 Q 行让排版自动折成两行（与 `adj1258` 的 LONG 样例同一手法），
+   * 连音线从第 1 行第 1 个音连到第 2 行第 2 小节末 —— 排版会把它拆成两条半条。
+   */
+  const CROSS_ROW2 = `V: 1.0
+B: 跨行连音
+Q: (1 2 3 4 | 5 6 7 1' | 2 3 4 5 | 6 7 1' 2' | 3 4 5 6 | 7 1' 2' 3' | 4 5 6 7 | 1' 2' 3' 4' | 5 6 7 1' | 2 3 4 5 | 6 7 1' 2' | 3 4 5 6 | 7 1' 2' 3' | 4 5 6 7 | 1' 2' 3' 4' | 5 6 7 1')
+`
+  void CROSS_ROW
+  const cr = buildN(CROSS_ROW2)
+  const rows = new Set(cr.strip.runs.map((r) => r.rowIndex))
+  const halves = (cr.lay.pages[0]?.slurs ?? []).filter((s) => s.half !== undefined)
+  check(
+    'adj1269 样例确实跨行（排版把它拆成了两条半条）——这条不成立后面就没意义',
+    rows.size > 1 && halves.length === 2 && halves.some((h) => h.half === 'l') && halves.some((h) => h.half === 'r'),
+    `rows=${rows.size} halves=${halves.map((h) => h.half).join(',')} slurs=${(cr.lay.pages[0]?.slurs ?? []).length}`,
+  )
+  const merged = cr.strip.page.slurs
+  const firstRun = cr.strip.runs[0]
+  const lastRun = cr.strip.runs[cr.strip.runs.length - 1]
+  check(
+    'adj1269 跨行的两条半条在条带上**合成一条**完整弧线（不再有 half、横跨两行）',
+    merged.length === 1 &&
+      merged[0].half === undefined &&
+      Math.abs(merged[0].x1 - firstRun.x0) < Math.max(40, firstRun.x1 - firstRun.x0) &&
+      merged[0].x2 > cr.strip.runs[7].x1 &&
+      merged[0].x1 < merged[0].x2,
+    `n=${merged.length} x=${merged[0]?.x1}/${merged[0]?.x2} 第8段右缘=${cr.strip.runs[7]?.x1} 末段=${lastRun?.x0}-${lastRun?.x1}`,
+  )
+  check(
+    'adj1269 合并后的弧线整体在条带里（y > 0、不出条带宽度）',
+    merged.every((s) => s.y > 0 && s.y < cr.strip.height && s.x2 <= cr.strip.width + 0.5),
+    JSON.stringify(merged.map((s) => ({ y: s.y, x2: s.x2 }))),
+  )
+
+  /** 反复段里的连音线：每遍都要有（否则第 2 遍那条弧就"消失"了） */
+  const REPEAT_SLUR = `V: 1.0
+B: 反复里的连音
+Q: 1 2 3 4 |: ( 5 6 | 7 1' ) :| 6 7 1' 2' |
+`
+  const rep = buildN(REPEAT_SLUR)
+  const repSlurs = rep.strip.page.slurs
+  check(
+    'adj1269 反复段里的连音线每遍都画（第 2 遍不是空白）',
+    repSlurs.length === 2 && repSlurs[1].x1 > repSlurs[0].x2,
+    `n=${repSlurs.length} x=${repSlurs.map((s) => `${s.x1}/${s.x2}`).join(' ')}`,
+  )
+  /** 真渲染：SVG 里确实有弧线路径（不是只有数据） */
+  const svgCurve = stripSvgOf(cr.strip, defaultPageConfig)
+  check(
+    'adj1269 条带 SVG 里真的画出了跨行那条弧线（有 `A` 圆弧路径，且跨过两行的交界）',
+    /<path d="M [\d.]+ [\d.]+ A /.test(svgCurve),
+    '',
+  )
+}
+/**
+ * adj1268（用户 2026-11-09 拍板「小节号**可放在小节线上方**」）：
+ * 条带上的小节号默认不画（P3），打开后画在**小节线正上方**。
+ *
+ * 为什么不沿用 A4 的位置：A4 里序号画在小节线**下方**，而条带下方正是歌词区，
+ * 硬搬会压词（违反"墨迹不重叠"）。所以框底贴住小节线顶端：
+ * `框顶 = 小节线顶端 − 框高`，并且必须在条带里（`y ≥ 0`）。
+ * 断言直接量**渲染出来的 SVG**（`<g data-barnumber>` 里的 rect），
+ * 免得"算出来对、画出来错"（本项目踩过多次）。
+ */
+console.log('[adj1268] 条带小节号：画在小节线正上方（默认不画）')
+{
+  const CODE = `V: 1.0
+B: 小节号
+Q: 1 2 3 4 | 5 6 7 1' |: 2 3 4 5 :| 6 7 1' 2' |
+C: 一 二 三 四 五 六 七 八 九 十 百 千 万 亿 兆 京
+`
+  const r = parseJpsRaw(CODE)
+  const lay = layoutScore(r, defaultPageConfig)
+  const seq = buildPlaySequence(r, lay, 120)
+  const plain = buildLinearStrip(lay, seq, defaultPageConfig)
+  const withNums = buildLinearStrip(lay, seq, defaultPageConfig, { barNumbers: true })
+  check(
+    'adj1268 默认不画小节号（P3），且不因为开了这个选项而改动别的东西',
+    plain.page.barNumbers.length === 0 && plain.height === buildLinearStrip(lay, seq, defaultPageConfig).height,
+    `barnums=${plain.page.barNumbers.length}`,
+  )
+  check(
+    'adj1268 打开后：每根小节线一个号（第 1 段没有线、不画；反复段每出现一次都画）',
+    withNums.page.barNumbers.length === withNums.runs.length - 1 &&
+      JSON.stringify(withNums.page.barNumbers.map((b) => b.n)) ===
+        JSON.stringify(withNums.runs.slice(1).map((x) => x.sourceBar)),
+    `号=${withNums.page.barNumbers.map((b) => b.n).join(',')} runs=${withNums.runs.map((x) => x.sourceBar).join(',')}`,
+  )
+  /** 真渲染一遍：量 SVG 里序号框的实际 y/height，与小节线顶端比 */
+  const svgNums = stripSvgOf(withNums, defaultPageConfig)
+  const rects: { n: number; y: number; h: number; x: number }[] = []
+  const re = /<g data-barnumber="(\d+)"><rect x="([-\d.]+)" y="([-\d.]+)" width="([-\d.]+)" height="([-\d.]+)"/g
+  for (let m = re.exec(svgNums); m !== null; m = re.exec(svgNums)) {
+    rects.push({ n: Number(m[1]), x: Number(m[2]), y: Number(m[3]), h: Number(m[5]) })
+  }
+  const barTops = withNums.page.barlines.map((b) => b.yTop)
+  const aboveAll = rects.length > 0 && rects.every((b) => b.y >= 0 && barTops.some((t) => b.y + b.h <= t + 0.01))
+  check(
+    'adj1268 序号框画在小节线**上方**且完整落在条带里（框顶 ≥ 0、框底 ≤ 小节线顶端）',
+    aboveAll,
+    rects.length === 0 ? 'SVG 里一个序号框都没有' : `${rects.map((b) => `${b.n}@y${b.y.toFixed(1)}+${b.h.toFixed(1)}`).join(' ')} 线顶=${barTops.map((t) => t.toFixed(1)).join(',')}`,
+  )
+  const numTop = Math.min(...withNums.page.notes.map((n) => n.y))
+  check(
+    'adj1268 序号框不压音符（框底在小节线顶端之上，而数字墨迹在顶端之下）',
+    rects.every((b) => b.y + b.h <= numTop + 0.01),
+    `框底=${rects.map((b) => (b.y + b.h).toFixed(1)).join(',')} 数字基线=${numTop.toFixed(1)}`,
+  )
+
+  /* ---- sidecar：默认不画，所以只记"打开"这一笔 ---- */
+  const onDoc2 = makeSyncDoc({
+    audio: '',
+    audioDurationMs: 0,
+    anchors: [],
+    linear: { barNumbers: true },
+    code: CODE,
+  })
+  const onBack = parseSyncDoc(serializeSyncDoc(onDoc2)).doc
+  check(
+    'adj1268 sidecar 记住"打开小节号"；没打开时不写字段（缺字段 = 不画）',
+    onBack?.linear?.barNumbers === true &&
+      makeSyncDoc({ audio: '', audioDurationMs: 0, anchors: [], linear: { theme: 'gold' }, code: CODE }).linear
+        ?.barNumbers === undefined,
+    JSON.stringify(onBack?.linear),
+  )
+  const linearSrc2 = readFileSync(join(root, 'src', 'dialogs', 'LinearSyncDialog.tsx'), 'utf8')
+  check(
+    'adj1268 台面接线：小节号开关进条带、只在打开时写 `barNumbers:true`、有复选框',
+    /barNumbers: showBarNumbers/.test(linearSrc2) &&
+      /next\.barNumbers = true/.test(linearSrc2) &&
+      /data-role="linear-barnumbers"/.test(linearSrc2),
+    '',
+  )
+}
+
+/**
+ * adj1270（`adj1269` 看真图时发现的）：**条带上的歌词字号没跟着放大**。
+ *
+ * `adj1258` 起条带用 `{...pageConfig, note_size: 64}` 排版 —— 只抬了数字字号，
+ * `geci_size`（歌词字号）还是谱面原值（默认 11）。出片画布 1920 宽时，
+ * 结果是"64px 的谱 + 11px 的词"，真图里歌词糊成一排小点。
+ * 判据：按比例放大 + 真渲染出的 SVG 里歌词 `font-size` 真的变大了。
+ */
+console.log('[adj1270] 条带字号：歌词字号跟着谱面字号一起放大')
+{
+  const base = { ...defaultPageConfig }
+  const big = stripCfgOf(base, 64)
+  const ratioOf = (c: { note_size: number; geci_size: number }): number => c.geci_size / c.note_size
+  check(
+    'adj1270 抬到 64px 时歌词字号按同一比例放大（64:11 → 64:约54），比例基本不变',
+    big.note_size === 64 && big.geci_size >= 45 && Math.abs(ratioOf(big) - ratioOf(base)) < 0.06,
+    `base=${base.geci_size}/${base.note_size}=${ratioOf(base).toFixed(2)} → ${big.geci_size}/${big.note_size}=${ratioOf(big).toFixed(2)}`,
+  )
+  check(
+    'adj1270 坏输入不产生 0/NaN（`note_size` 缺省/为 0 时按 13 算，字号最小 1）',
+    stripCfgOf({ ...base, note_size: 0 }, 64).geci_size >= 1 &&
+      stripCfgOf({ ...base, geci_size: 0 }, 64).geci_size >= 1 &&
+      Number.isFinite(stripCfgOf({ ...base, note_size: 0 }, 64).note_size),
+    JSON.stringify(stripCfgOf({ ...base, note_size: 0 }, 64)),
+  )
+  /** 真渲染：歌词字在 SVG 里的 font-size 真的是放大后的值 */
+  const CODE = `V: 1.0
+B: 歌词字号
+Q: 1 2 3 4 |
+C: 一 二 三 四
+`
+  const r = parseJpsRaw(CODE)
+  const cfgBig = stripCfgOf(base, 64)
+  const lay = layoutScore(r, cfgBig)
+  const seq = buildPlaySequence(r, lay, 120)
+  const stripBig = buildLinearStrip(lay, seq, cfgBig)
+  const svgBig = stripSvgOf(stripBig, cfgBig)
+  const lyricFont = /<text[^>]*font-size="([\d.]+)"[^>]*>一</.exec(svgBig)
+  check(
+    'adj1270 真渲染：歌词字是 ~54px（不是原来的 11px），一眼能读',
+    lyricFont !== null && Number(lyricFont[1]) >= 40,
+    lyricFont === null ? 'SVG 里没找到歌词字' : `font-size=${lyricFont[1]}`,
+  )
+  const linearSrc3 = readFileSync(join(root, 'src', 'dialogs', 'LinearSyncDialog.tsx'), 'utf8')
+  check(
+    'adj1270 台面走同一个入口（`stripCfgOf(pageConfig, STRIP_NOTE_SIZE)`，不再自己拼配置）',
+    /stripCfgOf\(pageConfig, STRIP_NOTE_SIZE\)/.test(linearSrc3) && !/note_size: STRIP_NOTE_SIZE\s*\}\)/.test(linearSrc3),
     '',
   )
 }

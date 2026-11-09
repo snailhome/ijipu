@@ -52,6 +52,7 @@ import {
   type StripStyle,
 } from '../export/video/stripTheme'
 import { createLinearSession, type LinearSession } from '../export/video/linearSession'
+import { stripCfgOf } from '../export/video/stripFrame'
 import { CARD_TEMPLATES, resolveCardStyle } from '../export/video/cardTemplates'
 import { recordCardTemplate } from '../store/syncExtras'
 import {
@@ -143,8 +144,11 @@ export function LinearSyncDialog() {
     const lay = layoutScore(parseResult, pageConfig)
     return buildPlaySequence(parseResult, lay, scoreBpm)
   }, [parseResult, pageConfig, scoreBpm])
-  /** 条带的排版配置：字号固定（出片分辨率与字号无关，字号只影响"一屏几拍"） */
-  const stripCfg = useMemo<PageConfig>(() => ({ ...pageConfig, note_size: STRIP_NOTE_SIZE }), [pageConfig])
+  /**
+   * 条带的排版配置：字号固定（出片分辨率与字号无关，字号只影响"一屏几拍"）。
+   * adj1270：歌词字号跟着一起放大（只抬 `note_size` 会让歌词按原值画，真图里糊成小点）。
+   */
+  const stripCfg = useMemo<PageConfig>(() => stripCfgOf(pageConfig, STRIP_NOTE_SIZE), [pageConfig])
   /** adj1265：排版结果留着算片头卡的文字（标题/作者/调号/拍速） */
   const scoreLayout = useMemo(() => layoutScore(parseResult, stripCfg), [parseResult, stripCfg])
   /**
@@ -152,12 +156,15 @@ export function LinearSyncDialog() {
    * 直接读 `doc.linear` 而不是等到下面那份 `linearStyle`——谱带在这之前就要建好。
    */
   const showLyrics = doc?.linear?.lyrics !== false
+  /** adj1268：小节号（默认不画；勾上时画在小节线正上方） */
+  const showBarNumbers = doc?.linear?.barNumbers === true
   const strip: LinearStrip = useMemo(() => {
     return buildLinearStrip(scoreLayout, scoreSeq, stripCfg, {
       pxPerBeat: Math.round(STRIP_NOTE_SIZE * 1.6),
       lyrics: showLyrics,
+      barNumbers: showBarNumbers,
     })
-  }, [scoreLayout, stripCfg, scoreSeq, showLyrics])
+  }, [scoreLayout, stripCfg, scoreSeq, showLyrics, showBarNumbers])
   const scoreEndMs = useMemo(() => stripEndMs(strip), [strip])
   const barStartBeats = useMemo(() => (scoreSeq.barStartsMs ?? []).map((ms) => ms / scoreBeatMs), [scoreSeq, scoreBeatMs])
   const barNoOf = useCallback((i: number): number => scoreSeq.barNos?.[i] ?? i + 1, [scoreSeq])
@@ -806,6 +813,17 @@ export function LinearSyncDialog() {
     [linearStyle, setExtras],
   )
 
+  /** adj1268：小节号开关。默认**不画**，所以只记"打开"这一笔（缺字段 = 不画） */
+  const setBarNumbersOn = useCallback(
+    (on: boolean) => {
+      const next = { ...linearStyle }
+      if (on) next.barNumbers = true
+      else delete next.barNumbers
+      setExtras({ linear: next })
+    },
+    [linearStyle, setExtras],
+  )
+
   const barBeatLabel = useCallback(
     (b: number): string => {
       for (let i = barStartBeats.length - 1; i >= 0; i--) {
@@ -1338,6 +1356,16 @@ export function LinearSyncDialog() {
                 {linearSyncCopy.lyricsMulti(strip.lyricLines)}
               </span>
             )}
+            <label className="sync-label" title={linearSyncCopy.barNumbersHint}>
+              <input
+                type="checkbox"
+                checked={showBarNumbers}
+                data-role="linear-barnumbers"
+                aria-label={linearSyncCopy.barNumbers}
+                onChange={(e) => setBarNumbersOn(e.target.checked)}
+              />
+              {linearSyncCopy.barNumbers}
+            </label>
             <span className="sync-grow" />
             <label className="sync-label" title={linearSyncCopy.cardsHint}>
               <input
