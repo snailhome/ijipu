@@ -38371,6 +38371,24 @@ Q: 1 2 3 4 | 5 6 7 1' |: 2 3 4 5 :|
     return Math.max(mx, x < lo - 0.5 ? lo - x : x > hi + 0.5 ? x - hi : 0)
   }, 0)
   check('adj1282 每个音符起点 ⇔ 它自己的中心（不再是"段内 x ∝ t"）', drift < 0.5, `drift=${drift}`)
+  /**
+   * adj1283（用户 2026-11-09「谱带移动比合成音慢」）：音符时刻必须按**小节内拍位**算，
+   * 不是按"音符在小节里的 x 比例"。4/4、120bpm ⇒ 相邻四分音符正好相差 500ms。
+   */
+  const EVEN = `V: 1.0
+B: 等距
+Q: 1 2 3 4 |
+`
+  const re = parseJpsRaw(EVEN)
+  const layE = layoutScore(re, defaultPageConfig)
+  const seqE = buildPlaySequence(re, layE, 120)
+  const stripE = buildLinearStrip(layE, seqE, defaultPageConfig)
+  const gaps = stripE.notes.slice(1).map((n, i) => Math.round(n.t0 - stripE.notes[i].t0))
+  check(
+    'adj1283 4/4、120bpm 的四个四分音符 ⇒ 每个音起点正好差 500ms（按拍位算，不按 x 折算）',
+    gaps.length === 3 && gaps.every((g) => Math.abs(g - 500) <= 2),
+    `间隔=${gaps.join(',')}ms`,
+  )
   // ⑤ 单调：时间递增 ⇒ x 不减；曲末取末端
   let mono = true
   let prevX = -1

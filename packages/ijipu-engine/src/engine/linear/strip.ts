@@ -349,8 +349,15 @@ export function buildLinearStrip(
       const c = cloneNote(n, x0, m, k, yShift, noteIdx, runs.length)
       noteIdx += 1
       page.notes.push(c)
-      // 音符时刻：小节内按"离左边界多远"折算（与 x 的仿射同源，保证图和声对得上）
-      const t0 = o.t0 + ((n.x - m.x0) / srcW) * (o.t1 - o.t0)
+      /**
+       * 音符时刻：**用小节内拍位算**（`adj1283`，用户 2026-11-09「谱带移动比合成音慢」）。
+       *
+       * 原来按"音符在小节里的 x 比例 × 小节时长"折算 —— 可空间优先排版里 x 不跟时值成比例
+       * （音符常常挤在小节左侧、右边留白），折出来的时刻整体偏小 ⇒ 谱带走得比声音慢。
+       * `beatPos` 是"小节内第几拍"（从 0 起），乘一拍毫秒就是**真正的发声时刻**，
+       * 与合成音（按播放序列的拍点渲染）同源。
+       */
+      const t0 = o.t0 + n.beatPos * beatMs
       const t1 = Math.min(o.t1, t0 + Math.max(1, n.duration) * beatMs)
       notes.push({
         t0: Math.round(t0 * 10) / 10,
