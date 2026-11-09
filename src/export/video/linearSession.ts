@@ -13,7 +13,7 @@
 import type { LinearStrip, ScorePageMeta } from '@ijipu/engine'
 import { StripRasterCache } from './stripRaster'
 import { stripSvgOf } from './stripSvg'
-import { stripFrameAt, type StripFrameGeom, type StripLayOptions } from './stripFrame'
+import { stripFrameAt, edgeFadeWidthOf, type StripFrameGeom, type StripLayOptions } from './stripFrame'
 import { normalizeStripStyle, type StripStyle } from './stripTheme'
 import {
   linearCardFrameAt,
@@ -27,6 +27,7 @@ import type { CardStyle } from './cardTemplates'
 import type { PageConfig } from '@ijipu/engine'
 
 export type StripBackground =
+  | { kind: 'none' }
   | { kind: 'color'; color: string }
   | { kind: 'image'; image: CanvasImageSource; w: number; h: number }
   | { kind: 'video'; draw: (ctx: DrawCtx, tMs: number) => void }
@@ -44,6 +45,14 @@ export interface LinearSession {
   warm: (tMs: number) => Promise<void>
   /** 会话时刻 → 媒体时刻（对话框要按它预热视频帧；没有卡片时是恒等映射） */
   mediaMsOf: (tMs: number) => number
+  /**
+   * adj1271：**只**改"画在哪"的两项（谱带纵向位置 / 色块中心），不重建光栅。
+   *
+   * 为什么要这个入口：鼠标拖动时每一帧都在改纵向位置，走 `createLinearSession` 重建
+   * 会把整条谱的 SVG/块缓存重做一遍（长曲子明显卡）。位置只是 `stripFrameAt` 的入参，
+   * 改一个数就行。
+   */
+  setLay: (patch: Omit<StripLayOptions, 'viewW' | 'viewH' | 'stripH'>) => void
   /** 三段式时间轴（没有卡片时 `introMs = endMs = 0`） */
   timeline: LinearCardTimeline
   /** 谱带底图（排查用：把整条 SVG 拿走） */
@@ -77,6 +86,14 @@ export interface CreateLinearSessionOptions {
   lay?: Omit<StripLayOptions, 'viewW' | 'viewH' | 'stripH'>
   /** 谱带整体缩放（谱带高 / 字号；1 = 用 `strip.noteSize`） */
   bandScale?: number
+  /**
+   * adj1271：**两端淡化**的宽度（占画布宽的比例，0 = 关闭）。
+   *
+   * 只淡**谱带那一层**（背景视频/图片不动）——所以它走"先把谱带画到一张透明小画布、
+   * 用 `destination-out` 擦掉两端、再整体贴上去"这条路，而不是直接在主画布上擦
+   * （直接擦会把背景也擦出两个洞）。
+   */
+  edgeFade?: number
   /**
    * 媒体时间轴总长（ms）。没有卡片时必须给：它决定"会话时刻 = 媒体时刻"这条映射，
    * 也决定预览能拖到哪。
@@ -156,6 +173,43 @@ export async function createLinearSession(opts: CreateLinearSessionOptions): Pro
         })
       : null
 
+  /**
+   * adj1271：两端淡化。
+   *
+   * 谱带单独画到一张**透明小画布**上，用 `destination-out` 把左右两端擦成渐变，再整块贴到主画布。
+   * 为什么不直接在主画布上擦：那样会把背景视频/背景图也擦出两个洞（"淡化"只该作用在谱带这一层）。
+   */
+  const fadeW = edgeFadeWidthOf(opts.width, opts.edgeFade ?? 0)
+  let bandCanvas: OffscreenCanvas | null = null
+  const bandCtx = (): OffscreenCanvasRenderingContext2D | null => {
+    if (fadeW <= 0) return null
+    bandCanvas ??= new OffscreenCanvas(Math.max(1, opts.width), Math.max(1, stripH))
+    return bandCanvas.getContext('2d')
+  }
+  /** 把谱带贴到 `(0, bandTop)`；有淡化时先过一遍遮罩 */
+  const blitBand = (ctx: DrawCtx, g: StripFrameGeom): void => {
+    const bc = bandCtx()
+    if (bc === null) {
+      cache.blit(ctx, g.scrollX, g.bandTop)
+      return
+    }
+    bc.clearRect(0, 0, opts.width, stripH)
+    cache.blit(bc, g.scrollX, 0)
+    bc.globalCompositeOperation = 'destination-out'
+    const left = bc.createLinearGradient(0, 0, fadeW, 0)
+    left.addColorStop(0, 'rgba(0,0,0,1)')
+    left.addColorStop(1, 'rgba(0,0,0,0)')
+    bc.fillStyle = left
+    bc.fillRect(0, 0, fadeW, stripH)
+    const right = bc.createLinearGradient(opts.width - fadeW, 0, opts.width, 0)
+    right.addColorStop(0, 'rgba(0,0,0,0)')
+    right.addColorStop(1, 'rgba(0,0,0,1)')
+    bc.fillStyle = right
+    bc.fillRect(opts.width - fadeW, 0, fadeW, stripH)
+    bc.globalCompositeOperation = 'source-over'
+    ctx.drawImage(bandCanvas as OffscreenCanvas, 0, g.bandTop)
+  }
+
   /** 画"谱面那一帧"（背景 → 色块 → 谱带 → 球）；`alpha<1` 用于片头卡的最后一段交叉淡化 */
   const drawMusic = (ctx: DrawCtx, mediaMs: number, alpha = 1): StripFrameGeom => {
     const g = stripFrameAt(mediaMs, opts.strip, lay)
@@ -165,7 +219,13 @@ export async function createLinearSession(opts: CreateLinearSessionOptions): Pro
     }
     // ① 背景
     const bg = opts.background ?? { kind: 'color', color: '#000000' }
-    if (bg.kind === 'color') {
+    if (bg.kind === 'none') {
+      /**
+       * adj1271（第 1 层：无背景、只有谱）：什么都不画，画布保持**透明**（方便叠到别的视频上）。
+       * 但必须先把上一帧清掉 —— 不然会留残影。片头交叉淡化时画布已经被清过，不用再清。
+       */
+      if (alpha >= 1) ctx.clearRect(0, 0, opts.width, opts.height)
+    } else if (bg.kind === 'color') {
       ctx.fillStyle = bg.color
       ctx.fillRect(0, 0, opts.width, opts.height)
     } else if (bg.kind === 'image') {
@@ -178,16 +238,18 @@ export async function createLinearSession(opts: CreateLinearSessionOptions): Pro
     //    盖在字上面会把当前音染成粉色（截图里"0 0"就是粉的），字就不"白"了。
     //    adj1264（用户 2026-11-09）：宽度改成一个数字的墨迹宽、固定不随段落变化。
     const bw = Math.max(4, g.blockW)
+    const bh = Math.max(6, g.blockBottom - g.blockTop)
     ctx.save()
     ctx.globalAlpha = ctx.globalAlpha * style.blockAlpha
     ctx.fillStyle = style.blockColor
-    roundRect(ctx, g.blockX - bw / 2, g.blockTop, bw, stripH, Math.min(6, bw / 2))
+    roundRect(ctx, g.blockX - bw / 2, g.blockTop, bw, bh, Math.min(6, bw / 2))
     ctx.fill()
     ctx.restore()
-    // ③ 谱带
-    cache.blit(ctx, g.scrollX, g.bandTop)
+    // ③ 谱带（adj1271：两端淡化在这一步做，只影响谱带这一层）
+    blitBand(ctx, g)
     // ④ 跳跳球（x 固定；落地压扁）
-    const r = Math.max(6, stripH * 0.16)
+    /** adj1275（用户 2026-11-09「跳跳球太大了」）：球径按**色块高度**定，不再按整条谱带高 */
+    const r = Math.max(4, Math.round(bh * 0.26))
     ctx.save()
     ctx.fillStyle = style.ballColor
     ctx.beginPath()
@@ -204,6 +266,9 @@ export async function createLinearSession(opts: CreateLinearSessionOptions): Pro
     totalMs: timeline.totalMs,
     timeline,
     svg,
+    setLay: (patch) => {
+      Object.assign(lay, patch)
+    },
     mediaMsOf: (tMs) => mediaMsOfSession(timeline, tMs),
     warm: (tMs) => {
       const mediaMs = mediaMsOfSession(timeline, tMs)

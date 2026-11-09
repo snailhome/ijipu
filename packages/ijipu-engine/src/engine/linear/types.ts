@@ -72,6 +72,12 @@ export interface LinearStrip {
    * 条带按**这个源小节第几次被演奏**换行（第 2 次演奏显示第 2 行）。
    */
   lyricLines: number
+  /**
+   * adj1274：**曲部 / 词部**那条分界线在条带里的 y（台面画可拖的虚线用）。
+   *
+   * 位置取"谱表下沿"与"歌词字上沿"的中间；没有歌词时就是谱表下沿。
+   */
+  guideQuciY: number
   /** 主基线在条带里的 y（数字基线） */
   baselineY: number
   runs: StripRun[]
@@ -111,4 +117,12 @@ export interface LinearStripOptions {
    * 第 1 段 run 没有小节线，也就不画号；反复段每出现一次都画（同一个源小节号）。
    */
   barNumbers?: boolean
+  /**
+   * adj1274（用户 2026-11-09）：**曲/词行间距**的额外量（px，正 = 词往下挪）。
+   *
+   * 用户在台面上拖"曲部/词部"那条虚线改的就是它；默认 0 = 完全按谱面排版来。
+   * 为什么不用改 `height_quci`：那是**谱面级**（L2，跟着 .jps 走）的设置，
+   * 这里只是"这条连续谱想怎么摆"，属于这首歌的台面外观（sidecar）。
+   */
+  lyricGap?: number
 }

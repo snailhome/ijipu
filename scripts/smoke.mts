@@ -39414,18 +39414,18 @@ C: 一 二 三 四 五 六 七 八 九 十 百 千 万 亿 兆 京
   for (let m = re.exec(svgNums); m !== null; m = re.exec(svgNums)) {
     rects.push({ n: Number(m[1]), x: Number(m[2]), y: Number(m[3]), h: Number(m[5]) })
   }
-  const barTops = withNums.page.barlines.map((b) => b.yTop)
-  const aboveAll = rects.length > 0 && rects.every((b) => b.y >= 0 && barTops.some((t) => b.y + b.h <= t + 0.01))
+  const barBottoms = withNums.page.barlines.map((b) => b.yBottom)
+  const belowAll = rects.length > 0 && rects.every((b) => b.y >= 0 && barBottoms.some((t) => b.y >= t - 0.01))
   check(
-    'adj1268 序号框画在小节线**上方**且完整落在条带里（框顶 ≥ 0、框底 ≤ 小节线顶端）',
-    aboveAll,
-    rects.length === 0 ? 'SVG 里一个序号框都没有' : `${rects.map((b) => `${b.n}@y${b.y.toFixed(1)}+${b.h.toFixed(1)}`).join(' ')} 线顶=${barTops.map((t) => t.toFixed(1)).join(',')}`,
+    'adj1268→adj1274 序号框画在小节线**下方**（与应用一致：框顶 ≥ 小节线底缘），且完整落在条带里',
+    belowAll,
+    rects.length === 0 ? 'SVG 里一个序号框都没有' : `${rects.map((b) => `${b.n}@y${b.y.toFixed(1)}+${b.h.toFixed(1)}`).join(' ')} 线底=${barBottoms.map((t) => t.toFixed(1)).join(',')}`,
   )
   const numTop = Math.min(...withNums.page.notes.map((n) => n.y))
   check(
-    'adj1268 序号框不压音符（框底在小节线顶端之上，而数字墨迹在顶端之下）',
-    rects.every((b) => b.y + b.h <= numTop + 0.01),
-    `框底=${rects.map((b) => (b.y + b.h).toFixed(1)).join(',')} 数字基线=${numTop.toFixed(1)}`,
+    'adj1268→adj1274 序号框不压数字（框顶在小节线底缘之下，数字墨迹在基线之上）',
+    rects.every((b) => b.y >= numTop - 0.01),
+    `框顶=${rects.map((b) => b.y.toFixed(1)).join(',')} 数字基线=${numTop.toFixed(1)}`,
   )
 
   /* ---- sidecar：默认不画，所以只记"打开"这一笔 ---- */
@@ -39502,5 +39502,67 @@ C: 一 二 三 四
     'adj1270 台面走同一个入口（`stripCfgOf(pageConfig, STRIP_NOTE_SIZE)`，不再自己拼配置）',
     /stripCfgOf\(pageConfig, STRIP_NOTE_SIZE\)/.test(linearSrc3) && !/note_size: STRIP_NOTE_SIZE\s*\}\)/.test(linearSrc3),
     '',
+  )
+}
+
+/**
+ * adj1274 / adj1275（用户 2026-11-09 连着的两条）：
+ *  · **曲部/词部**要能在台面上拖虚线调行间距（`lyricGap`），拖够就不会和歌词重叠；
+ *  · 小节号改回**与应用一致：画在小节线下方**（`adj1268` 的上方方案作废）；
+ *  · **跳跳球太大、定位色块太高**——都按"一行数字"的尺度来，别按整条谱带。
+ */
+console.log('[adj1274] 谱带外框 / 曲词虚线 / 定位色块与球的大小')
+{
+  const CODE = `V: 1.0
+B: 曲词间距
+Q: 1 2 3 4 | 5 6 7 1' |
+C: 一 二 三 四 五 六 七 八
+`
+  const build = (opts: { lyricGap?: number; barNumbers?: boolean } = {}) => {
+    const r = parseJpsRaw(CODE)
+    const lay = layoutScore(r, defaultPageConfig)
+    const seq = buildPlaySequence(r, lay, 120)
+    return buildLinearStrip(lay, seq, defaultPageConfig, opts)
+  }
+  const base = build()
+  const pushed = build({ lyricGap: 40 })
+  const minLyricY = (s: typeof base): number => Math.min(...s.page.lyrics.map((l) => l.y))
+  check(
+    'adj1274 曲/词行间距 +40 ⇒ 歌词整体下移 40、条带高度跟着长（内容驱动，不会被裁）',
+    Math.abs(minLyricY(pushed) - minLyricY(base) - 40) < 0.6 && pushed.height > base.height + 35,
+    `歌词基线 ${minLyricY(base)} → ${minLyricY(pushed)}；高 ${base.height} → ${pushed.height}`,
+  )
+  const staffBottom = base.page.barlines[0]?.yBottom ?? base.baselineY
+  check(
+    'adj1274 分界虚线落在谱表下沿与歌词上沿之间（拖它是"改行距"，不是改别的东西）',
+    base.guideQuciY > staffBottom - 0.5 && base.guideQuciY < minLyricY(base),
+    `虚线 y=${base.guideQuciY} 谱表下沿=${staffBottom.toFixed(1)} 词上沿≈${minLyricY(base)}`,
+  )
+  const withNums = build({ barNumbers: true })
+  const svgNums = stripSvgOf(withNums, defaultPageConfig)
+  const boxM = /<g data-barnumber="\d+"><rect x="[-\d.]+" y="([-\d.]+)" width="[-\d.]+" height="([-\d.]+)"/.exec(svgNums)
+  check(
+    'adj1274 小节号画在下方时，序号框完整落在条带里（框底 ≤ 条带高；不会被裁）',
+    withNums.page.barNumbers.length > 0 &&
+      boxM !== null &&
+      Number(boxM[1]) >= 0 &&
+      Number(boxM[1]) + Number(boxM[2]) <= withNums.height,
+    boxM === null ? 'SVG 里没有序号框' : `框 ${Number(boxM[1]).toFixed(1)}+${Number(boxM[2]).toFixed(1)}，条带高 ${withNums.height}`,
+  )
+
+  /* ---- adj1275：定位色块与跳跳球按"一行数字"的尺度 ---- */
+  const lay = { viewW: 1080, viewH: 1920, stripH: base.height }
+  const g = stripFrameAt(1000, base, lay)
+  const blockH = g.blockBottom - g.blockTop
+  const unit = base.noteSize * (lay.stripH / base.height)
+  check(
+    'adj1275 定位色块只罩住这一行数字（高 ≈ 1.15 个数字高，不再是一整条竖带）',
+    Math.abs(blockH - Math.round(unit * 1.15)) <= 1 && blockH < lay.stripH * 0.5,
+    `块高=${blockH.toFixed(1)} 数字高=${unit.toFixed(1)} 谱带高=${lay.stripH}`,
+  )
+  check(
+    'adj1275 色块顶在谱带顶之下（竖直方向对齐到数字那一行）',
+    g.blockTop > g.bandTop + 1 && g.blockBottom < g.bandTop + lay.stripH,
+    `bandTop=${g.bandTop} block=${g.blockTop}..${g.blockBottom} stripH=${lay.stripH}`,
   )
 }

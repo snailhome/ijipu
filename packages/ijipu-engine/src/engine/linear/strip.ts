@@ -269,17 +269,14 @@ export function buildLinearStrip(
 ): LinearStrip {
   const noteSize = cfg.note_size
   /**
-   * adj1268（用户 2026-11-09 拍板「小节号可放在小节线上方」）：序号框画在**小节线正上方**，
-   * 框底贴住小节线顶端。默认基线（字号 × 2.2）上方只留了 0.45 × 字号，
-   * 小字号时放不下一个序号框 ⇒ 打开这个开关时整条带往下让几像素（只在开关打开时生效）。
+   * adj1268 → adj1274（用户 2026-11-09 改口）：小节号**与应用一样画在小节线下方**。
+   * 所以这里不再需要"整条带往下让几像素"的顶部留白（那是为了画在上方才有的）。
    */
   const withBarNumbers = opts.barNumbers === true
   const barBoxH = barNumberBoxH(noteSize)
-  const baseY0 = opts.baselineY ?? Math.round(noteSize * 2.2)
-  const barNumberPad = withBarNumbers
-    ? Math.max(0, Math.ceil(barBoxH + 1 - (baseY0 - noteSize * 1.75)))
-    : 0
-  const baselineY = baseY0 + barNumberPad
+  const baselineY = opts.baselineY ?? Math.round(noteSize * 2.2)
+  /** adj1274：曲/词行间距的额外量（用户拖虚线调；正 = 词往下） */
+  const lyricGap = Number.isFinite(opts.lyricGap) ? Math.round(opts.lyricGap as number) : 0
   const withLyrics = opts.lyrics !== false
   const beatMs = seq.bpm > 0 ? 60000 / seq.bpm : 500
   const pxPerBeat = opts.pxPerBeat ?? Math.round(noteSize * 1.6)
@@ -321,6 +318,8 @@ export function buildLinearStrip(
   let noteIdx = 0
   let droppedVoice = 0
   let droppedCross = 0
+  /** 歌词最下沿（按"要不要画"都算一份，见循环里的说明） */
+  let lyricBottom = 0
 
   for (let i = 0; i < occ.length; i++) {
     const o = occ[i]
@@ -354,30 +353,43 @@ export function buildLinearStrip(
       })
     }
 
-    if (withLyrics) {
+    /**
+     * `adj1267`（用户 P2 的后续）：多段歌词**按这个源小节第几次演奏**换行。
+     * `o.pass` = 1 用第 1 条 `C:` 行、= 2 用第 2 条……；超过段数就停在最后一段。
+     * 这一小节在这一遍里没有那一段的字（长音跨过了）⇒ 就不画（不退回上一段，免得"串词"）。
+     *
+     * ⚠ 这段**不受 `withLyrics` 短路**：关掉歌词时还要靠它算"要不要预留歌词那一行的高度"
+     * （`adj1267` 的口径：开关只少画字，不缩谱带）。
+     */
+    const wantLine = Math.min(Math.max(0, o.pass - 1), verseLines.get(rowKeyOf(m)) ?? 0)
+    /**
+     * adj1273：第 N 段词**画在第 1 段词的位置上**（往上挪 `N × 行距`）。
+     * 不挪的话，第 2 段词永远在下面一行 ⇒ 条带得为"最低那一行"留高度，切换遍次时字会跳。
+     */
+    const verseStep = cfg.geci_size + 4 + cfg.height_cici
+    for (const l of m.lyrics) {
+      if ((l.line ?? 0) !== wantLine) continue
+      // 第 1 个字的字左缘本来会比内容左缘再往左 1px 左右（字居中放在数字下），夹到 0 免得被裁掉
+      const ly = Math.round((l.y + yShift - wantLine * verseStep + lyricGap) * 10) / 10
       /**
-       * `adj1267`（用户 P2 的后续）：多段歌词**按这个源小节第几次演奏**换行。
-       * `o.pass` = 1 用第 1 条 `C:` 行、= 2 用第 2 条……；超过段数就停在最后一段。
-       * 这一小节在这一遍里没有那一段的字（长音跨过了）⇒ 就不画（不退回上一段，免得"串词"）。
+       * 高度按内容算（`adj1273`）；但**歌词关掉时也照样预留这一行的高度**（`adj1267` 的口径：
+       * 开关只少画字、不缩谱带，否则一按开关字号跟着跳）。
        */
-      const wantLine = Math.min(Math.max(0, o.pass - 1), verseLines.get(rowKeyOf(m)) ?? 0)
-      for (const l of m.lyrics) {
-        if ((l.line ?? 0) !== wantLine) continue
-        page.lyrics.push({
-          ...l,
-          id: { ...l.id, index: noteIdx++ },
-          // 第 1 个字的字左缘本来会比内容左缘再往左 1px 左右（字居中放在数字下），夹到 0 免得被裁掉
-          x: Math.max(0, Math.round((x0 + (l.x - m.x0) * k) * 10) / 10),
-          y: Math.round((l.y + yShift) * 10) / 10,
-        })
-      }
+      lyricBottom = Math.max(lyricBottom, ly + cfg.geci_size * 0.35)
+      if (!withLyrics) continue
+      page.lyrics.push({
+        ...l,
+        id: { ...l.id, index: noteIdx++ },
+        x: Math.max(0, Math.round((x0 + (l.x - m.x0) * k) * 10) / 10),
+        y: ly,
+      })
     }
 
     // 小节线：第一小节不画（条带从内容开始）；其余在小节起点补一根
     if (i > 0) {
       const prev = byNo.get(occ[i - 1].no)
       const type = prev?.endType === '||' || prev?.endType === '||/' ? '||' : stripBarlineTypeOf(m.leadType)
-      page.barlines.push(barlineAt(x0, baselineY - noteSize * 1.75, baselineY + noteSize * 0.55, type))
+      page.barlines.push(barlineAt(x0, baselineY + m.staffTop, baselineY + m.staffBottom, type))
     }
 
     runs.push({
@@ -398,9 +410,17 @@ export function buildLinearStrip(
    * 第 1 段 run 没有小节线（条带从内容开始），所以从第 2 段起画；反复段每出现一次都画。
    */
   if (withBarNumbers) {
-    const yBarBottom = Math.round((baselineY - noteSize * 1.75 - barBoxH - BAR_NUMBER_BOTTOM_GAP) * 10) / 10
+    // adj1274：与应用一致——序号挂在小节线**下方**（框顶 = 小节线底缘 + 固定间隙）
     for (let i = 1; i < runs.length; i++) {
-      page.barNumbers.push({ n: runs[i].sourceBar, x: runs[i].x0, yBarBottom, voice: 1, group: 1 })
+      const m = byNo.get(runs[i].sourceBar)
+      const bottom = baselineY + (m?.staffBottom ?? noteSize * 0.6)
+      page.barNumbers.push({
+        n: runs[i].sourceBar,
+        x: runs[i].x0,
+        yBarBottom: Math.round(bottom * 10) / 10,
+        voice: 1,
+        group: 1,
+      })
     }
   }
 
@@ -408,7 +428,9 @@ export function buildLinearStrip(
   const lastOcc = occ[occ.length - 1]
   const lastMeasure = lastOcc ? byNo.get(lastOcc.no) : undefined
   if (lastMeasure?.endType === '||' || lastMeasure?.endType === '||/') {
-    page.barlines.push(barlineAt(cursor, baselineY - noteSize * 1.75, baselineY + noteSize * 0.55, '||'))
+    page.barlines.push(
+      barlineAt(cursor, baselineY + lastMeasure.staffTop, baselineY + lastMeasure.staffBottom, '||'),
+    )
   }
 
   /**
@@ -482,8 +504,26 @@ export function buildLinearStrip(
   /**
    * 高度**与歌词开关无关**（`adj1267`）：关掉歌词只少画字，谱带不缩——
    * 条带在画布上的缩放是按 `height` 算的，一缩字号就跟着变（开关一按整幅画面跳一下）。
+   *
+   * adj1273：高度改成**按内容算**（谱表下沿 / 歌词下沿取大的），不再用"字号 × 1.9 + 歌词 × 1.4"估算——
+   * 估算值在"间距按比例放大"之后会把最后一行歌词裁掉几像素。
    */
-  const height = baselineY + Math.round(noteSize * 1.9) + Math.round(cfg.geci_size * 1.4)
+  let contentBottom = baselineY + noteSize * 0.7
+  let staffBottomY = contentBottom
+  for (const m of measures) {
+    contentBottom = Math.max(contentBottom, baselineY + m.staffBottom)
+    staffBottomY = Math.max(staffBottomY, baselineY + m.staffBottom)
+  }
+  contentBottom = Math.max(contentBottom, lyricBottom)
+  // adj1274：小节号现在画在**线下方**，条带底部要给它留出位置
+  if (withBarNumbers) contentBottom = Math.max(contentBottom, staffBottomY + BAR_NUMBER_BOTTOM_GAP + barBoxH + 2)
+  const height = Math.ceil(contentBottom + 4)
+  /** adj1274：曲部/词部那条可拖的虚线（没有歌词时放在谱表下方一点，仍可拖） */
+  const lyricTopY =
+    page.lyrics.length > 0 ? Math.min(...page.lyrics.map((l) => l.y)) - cfg.geci_size * 0.72 : Number.NaN
+  const guideQuciY = Math.round(
+    (Number.isFinite(lyricTopY) ? (staffBottomY + lyricTopY) / 2 : staffBottomY + noteSize * 0.35) * 10,
+  ) / 10
   let lyricLines = 1
   for (const v of verseLines.values()) lyricLines = Math.max(lyricLines, v + 1)
 
@@ -493,6 +533,7 @@ export function buildLinearStrip(
     height,
     baselineY,
     lyricLines,
+    guideQuciY,
     runs,
     notes,
     noteSize,

@@ -92,6 +92,27 @@ export interface SyncLinear {
    * 这个默认是"关"，所以只记"打开"这一笔。
    */
   barNumbers?: boolean
+  /**
+   * adj1271：**两端淡化**的宽度（占画布宽的比例，0 = 硬边）。
+   *
+   * 缺字段 = 0.08（默认淡淡一层，显式给 0 才关）。与 `topRatio` 同层：它也是"这首曲子配这个背景
+   * 好不好看"的决定，跟着谱走。
+   */
+  edgeFade?: number
+  /**
+   * adj1272（用户 2026-11-09 定的第 1 层）：**无背景（透明）**。
+   *
+   * 只要谱、不要底 —— 导出的成片是 WebM（VP9 + 透明通道），方便叠到别的视频上。
+   * 缺字段 = 有背景（按视频/背景图/纯色兜底），行为与以前一致。
+   */
+  bgNone?: boolean
+  /**
+   * adj1274：**曲/词行间距**的额外量（px，在条带排版坐标系里；正 = 词往下）。
+   *
+   * 台面上拖"曲部/词部"那条虚线改的就是它。缺字段 = 0（完全按谱面排版来）。
+   * 只影响这条连续谱的观感（不改 `.jps` 里的 `height_quci`，那是谱面级设置）。
+   */
+  lyricGap?: number
 }
 
 export interface SyncDoc {
@@ -467,6 +488,18 @@ export function parseSyncDoc(text: string): { doc: SyncDoc | null; error?: strin
     if (typeof l.lyrics === 'boolean') out.lyrics = l.lyrics
     // adj1268：小节号默认不画，只认布尔值
     if (typeof l.barNumbers === 'boolean') out.barNumbers = l.barNumbers
+    // adj1271：两端淡化宽度（0~0.35，其余越界一律夹紧；缺字段 = 默认 0.08）
+    if (l.edgeFade !== undefined && l.edgeFade !== null) {
+      const n = finiteOr(l.edgeFade, Number.NaN)
+      if (Number.isFinite(n)) out.edgeFade = Math.round(Math.min(0.35, Math.max(0, n)) * 1000) / 1000
+    }
+    // adj1272：无背景（透明）
+    if (typeof l.bgNone === 'boolean') out.bgNone = l.bgNone
+    // adj1274：曲/词行间距（-200 ~ 400px，越界夹紧）
+    if (l.lyricGap !== undefined && l.lyricGap !== null) {
+      const n = finiteOr(l.lyricGap, Number.NaN)
+      if (Number.isFinite(n)) out.lyricGap = Math.round(Math.min(400, Math.max(-200, n)))
+    }
     if (Object.keys(out).length > 0) linear = out
   }
   const doc: SyncDoc = {

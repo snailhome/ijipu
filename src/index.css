@@ -6816,22 +6816,88 @@ span.ws-check {
 
 .linear-stage {
   position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: block;
+  /* adj1271：预览可缩放 ⇒ 舞台要能滚（放大后拖滚动条看细节） */
+  overflow: auto;
   background: #000;
   border-radius: 8px;
-  overflow: hidden;
 }
 
 /* 画布像素尺寸 = 出片尺寸；这里只做等比缩放（宽/高都不许超） */
 .linear-stage-canvas {
   display: block;
+  margin: 0 auto;
   width: auto;
   height: auto;
   max-width: 100%;
   max-height: 46vh;
   object-fit: contain;
+  /* adj1271：在画布上按住上下拖 = 调谱带纵向位置 */
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+/* adj1272：无背景（透明）时用棋格底，一眼看出"这里是透明的" */
+.linear-stage-alpha {
+  background-color: #222 !important;
+  background-image:
+    linear-gradient(45deg, #3a3a3a 25%, transparent 25%, transparent 75%, #3a3a3a 75%),
+    linear-gradient(45deg, #3a3a3a 25%, transparent 25%, transparent 75%, #3a3a3a 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 8px 8px;
+}
+
+/* adj1274：谱带外框（虚线）+ 曲/词分界虚线 + 缩放小方块（都只是"台面上的参考线"，不进成片） */
+.linear-stage-zoom {
+  width: fit-content;
+  margin: 0 auto;
+}
+
+.linear-stage-wrap {
+  position: relative;
+  display: inline-block;
+  line-height: 0;
+}
+
+.linear-guides {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.linear-guide-band {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  border: 1px dashed rgb(255 255 255 / 55%);
+  border-radius: 6px;
+}
+
+.linear-guide-quci {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  height: 0;
+  border-top: 1px dashed var(--jp-accent, #2f6fed);
+  cursor: ns-resize;
+  pointer-events: auto;
+  /* 细线也要好点中：上下各放宽 6px 的命中区 */
+  padding: 6px 0;
+  margin-top: -6px;
+  background: transparent;
+}
+
+.linear-guide-scale {
+  position: absolute;
+  right: 6px;
+  width: 14px;
+  height: 14px;
+  margin-top: -7px;
+  border-radius: 3px;
+  background: rgb(255 255 255 / 70%);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 45%);
+  cursor: ns-resize;
+  pointer-events: auto;
 }
 
 /* 画面左下角那排读数压一层阴影，浅色视频上也读得清 */

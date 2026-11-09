@@ -20,7 +20,16 @@
  * 每一帧都是 `session.draw(ctx, n/fps)` 现画出来的，时间戳由帧号算出，不是录屏、
  * 不依赖机器快慢 ⇒ 同一份谱两次导出逐帧一致。
  */
-import { Output, Mp4OutputFormat, BufferTarget, CanvasSource, AudioBufferSource, Quality } from 'mediabunny'
+import {
+  Output,
+  Mp4OutputFormat,
+  WebMOutputFormat,
+  BufferTarget,
+  CanvasSource,
+  AudioBufferSource,
+  Quality,
+  canEncodeVideo,
+} from 'mediabunny'
 import type { AttachedImage } from 'mediabunny'
 
 /**
@@ -66,6 +75,25 @@ export interface Mp4Options {
   onProgress?: (p: number) => void
   /** 取消 */
   signal?: AbortSignal
+  /**
+   * adj1272：容器。
+   *
+   * `mp4`（默认）= H.264，通用性最好，但**没有透明通道**；
+   * `webm` = VP9（`alpha: true` 时带透明通道），用来出"只有谱、背景透明"的可叠加素材。
+   */
+  container?: 'mp4' | 'webm'
+  /** adj1272：保留透明通道（只有 webm + VP9 支持；mp4 会静默变不透明，所以这里显式报错） */
+  alpha?: boolean
+}
+
+/** adj1272：透明视频的编码能力（UI 先问它，别等编到一半才失败） */
+export async function canEncodeTransparentVideo(): Promise<boolean> {
+  if (typeof VideoEncoder === 'undefined') return false
+  try {
+    return await canEncodeVideo('vp9')
+  } catch {
+    return false
+  }
 }
 
 /** 关键帧间隔（秒）——seek/播放器拖动更稳 */
@@ -134,17 +162,36 @@ export async function encodeMp4(session: EncodableSession, opts: Mp4Options = {}
   const ctx = canvas.getContext('2d')
   if (!ctx) throw new Error('无法创建离屏画布')
 
-  const output = new Output({ format: new Mp4OutputFormat(), target: new BufferTarget() })
+  /**
+   * adj1272：MP4（H.264）或 WebM（VP9，可带 alpha）。
+   * 透明只对 webm 有意义——给 mp4 传 `alpha` 直接报错，免得"以为导出了透明片"。
+   */
+  const isWebm = opts.container === 'webm'
+  if (opts.alpha === true && !isWebm) {
+    throw new Error('透明视频只能用 WebM（VP9）导出；MP4/H.264 不带透明通道')
+  }
+  if (isWebm && !(await canEncodeTransparentVideo())) {
+    throw new Error('当前环境不能编 VP9（WebM），导不了透明视频；请更新 WebView2 / 换 Chrome')
+  }
+  const output = new Output({
+    format: isWebm ? new WebMOutputFormat() : new Mp4OutputFormat(),
+    target: new BufferTarget(),
+  })
   const video = new CanvasSource(canvas, {
-    codec: 'avc',
+    codec: isWebm ? 'vp9' : 'avc',
     quality: new Quality({ bitrate: opts.bitrate ?? 8_000_000 }),
+    ...(isWebm && opts.alpha === true ? { alpha: 'keep' as const } : {}),
   })
   output.addVideoTrack(video, { frameRate: fps })
 
   // 音轨：有 AudioBuffer 才加，否则就是无声视频（v1 的默认路径）
+  // adj1272：WebM 只收 Opus/Vorbis（AAC 塞不进去，会直接报 "Codec 'aac' cannot be contained within WebM"）
   const audio =
     opts.audio && opts.audio.numberOfChannels > 0
-      ? new AudioBufferSource({ codec: 'aac', quality: new Quality({ bitrate: opts.audioBitrate ?? 128_000 }) })
+      ? new AudioBufferSource({
+          codec: isWebm ? 'opus' : 'aac',
+          quality: new Quality({ bitrate: opts.audioBitrate ?? 128_000 }),
+        })
       : null
   if (audio) output.addAudioTrack(audio)
 
@@ -156,7 +203,8 @@ export async function encodeMp4(session: EncodableSession, opts: Mp4Options = {}
    * 取 3 秒这一帧，缩略图直接就是"标题 + 曲目信息"的完整卡片。
    */
   const coverMs = opts.coverMs === undefined ? DEFAULT_COVER_MS : opts.coverMs
-  if (coverMs !== null && coverMs < spanMs) {
+  // adj1272：封面是 MP4 的元数据标签（WebM 不写，免得"导出来有封面"的假象）
+  if (!isWebm && coverMs !== null && coverMs < spanMs) {
     await session.warm?.(coverMs)
     session.draw(ctx, coverMs)
     const jpeg = await canvas.convertToBlob({ type: COVER_MIME, quality: 0.9 })
@@ -191,5 +239,5 @@ export async function encodeMp4(session: EncodableSession, opts: Mp4Options = {}
 
   const buffer = output.target.buffer
   if (!buffer) throw new Error('封装失败：没有产出数据')
-  return new Blob([buffer], { type: 'video/mp4' })
+  return new Blob([buffer], { type: isWebm ? 'video/webm' : 'video/mp4' })
 }

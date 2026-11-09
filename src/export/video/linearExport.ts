@@ -119,6 +119,9 @@ export interface LinearEncodeOptions {
   bitrate?: number
   /** 封面取哪一刻（缺省 0；带片头卡时取"卡片最完整"的那一帧） */
   coverMs?: number
+  /** adj1272：容器（`webm` + `alpha` 出透明片） */
+  container?: 'mp4' | 'webm'
+  alpha?: boolean
 }
 
 /**
@@ -133,6 +136,8 @@ export async function encodeLinearMp4(session: EncodableSession, opts: LinearEnc
     audio: opts.audio ?? null,
     // 连续谱默认抓第 0 帧；带片头卡时由调用方传"卡片最完整"的那一刻
     coverMs: opts.coverMs ?? 0,
+    ...(opts.container !== undefined ? { container: opts.container } : {}),
+    ...(opts.alpha !== undefined ? { alpha: opts.alpha } : {}),
     ...(opts.bitrate !== undefined ? { bitrate: opts.bitrate } : {}),
     ...(opts.onProgress !== undefined ? { onProgress: opts.onProgress } : {}),
     ...(opts.signal !== undefined ? { signal: opts.signal } : {}),

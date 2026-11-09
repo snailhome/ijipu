@@ -3512,6 +3512,160 @@ async function main() {
         await evalJs(c, `(document.querySelector('[data-role="linear-barnumbers"]')?.click(), true)`)
         await sleep(900)
         /**
+         * adj1271 / adj1272（用户 2026-11-09）：
+         *  · 预览可缩放（放大看细节，不影响出片像素尺寸）；
+         *  · 画布上按住拖 = 谱带位置、滚轮 = 谱带宽度；
+         *  · 「无背景（透明）」⇒ 画布四角 alpha=0，舞台换棋格底。
+         */
+        const rectW = async () =>
+          Number(await evalJs(c, `Math.round(document.querySelector('[data-role="linear-stage"]').getBoundingClientRect().width)`))
+        const w0 = await rectW()
+        await evalJs(c, `(document.querySelector('[data-role="linear-zoom-in"]')?.click(), true)`)
+        await sleep(400)
+        const w1 = await rectW()
+        const zoomText = await evalJs(c, `document.querySelector('[data-role="linear-zoom"]')?.textContent ?? ''`)
+        const cvSize = await evalJs(
+          c,
+          `(() => { const cv = document.querySelector('[data-role="linear-stage"]'); return { w: cv.width, h: cv.height } })()`,
+        )
+        check(
+          'adj1271 预览缩放：点＋后画布在屏幕上真的变大（125%），但画布像素尺寸没变（出片分辨率不受影响）',
+          w1 > w0 && zoomText === '125%' && cvSize.w >= 640,
+          `显示 ${w0} → ${w1}px；画布像素 ${cvSize.w}×${cvSize.h}；读数 ${zoomText}`,
+        )
+        await evalJs(c, `(document.querySelector('[data-role="linear-zoom-out"]')?.click(), true)`)
+        await sleep(300)
+
+        // 拖动 = 谱带位置（读滑条值即可：那就是真实生效的 `topRatio`）
+        const topOf = async () => Number(await evalJs(c, `document.querySelector('[aria-label="谱带位置"]').value`))
+        const top0 = await topOf()
+        await evalJs(
+          c,
+          `(() => {
+            const cv = document.querySelector('[data-role="linear-stage"]')
+            const r = cv.getBoundingClientRect()
+            const opts = (y) => ({ bubbles: true, clientX: r.left + r.width / 2, clientY: y, pointerId: 1, button: 0 })
+            cv.dispatchEvent(new PointerEvent('pointerdown', opts(r.top + 40)))
+            cv.dispatchEvent(new PointerEvent('pointermove', opts(r.top + 40 + r.height * 0.25)))
+            cv.dispatchEvent(new PointerEvent('pointerup', opts(r.top + 40 + r.height * 0.25)))
+            return true
+          })()`,
+        )
+        await sleep(500)
+        const top1 = await topOf()
+        check('adj1271 画布上按住往下拖 ⇒ 谱带位置跟着下移（鼠标直接调位置）', top1 > top0 + 0.05, `${top0} → ${top1}`)
+
+        // 滚轮 = 谱带大小
+        const scaleOf = async () => Number(await evalJs(c, `document.querySelector('[aria-label="谱带大小"]').value`))
+        const sc0 = await scaleOf()
+        await evalJs(
+          c,
+          `(() => {
+            const cv = document.querySelector('[data-role="linear-stage"]')
+            cv.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: -120 }))
+            return true
+          })()`,
+        )
+        await sleep(500)
+        const sc1 = await scaleOf()
+        check('adj1271 画布上滚轮向上 ⇒ 谱带变大（鼠标直接调宽度）', sc1 > sc0 + 0.02, `${sc0} → ${sc1}`)
+
+        // 无背景（透明）
+        await evalJs(c, `(document.querySelector('[data-role="linear-bgnone"]')?.click(), true)`)
+        await sleep(1800)
+        const alphaCorner = await evalJs(
+          c,
+          `(() => {
+            const cv = document.querySelector('[data-role="linear-stage"]')
+            const d = cv.getContext('2d').getImageData(0, 0, 1, 1).data
+            return { a: d[3], cls: document.querySelector('.linear-stage')?.className ?? '' }
+          })()`,
+        )
+        check(
+          'adj1272 勾「无背景（透明）」⇒ 画布上是真透明（alpha=0），舞台换棋格底（一眼看出是透明的）',
+          alphaCorner.a === 0 && String(alphaCorner.cls).includes('linear-stage-alpha'),
+          JSON.stringify(alphaCorner),
+        )
+        await evalJs(c, `(document.querySelector('[data-role="linear-bgnone"]')?.click(), true)`)
+        await sleep(1200)
+
+        /**
+         * adj1274：谱带外框 + 曲/词分界虚线（真拖一次）。
+         * 判据读台面上的「曲词间距 +N」读数——那就是真正传给条带布局的 `lyricGap`。
+         */
+        const guideUi = await evalJs(
+          c,
+          `(() => ({
+            band: !!document.querySelector('[data-role="linear-guide-band"]'),
+            quci: !!document.querySelector('[data-role="linear-guide-quci"]'),
+            handle: !!document.querySelector('[data-role="linear-guide-scale"]'),
+            gap: document.querySelector('[data-role="linear-lyricgap"]')?.textContent ?? '',
+          }))()`,
+        )
+        check(
+          'adj1274 台面上有谱带外框 / 曲词虚线 / 缩放手柄三条调整线，并写出当前曲词间距',
+          guideUi.band && guideUi.quci && guideUi.handle && /曲词间距 \+?0/.test(guideUi.gap),
+          JSON.stringify(guideUi),
+        )
+        await evalJs(
+          c,
+          `(() => {
+            const line = document.querySelector('[data-role="linear-guide-quci"]')
+            const r = line.getBoundingClientRect()
+            const opts = (y) => ({ bubbles: true, clientX: r.left + r.width / 2, clientY: y, pointerId: 2, button: 0 })
+            line.dispatchEvent(new PointerEvent('pointerdown', opts(r.top + 2)))
+            line.dispatchEvent(new PointerEvent('pointermove', opts(r.top + 2 + r.height + 30)))
+            line.dispatchEvent(new PointerEvent('pointerup', opts(r.top + 2 + r.height + 30)))
+            return true
+          })()`,
+        )
+        await sleep(900)
+        const gapText = await evalJs(c, `document.querySelector('[data-role="linear-lyricgap"]')?.textContent ?? ''`)
+        check(
+          'adj1274 往下拖曲词虚线 ⇒ 曲词间距真的变大（歌词跟着下移，不再和小节号压在一起）',
+          /曲词间距 \+\d+/.test(gapText) && !/\+0$/.test(gapText),
+          gapText,
+        )
+
+        /**
+         * adj1271：两端淡化——拉满到 0.3 后，画布**右边缘那一条**的墨迹应明显变少。
+         * 取右边缘而不是左边缘：曲首时条带从画面 1/3 处才开始，左边那块本来就没内容。
+         */
+        const edgeInk = `(() => {
+          const cv = document.querySelector('[data-role="linear-stage"]')
+          const g = cv.getContext('2d')
+          const w = cv.width, h = cv.height
+          const d = g.getImageData(0, 0, w, h).data
+          let n = 0
+          for (let x = Math.floor(w * 0.96); x < w; x++) {
+            for (let y = 0; y < h; y++) {
+              const i = (y * w + x) * 4
+              if (Math.abs(d[i] - 16) + Math.abs(d[i + 1] - 16) + Math.abs(d[i + 2] - 20) > 60) n++
+            }
+          }
+          return n
+        })()`
+        const setRange = (sel, v) => `(() => {
+            const el = document.querySelector(${JSON.stringify(sel)})
+            if (!el) return false
+            const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set
+            setter.call(el, String(${JSON.stringify(v)}))
+            el.dispatchEvent(new Event('input', { bubbles: true }))
+            el.dispatchEvent(new Event('change', { bubbles: true }))
+            return true
+          })()`
+        const edgeNoFade = Number(await evalJs(c, edgeInk))
+        await evalJs(c, setRange('[data-role="linear-edgefade"]', 0.3))
+        await sleep(1800)
+        const edgeFaded = Number(await evalJs(c, edgeInk))
+        check(
+          'adj1271 两端淡化拉满后，画面右边缘的墨迹明显变少（谱带不再硬切一刀）',
+          edgeFaded < edgeNoFade * 0.6,
+          `右边缘墨迹 ${edgeNoFade} → ${edgeFaded}`,
+        )
+        await evalJs(c, setRange('[data-role="linear-edgefade"]', 0.08))
+        await sleep(900)
+        /**
          * adj1265（M4）：主题编辑器与片头片尾卡——真浏览器里点一遍。
          * 纯函数/带 sidecar 的判据在 smoke 里；这里只验"界面真的接上了、改动真的进了画布"。
          */

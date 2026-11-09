@@ -1578,6 +1578,11 @@ export const linearSyncCopy = {
   stageHint: '画面就是成片的样子：背景视频 + 一条横滚的谱带，色块压在当前音上',
   fallbackColor: '没有视频：用纯色背景（也可以选一张背景图）',
   fallbackImage: '没有视频：用背景图',
+  /** adj1272：第 1 层——无背景（透明），只要谱，方便叠到别的视频上 */
+  bgNone: '无背景（透明）',
+  bgNoneHint: '只要谱、背景透明，方便叠到别的视频上；导出为 WebM（VP9 + 透明通道，剪辑软件都认）',
+  bgNoneTag: '透明底：导出 .webm',
+  bgNoneExporting: '导出透明视频（WebM/VP9）…',
   frameMissing: '这一帧还没解出来（视频解码中）；不影响对拍',
   videoBusy: '正在打开视频…',
   pickVideo: '导入视频…',
@@ -1617,6 +1622,18 @@ export const linearSyncCopy = {
   themeHint: '默认跟着卡片模板的配色走：换模板，谱带的墨色/描边/色块/球一起换；也可指定下面四套预设',
   bandTop: '谱带位置',
   bandScale: '谱带大小',
+  /** adj1271：预览缩放与两端淡化 */
+  zoom: '预览缩放',
+  zoomHint: '只放大"看"（画布像素尺寸仍是出片尺寸）；放大后拖滚动条看细节',
+  edgeFade: '两端淡化',
+  edgeFadeHint: '谱带左右两端淡出，不要硬切（0 = 硬边）',
+  dragHint: '画布上按住上下拖 = 谱带位置；滚轮 = 谱带大小',
+  /** adj1274：谱带外框与曲/词分界虚线（可拖） */
+  guideFrameHint: '谱带外框：拖框内上下移动；拖右下角小方块缩放（宽度）',
+  guideQuciHint: '拖这条虚线 = 调整「曲部 / 词部」的行间距（词往下挪；小节号在线的下方，调够就不会和歌词重叠）',
+  guideScaleHint: '按住上下拖 = 谱带宽度（缩放）',
+  /** adj1274：曲/词间距读数 */
+  quciGapLabel: (px: number) => `曲词间距 ${px > 0 ? '+' : ''}${px}`,
   /** adj1267：谱带上的歌词（多段歌词按演奏遍次自动换行） */
   lyrics: '歌词',
   lyricsHint:

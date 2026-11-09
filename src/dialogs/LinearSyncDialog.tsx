@@ -52,7 +52,7 @@ import {
   type StripStyle,
 } from '../export/video/stripTheme'
 import { createLinearSession, type LinearSession } from '../export/video/linearSession'
-import { stripCfgOf } from '../export/video/stripFrame'
+import { stripCfgOf, bandTopOf } from '../export/video/stripFrame'
 import { CARD_TEMPLATES, resolveCardStyle } from '../export/video/cardTemplates'
 import { recordCardTemplate } from '../store/syncExtras'
 import {
@@ -158,13 +158,16 @@ export function LinearSyncDialog() {
   const showLyrics = doc?.linear?.lyrics !== false
   /** adj1268：小节号（默认不画；勾上时画在小节线正上方） */
   const showBarNumbers = doc?.linear?.barNumbers === true
+  /** adj1274：曲/词行间距（拖虚线改；0 = 按谱面排版）—— 条带在这之前就要建好，所以直接读 doc */
+  const lyricGap = doc?.linear?.lyricGap ?? 0
   const strip: LinearStrip = useMemo(() => {
     return buildLinearStrip(scoreLayout, scoreSeq, stripCfg, {
       pxPerBeat: Math.round(STRIP_NOTE_SIZE * 1.6),
       lyrics: showLyrics,
       barNumbers: showBarNumbers,
+      lyricGap,
     })
-  }, [scoreLayout, stripCfg, scoreSeq, showLyrics, showBarNumbers])
+  }, [scoreLayout, stripCfg, scoreSeq, showLyrics, showBarNumbers, lyricGap])
   const scoreEndMs = useMemo(() => stripEndMs(strip), [strip])
   const barStartBeats = useMemo(() => (scoreSeq.barStartsMs ?? []).map((ms) => ms / scoreBeatMs), [scoreSeq, scoreBeatMs])
   const barNoOf = useCallback((i: number): number => scoreSeq.barNos?.[i] ?? i + 1, [scoreSeq])
@@ -188,10 +191,25 @@ export function LinearSyncDialog() {
   const topRatio = linearStyle.topRatio ?? 0.25
   const blockRatio = linearStyle.blockRatio ?? 1 / 3
   const bandScale = linearStyle.bandScale ?? 1
+  /** adj1271：两端淡化（占画布宽的比例；缺字段 = 0.08，0 = 关） */
+  const edgeFade = linearStyle.edgeFade ?? 0.08
+  /** adj1272：无背景（透明）——第 1 层，只要谱 */
+  const bgNone = linearStyle.bgNone === true
   /** 卡片样式与相机位共用模板库（sidecar 记的模板优先，没有就用当前选中的） */
   const effectiveCardStyle = useMemo(
     () => resolveCardStyle(doc?.card?.template ?? dynamicCardStyle, cardTemplates),
     [cardTemplates, doc?.card?.template, dynamicCardStyle],
+  )
+  /**
+   * adj1271（用户 2026-11-09「连续动态谱先不显示水印」）：卡片上那张大号水印字先不画。
+   * 只改水印这一项，其它（标题色/背景/印章）照旧——配色仍从**原模板**推。
+   */
+  const linearCardStyle = useMemo(
+    () => ({
+      ...effectiveCardStyle,
+      watermark: { ...effectiveCardStyle.watermark, intro: '', end: '', alpha: 0 },
+    }),
+    [effectiveCardStyle],
   )
   /**
    * adj1266（用户 2026-11-09 拍板「配色随卡片模板」）：默认 `auto` ⇒ 谱带配色由卡片模板推出来；
@@ -308,11 +326,24 @@ export function LinearSyncDialog() {
   const stageRef = useRef<HTMLCanvasElement | null>(null)
   const waveRef = useRef<HTMLCanvasElement | null>(null)
   const [sessionReady, setSessionReady] = useState(false)
+  /**
+   * adj1271：谱带纵向位置 / 色块中心走**会话内的可变参数**，不参与重建。
+   * 拖动时每帧都在改位置，若把它放进依赖就会"每拖一下重建整条谱"（长曲子明显卡）。
+   */
+  const layRef = useRef({ topRatio, blockRatio })
+  layRef.current = { topRatio, blockRatio }
+  /**
+   * adj1271：**预览缩放**（1 = 适应面板；放大后可滚滚动条看细节）。
+   * 只影响"看"，不影响出片分辨率（画布像素尺寸始终等于出片尺寸）。
+   */
+  const [stageZoom, setStageZoom] = useState(1)
 
   useEffect(() => {
     let alive = true
-    const background =
-      video !== null
+    const background = bgNone
+      ? // adj1272：无背景（透明）——什么都不铺，画布保持透明
+        { kind: 'none' as const }
+      : video !== null
         ? {
             kind: 'video' as const,
             draw: (ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D, tMs: number) => {
@@ -333,15 +364,17 @@ export function LinearSyncDialog() {
       height: out.height,
       style: linearStripStyle,
       background,
-      lay: { topRatio, blockRatio },
+      lay: layRef.current,
       bandScale,
+      edgeFade,
       mediaTotalMs: clock.totalMs,
       ...(cardsOn
         ? {
             cards: {
               cards,
               range: { startMs: range.startMs, endMs: range.endMs },
-              cardStyle: effectiveCardStyle,
+              // adj1271：连续谱先不显示水印（用户 2026-11-09）——卡片上的大号水印也不画
+              cardStyle: linearCardStyle,
               meta: cardMeta,
               bpm: cardBpm,
               shortCode: '',
@@ -358,7 +391,12 @@ export function LinearSyncDialog() {
       sessionRef.current = null
       setSessionReady(false)
     }
-  }, [bgColor, bgImage, bandScale, blockRatio, cardBpm, cardMeta, cards, cardsOn, clock.totalMs, effectiveCardStyle, linearStripStyle, out.height, out.width, range.endMs, range.startMs, strip, stripCfg, topRatio, video])
+  }, [bgColor, bgImage, bgNone, bandScale, cardBpm, cardMeta, cards, cardsOn, clock.totalMs, edgeFade, linearCardStyle, linearStripStyle, out.height, out.width, range.endMs, range.startMs, strip, stripCfg, video])
+
+  /** 位置只改会话内参数（见 `layRef`），不重建 */
+  useEffect(() => {
+    sessionRef.current?.setLay({ topRatio, blockRatio })
+  }, [topRatio, blockRatio])
 
   // ---------- 绘制 ----------
   /**
@@ -487,6 +525,108 @@ export function LinearSyncDialog() {
     })
     return () => cancelAnimationFrame(id)
   }, [paintAt, sessionReady])
+
+  // ---------- 鼠标直接调"谱带位置 / 宽度"（adj1271，用户 2026-11-09） ----------
+  /** 按住画布上下拖 = 谱带纵向位置（只改会话内参数，不重建光栅，拖着跟手） */
+  const dragRef = useRef<{ y: number; top: number } | null>(null)
+  const onStageDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (e.button !== 0) return
+    dragRef.current = { y: e.clientY, top: topRatio }
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId)
+    } catch {
+      /* 合成事件没有真指针：拖动照样工作，只是不捕获 */
+    }
+  }, [topRatio])
+  const onStageMove = useCallback(
+    (e: React.PointerEvent<HTMLCanvasElement>) => {
+      const d = dragRef.current
+      if (d === null) return
+      const h = e.currentTarget.clientHeight || 1
+      const next = Math.max(0, Math.min(0.6, d.top + (e.clientY - d.y) / h))
+      setExtras({ linear: { ...linearStyle, topRatio: Math.round(next * 1000) / 1000 } })
+    },
+    [linearStyle, setExtras],
+  )
+  const onStageUp = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    dragRef.current = null
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+    } catch {
+      /* 没捕获过（点一下就抬） */
+    }
+  }, [])
+  /**
+   * 滚轮 = **谱带宽度**（"宽度/位置通过鼠标可以调整"）。
+   * 必须挂 **non-passive** 才能 `preventDefault`（React 的 onWheel 在根节点上是 passive 的），
+   * 否则放大预览后滚轮会同时滚舞台、又改宽度。
+   */
+  const wheelRef = useRef({ bandScale, linearStyle })
+  wheelRef.current = { bandScale, linearStyle }
+  useEffect(() => {
+    const el = stageRef.current
+    if (el === null) return
+    const onWheel = (e: WheelEvent): void => {
+      e.preventDefault()
+      const cur = wheelRef.current
+      const next = Math.max(0.3, Math.min(3, cur.bandScale - Math.sign(e.deltaY) * 0.05))
+      setExtras({ linear: { ...cur.linearStyle, bandScale: Math.round(next * 100) / 100 } })
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [setExtras])
+
+  /**
+   * adj1274（用户 2026-11-09）：**谱带外框 + 曲/词分界虚线**——拖它们直接调位置/宽度/行间距。
+   *
+   * 坐标怎么换算：判据全是"画布像素"，而屏幕上 DOM 是缩放过的（`max-height` + `zoom`），
+   * 所以每次移动都按 `画布像素 / DOM 像素` 的比例换一次（`canvasPerCss`）。
+   */
+  const guideDragRef = useRef<{ kind: 'quci' | 'scale'; y: number; base: number } | null>(null)
+  const stripH = Math.round(strip.height * bandScale)
+  const stripScale = stripH / Math.max(1, strip.height)
+  const quciGuideY = bandTopOf(out.height, stripH, topRatio) + strip.guideQuciY * stripScale
+  const pctOfHeight = (v: number): string => `${(v / Math.max(1, out.height)) * 100}%`
+  const onGuideDown = useCallback(
+    (kind: 'quci' | 'scale') => (e: React.PointerEvent<HTMLElement>) => {
+      e.stopPropagation()
+      guideDragRef.current = { kind, y: e.clientY, base: kind === 'quci' ? lyricGap : bandScale }
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId)
+      } catch {
+        /* 合成事件没有真指针 */
+      }
+    },
+    [bandScale, lyricGap],
+  )
+  const onGuideMove = useCallback(
+    (e: React.PointerEvent<HTMLElement>) => {
+      const d = guideDragRef.current
+      if (d === null) return
+      const wrap = e.currentTarget.closest('.linear-stage-wrap')
+      const cssH = wrap instanceof HTMLElement ? wrap.clientHeight : 0
+      if (cssH <= 0) return
+      const canvasPerCss = out.height / cssH
+      const dyCanvas = (e.clientY - d.y) * canvasPerCss
+      if (d.kind === 'quci') {
+        // 画布像素 → 条带排版像素（除以条带在画布上的缩放）
+        const next = Math.max(-200, Math.min(400, d.base + dyCanvas / Math.max(0.05, stripScale)))
+        setExtras({ linear: { ...linearStyle, lyricGap: Math.round(next) } })
+        return
+      }
+      const next = Math.max(0.3, Math.min(3, d.base + dyCanvas / Math.max(1, strip.height)))
+      setExtras({ linear: { ...linearStyle, bandScale: Math.round(next * 100) / 100 } })
+    },
+    [linearStyle, out.height, setExtras, strip.height, stripScale],
+  )
+  const onGuideUp = useCallback((e: React.PointerEvent<HTMLElement>) => {
+    guideDragRef.current = null
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+    } catch {
+      /* 没捕获过 */
+    }
+  }, [])
 
   // ---------- 播放器 ----------
   const ctxRef = useRef<AudioContext | null>(null)
@@ -988,6 +1128,11 @@ export function LinearSyncDialog() {
       const blob = await encodeLinearMp4(outSession, {
         fps: FPS,
         audio: mixed,
+        /**
+         * adj1272：无背景 ⇒ 出透明 WebM（VP9 + alpha）。
+         * MP4/H.264 没有透明通道，所以这里连容器一起换，不"悄悄导成黑底"。
+         */
+        ...(bgNone ? { container: 'webm' as const, alpha: true } : {}),
         // 带片头卡时封面取"卡片最完整"的那一刻（淡出开始前；与相机位同一个口径）
         coverMs:
           cardsOn && cardTimeline.introMs > 0
@@ -997,7 +1142,7 @@ export function LinearSyncDialog() {
         signal: ac.signal,
       })
       const file = baseNameOf(fileName).replace(/\.jps$/i, '')
-      const name = `连续动态谱-${file}.mp4`
+      const name = `连续动态谱-${file}.${bgNone ? 'webm' : 'mp4'}`
       if (isTauriShell()) {
         const bytes = new Uint8Array(await blob.arrayBuffer())
         const savedPath = await tauriInvoke<string | null>('save_mp4_file', { name, b64: bytesToBase64(bytes) })
@@ -1031,7 +1176,7 @@ export function LinearSyncDialog() {
       abortRef.current = null
       setExporting(false)
     }
-  }, [cardTimeline, cardsOn, exportWindow, exporting, fileName, out.height, out.width, range, showNotice, tracks])
+  }, [bgNone, cardTimeline, cardsOn, exportWindow, exporting, fileName, out.height, out.width, range, showNotice, tracks])
 
   // ---------- 键盘 ----------
   useEffect(() => {
@@ -1097,15 +1242,57 @@ export function LinearSyncDialog() {
         </div>
 
         <div className="linear-body">
-          <div className="linear-stage">
-            <canvas
-              ref={stageRef}
-              className="linear-stage-canvas"
-              width={out.width}
-              height={out.height}
-              data-role="linear-stage"
-              title={linearSyncCopy.stageHint}
-            />
+          <div className={bgNone ? 'linear-stage linear-stage-alpha' : 'linear-stage'}>
+            <div className="linear-stage-zoom" style={{ zoom: stageZoom }}>
+              <div className="linear-stage-wrap">
+                <canvas
+                  ref={stageRef}
+                  className="linear-stage-canvas"
+                  width={out.width}
+                  height={out.height}
+                  data-role="linear-stage"
+                  title={linearSyncCopy.stageHint}
+                  onPointerDown={onStageDown}
+                  onPointerMove={onStageMove}
+                  onPointerUp={onStageUp}
+                  onPointerCancel={onStageUp}
+                />
+                {/* adj1274：谱带外框（虚线）+ 曲/词分界虚线 + 右下角缩放手柄 */}
+                <div className="linear-guides">
+                  <div
+                    className="linear-guide-band"
+                    data-role="linear-guide-band"
+                    title={linearSyncCopy.guideFrameHint}
+                    style={{
+                      top: pctOfHeight(bandTopOf(out.height, stripH, topRatio)),
+                      height: pctOfHeight(stripH),
+                    }}
+                  />
+                  <div
+                    className="linear-guide-quci"
+                    data-role="linear-guide-quci"
+                    role="slider"
+                    aria-label={linearSyncCopy.guideQuciHint}
+                    title={linearSyncCopy.guideQuciHint}
+                    style={{ top: pctOfHeight(quciGuideY) }}
+                    onPointerDown={onGuideDown('quci')}
+                    onPointerMove={onGuideMove}
+                    onPointerUp={onGuideUp}
+                    onPointerCancel={onGuideUp}
+                  />
+                  <div
+                    className="linear-guide-scale"
+                    data-role="linear-guide-scale"
+                    title={linearSyncCopy.guideScaleHint}
+                    style={{ top: pctOfHeight(bandTopOf(out.height, stripH, topRatio) + stripH) }}
+                    onPointerDown={onGuideDown('scale')}
+                    onPointerMove={onGuideMove}
+                    onPointerUp={onGuideUp}
+                    onPointerCancel={onGuideUp}
+                  />
+                </div>
+              </div>
+            </div>
             <div className="linear-stage-info">
               <span className="sync-meta" data-role="linear-total">
                 {audioClockOf(playheadRef.current)} / {audioClockOf(sessionTotalMs)}
@@ -1113,15 +1300,63 @@ export function LinearSyncDialog() {
               <span className="sync-dim">
                 {out.width}×{out.height} · {FPS}fps
               </span>
-              {video === null && <span className="sync-dim">{bgImage === null ? linearSyncCopy.fallbackColor : linearSyncCopy.fallbackImage}</span>}
+              {video === null && !bgNone && (
+                <span className="sync-dim">{bgImage === null ? linearSyncCopy.fallbackColor : linearSyncCopy.fallbackImage}</span>
+              )}
+              {bgNone && <span className="sync-dim">{linearSyncCopy.bgNoneTag}</span>}
               {frameMiss && <span className="sync-warn">{linearSyncCopy.frameMissing}</span>}
               {notice !== '' && <span className="sync-warn linear-notice">{notice}</span>}
             </div>
           </div>
 
+          {/* adj1271：预览缩放（只看，不改出片分辨率）+ 两端淡化 */}
           <div className="sync-row">
-            <input ref={videoInputRef} type="file" accept="video/*" className="sync-file" onChange={onPickVideo} />
-            <button type="button" className="btn sync-mini" onClick={() => videoInputRef.current?.click()} disabled={videoBusy}>
+            <span className="sync-label" title={linearSyncCopy.zoomHint}>
+              {linearSyncCopy.zoom}
+            </span>
+            <button
+              type="button"
+              className="btn sync-mini"
+              data-role="linear-zoom-out"
+              onClick={() => setStageZoom((z) => Math.max(0.5, Math.round((z - 0.25) * 100) / 100))}
+            >
+              −
+            </button>
+            <span className="sync-meta" data-role="linear-zoom">
+              {Math.round(stageZoom * 100)}%
+            </span>
+            <button
+              type="button"
+              className="btn sync-mini"
+              data-role="linear-zoom-in"
+              onClick={() => setStageZoom((z) => Math.min(4, Math.round((z + 0.25) * 100) / 100))}
+            >
+              ＋
+            </button>
+            <span className="sync-label" title={linearSyncCopy.edgeFadeHint}>
+              {linearSyncCopy.edgeFade}
+            </span>
+            <input
+              className="sync-mix-range"
+              type="range"
+              min={0}
+              max={0.3}
+              step={0.01}
+              value={edgeFade}
+              data-role="linear-edgefade"
+              aria-label={linearSyncCopy.edgeFade}
+              title={linearSyncCopy.edgeFadeHint}
+              onChange={(e) => setExtras({ linear: { ...linearStyle, edgeFade: Number(e.target.value) } })}
+            />
+            <span className="sync-dim">{linearSyncCopy.dragHint}</span>
+            {/* adj1274：曲/词行间距的当前值（拖虚线改的就是它） */}
+            <span className="sync-meta" data-role="linear-lyricgap">
+              {linearSyncCopy.quciGapLabel(lyricGap)}
+            </span>
+          </div>
+
+          <div className="sync-row">
+            <input ref={videoInputRef} type="file" accept="video/*" className="sync-file" onChange={onPickVideo} />            <button type="button" className="btn sync-mini" onClick={() => videoInputRef.current?.click()} disabled={videoBusy}>
               {videoBusy ? linearSyncCopy.videoBusy : video === null ? linearSyncCopy.pickVideo : linearSyncCopy.repickVideo}
             </button>
             <input ref={imageInputRef} type="file" accept="image/*" className="sync-file" onChange={onPickImage} />
@@ -1132,6 +1367,18 @@ export function LinearSyncDialog() {
               {linearSyncCopy.bgColor}
               <input type="color" value={bgColor} onChange={(e) => setBgColor(e.target.value)} aria-label={linearSyncCopy.bgColor} />
             </label>
+            {/* adj1272（第 1 层）：无背景、只要谱 —— 棋格底表示"透明" */}
+            <label className="sync-label" title={linearSyncCopy.bgNoneHint}>
+              <input
+                type="checkbox"
+                checked={bgNone}
+                data-role="linear-bgnone"
+                aria-label={linearSyncCopy.bgNone}
+                onChange={(e) => setExtras({ linear: { ...linearStyle, bgNone: e.target.checked } })}
+              />
+              {linearSyncCopy.bgNone}
+            </label>
+            {bgNone && <span className="sync-dim">{linearSyncCopy.bgNoneTag}</span>}
             {video !== null && (
               <span className="sync-dim">
                 {linearSyncCopy.videoLoaded(video.info.name, video.info.hasAudio)}

@@ -67,20 +67,29 @@ export function stripFrameAt(tMs: number, strip: LinearStrip, o: StripLayOptions
   const blockX = o.viewW * blockRatio
   const bandTop = bandTopOf(o.viewH, o.stripH, o.topRatio ?? 0.25)
   const scrollX = stripXAt(strip, tMs + (o.leadMs ?? 0)) - blockX
-  const blockTop = bandTop
-  const blockBottom = bandTop + o.stripH
+  /**
+   * adj1275（用户 2026-11-09：「定位色块太高了」）：色块**只罩住这一行数字**，不是整条谱带。
+   *
+   * 原来是 `blockTop = 谱带顶、高 = 整条带`（把歌词那一片也罩进去，像一根竖条）。
+   * 现在按谱带自己的几何算：高度 ≈ 一个数字高 × 1.15，竖直方向对齐到数字所在的这一行。
+   */
+  const scale = o.stripH / Math.max(1, strip.height)
+  const unit = Math.max(4, strip.noteSize * scale)
+  const blockH = Math.max(8, Math.round(unit * 1.15))
+  const blockTop = Math.round((bandTop + strip.baselineY * scale - unit * 0.95) * 10) / 10
+  const blockBottom = blockTop + blockH
   /**
    * adj1264（用户 2026-11-09「定位色块以一个音符宽度，固定宽度即可」）：
    * `o.stripH` 是**画布上的**谱带高（已乘 `bandScale`），而 `strip.height` 是排版高 ⇒
    * 两者之比就是缩放系数，用 `strip.noteSize × 缩放 × 0.62` 得到"一个数字"的宽。
    */
-  const scale = o.stripH / Math.max(1, strip.height)
   const blockW = locatorBlockWidthOf(strip.noteSize, scale)
+  const radius = Math.max(4, Math.round(unit * 0.3))
   const ball: StripBall = stripBallAt(tMs, {
     beatMs: strip.beatMs,
     blockTop,
-    radius: Math.max(6, o.stripH * 0.16),
-    hopPx: Math.max(18, o.stripH * 0.55),
+    radius,
+    hopPx: Math.max(12, Math.round(unit * 1.5)),
   })
   return {
     bandTop,
@@ -109,6 +118,35 @@ export function stripFrameAt(tMs: number, strip: LinearStrip, o: StripLayOptions
 export function stripCfgOf(cfg: PageConfig, noteSize: number): PageConfig {
   const from = cfg.note_size > 0 ? cfg.note_size : 13
   const scale = Math.max(0.1, noteSize / from)
-  const scaled = (v: number): number => Math.max(1, Math.round(v * scale))
-  return { ...cfg, note_size: Math.max(1, Math.round(noteSize)), geci_size: scaled(cfg.geci_size) }
+  const scaled = (v: number): number => Math.round(v * scale)
+  /**
+   * adj1273（"谱的显示效果与预览还有差距"）：**字号 + 间距一起按比例放大**，条带才像"预览放大版"。
+   * 只放大字号时，谱与歌词之间的间距 (`height_quci`) 还是原值 ⇒ 歌词贴着数字（预览里不是这样）。
+   * 行间距 (`height_*`) 只用于"行与行"，条带把行压平了，抬不抬都不影响外观。
+   */
+  return {
+    ...cfg,
+    note_size: Math.max(1, Math.round(noteSize)),
+    geci_size: Math.max(1, scaled(cfg.geci_size)),
+    height_quci: scaled(cfg.height_quci),
+    height_cici: scaled(cfg.height_cici),
+  }
+}
+
+/**
+ * adj1271：**两端淡化**的宽度（px）。
+ *
+ * 用户 2026-11-09：「动态谱两端淡化」——谱带左右边缘不要硬切一刀，
+ * 让音符从边上淡出/淡入（参考的那种成片观感）。
+ *
+ * @param viewW 画布宽（px）
+ * @param ratio 淡化宽度占画布宽的比例（0 = 关闭；上限 0.35，再大就吃到中间了）
+ */
+export const EDGE_FADE_MAX_RATIO = 0.35
+
+export function edgeFadeWidthOf(viewW: number, ratio: number): number {
+  const w = Number.isFinite(viewW) ? Math.max(1, viewW) : 1
+  const r = Number.isFinite(ratio) ? Math.min(EDGE_FADE_MAX_RATIO, Math.max(0, ratio)) : 0
+  if (r <= 0) return 0
+  return Math.max(2, Math.round(w * r))
 }

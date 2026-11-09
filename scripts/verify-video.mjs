@@ -623,6 +623,91 @@ try {
       check('真机素材：成片读回来时长 ≈ 2s（画面/音轨等长）', /^0:02\.\d{2}$/.test(durReal), durReal)
     }
   }
+
+  /**
+   * ⑥ adj1272（用户 2026-11-09 的第 1 层）：**无背景（透明）**出片。
+   *
+   * 透明只能进 WebM（VP9 + alpha 侧数据）。这里真的点一遍「无背景」再出片，
+   * 然后在 **Node 里用 mediabunny 重新打开那个 .webm**，问它两条最关键的事：
+   * ① 有没有透明通道（`track.hasAlpha()`）；② 时长是不是保留段那 2 秒。
+   * 只看"文件出现了"是不够的——H.264 也能出文件，但它是黑底不透明。
+   */
+  {
+    await evalJs(
+      `(() => {
+        const box = document.querySelector('[data-role="linear-bgnone"]')
+        if (!box) return 'no-box'
+        if (!box.checked) box.click()
+        return box.checked ? 'on' : 'off'
+      })()`,
+    )
+    await waitFor(
+      `(() => {
+        const b = [...document.querySelectorAll('.linear-panel .btn')].find((el) => (el.textContent || '').trim() === '出片')
+        return !!b && !b.disabled
+      })()`,
+      '「出片」可用（切换无背景后会话重建完成）',
+      200,
+    )
+    await sleep(1200)
+    const before = new Set(await readdir(DL))
+    await evalJs(
+      `[...document.querySelectorAll('.linear-panel .btn')].find((el) => (el.textContent || '').trim() === '出片')?.click(), true`,
+    )
+    let webm = null
+    let state = ''
+    for (let i = 0; i < 900 && webm === null; i++) {
+      await sleep(300)
+      if (i % 10 === 0) {
+        state = await evalJs(
+          `(() => JSON.stringify({
+            notice: document.querySelector('.linear-notice')?.textContent ?? '',
+            prog: document.querySelector('[data-role="linear-progress"]')?.textContent ?? '',
+          }))()`,
+        )
+      }
+      for (const f of await readdir(DL)) {
+        if (f.endsWith('.webm') && !before.has(f)) webm = f
+      }
+    }
+    const webmPath = webm === null ? null : path.join(DL, webm)
+    check(
+      'adj1272 勾「无背景」后出片得到 .webm（不是 mp4；容器就是透明的那个）',
+      webm !== null && statSync(webmPath).size > 20000,
+      webm === null ? `没出现；最后状态：${state}` : `${webm} ${statSync(webmPath).size} 字节`,
+    )
+    if (webmPath !== null) {
+      /** 用 Node 侧的 mediabunny 打开它：透明通道与时长是硬判据 */
+      try {
+        const { Input, BlobSource, ALL_FORMATS } = await import('mediabunny')
+        const input = new Input({ source: new BlobSource(new Blob([readFileSync(webmPath)])), formats: ALL_FORMATS })
+        const track = await input.getPrimaryVideoTrack()
+        /**
+         * 只问**轨道级**：这条轨的样本是不是带 alpha 侧数据（VP9 alpha）。
+         * 不在这里解帧：Node 里没有 `VideoDecoder`（WebCodecs 是浏览器能力），
+         * 解帧那条留给浏览器里的用例（重新导入 `.webm` 能正常解码，见上面真机素材一段）。
+         */
+        const canBeTransparent = track === null ? null : await track.canBeTransparent()
+        const seconds = await input.computeDuration()
+        check(
+          'adj1272 透明成片真的带 alpha 通道（轨道 `canBeTransparent` = true）',
+          canBeTransparent === true,
+          `canBeTransparent=${canBeTransparent}`,
+        )
+        check(
+          'adj1272 透明成片时长 ≈ 2s（保留段，不是整首）',
+          Math.abs(seconds - 2) < 0.2,
+          `${seconds.toFixed(2)}s`,
+        )
+        input.dispose?.()
+      } catch (e) {
+        check(`adj1272 透明成片能被重新打开：${e instanceof Error ? e.message : String(e)}`, false)
+      }
+    }
+    // 关回去，别把台面留在"无背景"
+    await evalJs(`(document.querySelector('[data-role="linear-bgnone"]')?.click(), true)`)
+    await sleep(600)
+  }
   ws.close()
 } catch (e) {
   check(`脚本自身出错：${e instanceof Error ? e.message : String(e)}`, false)

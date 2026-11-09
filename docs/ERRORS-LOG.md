@@ -11953,4 +11953,16 @@ smoke 五条含"来源切换成对"结构断言与负对照） |
 - **预防**：把"构建"写进验收顺序（先 build 再浏览器验证）；看到"代码改了、画面没变"时，
   **先确认运行的是哪份产物**，再怀疑渲染（与 `E-2026-567` 的"假绿"是同一族：判据指向了别的对象）。
 
+### E-2026-572 透明 WebM 出片失败：AAC 音轨装不进 WebM（adj1272）
+
+- **现象**：勾「无背景」出片，提示
+  `出片失败：Codec 'aac' cannot be contained within WebM. Supported audio codecs are: 'opus', 'vorbis'`。
+  文件一个都没出来。
+- **根因**：为了透明通道把容器换成 WebM（VP9 + alpha），但音轨还是沿用 MP4 那条路的 **AAC**。
+  WebM 只认 Opus/Vorbis，mediabunny 在 `addAudioTrack` 时就拒绝了。
+- **解决**：`mp4.ts` 里音轨编码器按容器选：WebM ⇒ `opus`，MP4 ⇒ `aac`（码率仍 128k）。
+- **预防**：① **"换容器"要连编码器一起换**——不是只有视频轨道的事（音频、封面标签都要逐个过一遍）；
+  ② 验收里真的**重新打开产物**（Node 侧 mediabunny 读 `canBeTransparent()` 与时长），
+  只看"文件出现了"会漏掉"能封装但不能用"这一类（本案就是"根本没封装"）。
+
 

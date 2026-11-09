@@ -32,6 +32,15 @@ export interface SrcMeasure {
   x1: number
   /** 该行的主基线（音符基线 y） */
   baselineY: number
+  /**
+   * adj1273：该行谱表的**上下沿**（相对 `baselineY` 的偏移；负 = 基线之上）。
+   *
+   * 条带原来用"字号 × 1.75 / 0.55"估算小节线长度，与预览里排出来的不一样长
+   * （预览的小节线从行顶到行底，上下比例随字号/配置走）。这里把真实值带出去，
+   * 条带照抄 ⇒ 看起来和预览同一张谱，只是放大了。
+   */
+  staffTop: number
+  staffBottom: number
   /** 左边界那根线（源类型；可能是隐藏线 `|/`，也可能没有） */
   leadType?: BarlineType
   /** 右边界那根线 */
@@ -95,7 +104,7 @@ export function extractMeasures(layout: ScoreLayout, cfg: PageConfig): SrcMeasur
       if (notes.length === 0) continue
       const lines = linesOfRow(page.barlines, span.top, span.bottom)
       const lyrics = page.lyrics.filter((l) => l.y >= span.top - 1 && l.y <= span.bottom + 1)
-      out.push(...splitRow(pi, ri, span.top, span.bottom, notes, lyrics, lines, out.length + 1))
+      out.push(...splitRow(pi, ri, span.top, span.bottom, notes, lyrics, lines, out.length + 1, cfg.note_size))
     }
   }
   return out
@@ -111,8 +120,16 @@ function splitRow(
   lyrics: PlacedLyric[],
   lines: RowLines,
   startNo: number,
+  noteSize: number,
 ): SrcMeasure[] {
   const baselineY = median(notes.map((n) => n.y))
+  /**
+   * adj1273：谱表上下沿照抄**预览里那几根真小节线**（中位数，避免跳房子线之类的异类）。
+   * 一条线都没有（极短片段）才退回"字号 × 1.1 / 0.6"的经验值。
+   */
+  const barList = [...lines.byX.values()]
+  const staffTop = barList.length === 0 ? baselineY - noteSize * 1.1 : median(barList.map((b) => b.yTop))
+  const staffBottom = barList.length === 0 ? baselineY + noteSize * 0.6 : median(barList.map((b) => b.yBottom))
   const contentL = Math.min(...notes.map((n) => n.x))
   const contentR = Math.max(...notes.map((n) => n.rightX ?? n.x + n.width))
   // 边界 = 行内所有小节线；两端各补一个"内容边界"，保证首尾小节也有界
@@ -167,6 +184,8 @@ function splitRow(
       x0: b.x0,
       x1: b.x1,
       baselineY,
+      staffTop: Math.round((staffTop - baselineY) * 10) / 10,
+      staffBottom: Math.round((staffBottom - baselineY) * 10) / 10,
       ...(lineTypeAt(lines, b.x0) === undefined ? {} : { leadType: lineTypeAt(lines, b.x0) }),
       ...(lineTypeAt(lines, b.x1) === undefined ? {} : { endType: lineTypeAt(lines, b.x1) }),
       notes: b.notes,
