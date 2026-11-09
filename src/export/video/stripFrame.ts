@@ -76,11 +76,11 @@ export function stripFrameAt(tMs: number, strip: LinearStrip, o: StripLayOptions
   const scale = o.stripH / Math.max(1, strip.height)
   const unit = Math.max(4, strip.noteSize * scale)
   /**
-   * adj1281（用户 2026-11-09「定位色块上下延伸 1/2」）：块高从 1.15 个数字高放到 **1.7 个**
-   * （≈ 上下各多出四分之一的数字高），仍然对齐在数字那一行、不罩到歌词。
+   * adj1281（用户 2026-11-09「定位色块调整为 2 个数字高度，与数字居中对齐」）：
+   * 块高 = **2 个数字高**，竖直中心对准数字字的中心（数字墨迹中心 ≈ 基线 − 1/3 字高）。
    */
-  const blockH = Math.max(8, Math.round(unit * 1.7))
-  const blockTop = Math.round((bandTop + strip.baselineY * scale - unit * 1.25) * 10) / 10
+  const blockH = Math.max(8, Math.round(unit * 2))
+  const blockTop = Math.round((bandTop + strip.baselineY * scale - unit * 1.34) * 10) / 10
   const blockBottom = blockTop + blockH
   /**
    * adj1264（用户 2026-11-09「定位色块以一个音符宽度，固定宽度即可」）：

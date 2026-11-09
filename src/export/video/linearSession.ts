@@ -189,12 +189,12 @@ export async function createLinearSession(opts: CreateLinearSessionOptions): Pro
       : null
 
   /**
-   * adj1271：两端淡化。
-   *
-   * 谱带单独画到一张**透明小画布**上，用 `destination-out` 把左右两端擦成渐变，再整块贴到主画布。
-   * 为什么不直接在主画布上擦：那样会把背景视频/背景图也擦出两个洞（"淡化"只该作用在谱带这一层）。
+   * adj1271：两端淡化。谱带单独画到一张**透明小画布**上，用 `destination-out` 把左右两端擦成渐变。
+   *  为什么不直接在主画布上擦：那样会把背景视频/背景图也擦出两个洞。
+   *  adj1281（用户 2026-11-09「调整谱带宽度后，右侧的淡没有重新调整」）：淡化的位置跟**谱带宽度**走
+   *  （`bandW`），不再是画布宽度 —— 谱带只占左边 50% 时，右边缘就淡在 50% 处。
    */
-  const fadeW = edgeFadeWidthOf(opts.width, opts.edgeFade ?? 0)
+  const fadeW = edgeFadeWidthOf(bandW, opts.edgeFade ?? 0)
   let bandCanvas: OffscreenCanvas | null = null
   const bandCtx = (): OffscreenCanvasRenderingContext2D | null => {
     if (fadeW <= 0) return null
@@ -218,11 +218,12 @@ export async function createLinearSession(opts: CreateLinearSessionOptions): Pro
     left.addColorStop(1, 'rgba(0,0,0,0)')
     bc.fillStyle = left
     bc.fillRect(0, 0, fadeW, stripH)
-    const right = bc.createLinearGradient(opts.width - fadeW, 0, opts.width, 0)
+    // adj1281：右侧淡出跟**谱带右缘**（不是画布右缘）
+    const right = bc.createLinearGradient(bandW - fadeW, 0, bandW, 0)
     right.addColorStop(0, 'rgba(0,0,0,0)')
     right.addColorStop(1, 'rgba(0,0,0,1)')
     bc.fillStyle = right
-    bc.fillRect(opts.width - fadeW, 0, fadeW, stripH)
+    bc.fillRect(bandW - fadeW, 0, fadeW, stripH)
     bc.globalCompositeOperation = 'source-over'
     ctx.drawImage(bandCanvas as OffscreenCanvas, 0, g.bandTop)
   }

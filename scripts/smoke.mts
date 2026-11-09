@@ -38358,8 +38358,19 @@ Q: 1 2 3 4 | 5 6 7 1' |: 2 3 4 5 :|
   )
   check('adj1258 条带上没有反复/跳房子/&ds 等修饰线（只剩 | 与 ||）', cleanBars, '')
   // ④ 时刻 → x：每段起点精确落在自己的 x0
-  const drift = a.strip.runs.reduce((mx, r) => Math.max(mx, Math.abs(stripXAt(a.strip, r.t0) - r.x0)), 0)
-  check('adj1258 stripXAt(t0) 与段起点 x0 一致（误差 < 0.2px）', drift < 0.2, `drift=${drift}`)
+  /**
+   * adj1282（用户 2026-11-09「定位色块处的音符与合成音没对齐」）：口径从"段内 x ∝ t"改成
+   * **按音符插值**——每个音符起点 ⇔ 它自己的中心（空间优先排版里 x 本来就不跟时值成比例）。
+   * 这里改成验"每个音符起点落在它自己的中心上"（同 t0 的和弦取并集的区间）。
+   */
+  const drift = a.strip.notes.reduce((mx, n) => {
+    const same = a.strip.notes.filter((m) => Math.abs(m.t0 - n.t0) < 0.5)
+    const lo = Math.min(...same.map((m) => m.x + m.w / 2))
+    const hi = Math.max(...same.map((m) => m.x + m.w / 2))
+    const x = stripXAt(a.strip, n.t0)
+    return Math.max(mx, x < lo - 0.5 ? lo - x : x > hi + 0.5 ? x - hi : 0)
+  }, 0)
+  check('adj1282 每个音符起点 ⇔ 它自己的中心（不再是"段内 x ∝ t"）', drift < 0.5, `drift=${drift}`)
   // ⑤ 单调：时间递增 ⇒ x 不减；曲末取末端
   let mono = true
   let prevX = -1
@@ -38435,10 +38446,16 @@ Q: 1 2 3 4 | 5 6 7 1' | 2 3 4 5 | 6 7 1' 2' | 3 4 5 6 | 7 1' 2' 3' | 4 5 6 7 | 1
   check('adj1260 谱带比例过大时不出画（夹到 viewH − stripH）', bandTopOf(1920, 300, 1) === 1620, String(bandTopOf(1920, 300, 1)))
   const ballFixed = [0, 170, 640, 1500].every((t) => stripFrameAt(t, a.strip, LAY).ballX === g0.blockX)
   check('adj1260 球的 x 固定压在色块上（谱面动、球不动）', ballFixed, '')
-  // 当前演奏时点与色块对应：音符起点处 scrollX + blockX == 该音 x
+  // 当前演奏时点与色块对应：段起点处 scrollX + blockX = 该段第一个音符的中心（adj1282 的新口径）
   const r0 = a.strip.runs[0]
   const gAtRun = stripFrameAt(r0.t0, a.strip, LAY)
-  check('adj1260 段起点处"滚动量 + 色块 x" = 该段 x0（时点与色块对齐）', Math.abs(gAtRun.scrollX + gAtRun.blockX - r0.x0) < 0.2, `${gAtRun.scrollX}+${gAtRun.blockX} vs ${r0.x0}`)
+  const firstNote0 = a.strip.notes[0]
+  const want0 = firstNote0.x + firstNote0.w / 2
+  check(
+    'adj1260→adj1282 段起点处"滚动量 + 色块 x" = 该段第一个音符的中心（时点与色块对齐）',
+    Math.abs(gAtRun.scrollX + gAtRun.blockX - want0) < 0.6,
+    `${gAtRun.scrollX}+${gAtRun.blockX} vs ${want0}`,
+  )
   let monoScroll = true
   let prev = -1e9
   for (let t = 0; t <= stripEndMs(a.strip); t += 40) {
@@ -39584,8 +39601,8 @@ C: 一 二 三 四 五 六 七 八
   const blockH = g.blockBottom - g.blockTop
   const unit = base.noteSize * (lay.stripH / base.height)
   check(
-    'adj1281 定位色块上下延伸后仍只罩这一行（高 ≈ 1.7 个数字高，不到谱带一半）',
-    Math.abs(blockH - Math.round(unit * 1.7)) <= 1 && blockH < lay.stripH * 0.6,
+    'adj1281 定位色块 = 2 个数字高、与数字居中对齐（上下各多出半个字高）',
+    Math.abs(blockH - Math.round(unit * 2)) <= 1 && blockH < lay.stripH * 0.65,
     `块高=${blockH.toFixed(1)} 数字高=${unit.toFixed(1)} 谱带高=${lay.stripH}`,
   )
   check(
