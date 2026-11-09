@@ -528,11 +528,14 @@ export function buildLinearStrip(
   // adj1274：小节号现在画在**线下方**，条带底部要给它留出位置
   if (withBarNumbers) contentBottom = Math.max(contentBottom, staffBottomY + BAR_NUMBER_BOTTOM_GAP + barBoxH + 2)
   const height = Math.ceil(contentBottom + 4)
-  /** adj1274：曲部/词部那条可拖的虚线（没有歌词时放在谱表下方一点，仍可拖） */
+  /**
+   * adj1281（用户 2026-11-09「词行的位置调整虚线放在词行中间」）：
+   * 那条虚线画在**词行字的垂直中间**（不是曲/词之间的空白里），一眼能对上"我要挪的是这一行词"。
+   */
   const lyricTopY =
     page.lyrics.length > 0 ? Math.min(...page.lyrics.map((l) => l.y)) - cfg.geci_size * 0.72 : Number.NaN
   const guideQuciY = Math.round(
-    (Number.isFinite(lyricTopY) ? (staffBottomY + lyricTopY) / 2 : staffBottomY + noteSize * 0.35) * 10,
+    (Number.isFinite(lyricTopY) ? lyricTopY + cfg.geci_size * 0.36 : staffBottomY + noteSize * 0.35) * 10,
   ) / 10
   let lyricLines = 1
   for (const v of verseLines.values()) lyricLines = Math.max(lyricLines, v + 1)

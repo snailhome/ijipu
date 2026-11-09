@@ -6831,8 +6831,7 @@ span.ws-check {
 .linear-stage-canvas {
   display: block;
   margin: 0 auto;
-  /* adj1271：在画布上按住上下拖 = 调谱带纵向位置 */
-  cursor: ns-resize;
+  /* adj1281：光标由台面按"指到哪条边"动态给（move / col-resize / row-resize） */
   touch-action: none;
 }
 

@@ -609,27 +609,86 @@ export function LinearSyncDialog() {
     return () => cancelAnimationFrame(id)
   }, [paintAt, sessionReady])
 
-  // ---------- 鼠标直接调"谱带位置 / 宽度"（adj1271，用户 2026-11-09） ----------
-  /** 按住画布上下拖 = 谱带纵向位置（只改会话内参数，不重建光栅，拖着跟手） */
-  const dragRef = useRef<{ y: number; top: number } | null>(null)
-  const onStageDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (e.button !== 0) return
-    dragRef.current = { y: e.clientY, top: topRatio }
-    try {
-      e.currentTarget.setPointerCapture(e.pointerId)
-    } catch {
-      /* 合成事件没有真指针：拖动照样工作，只是不捕获 */
-    }
-  }, [topRatio])
+  // ---------- 鼠标手势（adj1281，用户 2026-11-09） ----------
+  /**
+   * 三种手势按**鼠标所在的边/面**区分（只有指到那条边上才换鼠标形状，按下才动手）：
+   *  · 谱带内 = 移动（上下挪位置）；
+   *  · 谱带**右边线** = 左右调整 **谱带宽度**（一行显示几拍）；
+   *  · 谱带**下边线** = 上下调整 **谱面缩放**（显示比率）。
+   */
+  const [stageHover, setStageHover] = useState<'move' | 'ew' | 'ns' | null>(null)
+  const dragRef = useRef<{
+    kind: 'move' | 'width' | 'scale'
+    x: number
+    y: number
+    top: number
+    width: number
+    scale: number
+  } | null>(null)
+  /** 指针 → 画布像素坐标 */
+  const canvasPointOf = useCallback(
+    (e: React.PointerEvent<HTMLCanvasElement>): { x: number; y: number } => {
+      const r = e.currentTarget.getBoundingClientRect()
+      return {
+        x: ((e.clientX - r.left) * out.width) / Math.max(1, r.width),
+        y: ((e.clientY - r.top) * out.height) / Math.max(1, r.height),
+      }
+    },
+    [out.width, out.height],
+  )
+  const zoneAt = useCallback(
+    (p: { x: number; y: number }): 'width' | 'scale' | 'move' | null => {
+      const sH = Math.max(8, Math.round(strip.height * bandScale))
+      const top = bandTopOf(out.height, sH, topRatio)
+      const bottom = top + sH
+      const edge = Math.max(8, Math.round(out.width * 0.008))
+      if (Math.abs(p.x - bandW) <= edge && p.y >= top - edge && p.y <= bottom + edge) return 'width'
+      if (Math.abs(p.y - bottom) <= edge && p.x <= bandW + edge) return 'scale'
+      if (p.y >= top && p.y <= bottom && p.x <= bandW) return 'move'
+      return null
+    },
+    [bandScale, bandW, out.height, out.width, strip.height, topRatio],
+  )
+  const onStageDown = useCallback(
+    (e: React.PointerEvent<HTMLCanvasElement>) => {
+      if (e.button !== 0) return
+      const z = zoneAt(canvasPointOf(e))
+      if (z === null) return
+      dragRef.current = { kind: z, x: e.clientX, y: e.clientY, top: topRatio, width: bandWidth, scale: bandScale }
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId)
+      } catch {
+        /* 合成事件没有真指针 */
+      }
+    },
+    [bandScale, bandWidth, canvasPointOf, topRatio, zoneAt],
+  )
   const onStageMove = useCallback(
     (e: React.PointerEvent<HTMLCanvasElement>) => {
       const d = dragRef.current
-      if (d === null) return
-      const h = e.currentTarget.clientHeight || 1
-      const next = Math.max(0, Math.min(0.6, d.top + (e.clientY - d.y) / h))
-      setExtras({ linear: { ...linearStyle, topRatio: Math.round(next * 1000) / 1000 } })
+      const p = canvasPointOf(e)
+      if (d === null) {
+        const z = zoneAt(p)
+        setStageHover(z === 'width' ? 'ew' : z === 'scale' ? 'ns' : z === 'move' ? 'move' : null)
+        return
+      }
+      const r = e.currentTarget.getBoundingClientRect()
+      if (d.kind === 'move') {
+        const dyCanvas = ((e.clientY - d.y) * out.height) / Math.max(1, r.height)
+        const next = Math.max(0, Math.min(0.6, d.top + dyCanvas / Math.max(1, out.height)))
+        setExtras({ linear: { ...linearStyle, topRatio: Math.round(next * 1000) / 1000 } })
+        return
+      }
+      if (d.kind === 'width') {
+        const next = Math.max(0.2, Math.min(1, p.x / Math.max(1, out.width)))
+        setExtras({ linear: { ...linearStyle, bandWidth: Math.round(next * 1000) / 1000 } })
+        return
+      }
+      const dyCanvas = ((e.clientY - d.y) * out.height) / Math.max(1, r.height)
+      const next = Math.max(1, Math.min(12, d.scale + dyCanvas / Math.max(1, strip.height)))
+      setExtras({ linear: { ...linearStyle, bandScale: Math.round(next * 100) / 100 } })
     },
-    [linearStyle, setExtras],
+    [canvasPointOf, linearStyle, out.height, out.width, setExtras, strip.height, zoneAt],
   )
   const onStageUp = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     dragRef.current = null
@@ -639,6 +698,7 @@ export function LinearSyncDialog() {
       /* 没捕获过（点一下就抬） */
     }
   }, [])
+  const stageCursor = stageHover === 'ew' ? 'col-resize' : stageHover === 'ns' ? 'row-resize' : stageHover === 'move' ? 'move' : 'default'
   /**
    * adj1280（用户 2026-11-09「鼠标滚动是调整缩放比率，这不是我要的效果，取消」）：
    * 画布上**不再接管滚轮** —— 舞台自己滚（放大预览后看细节），谱带宽度只从「谱带宽度」控件调。
@@ -1353,6 +1413,7 @@ export function LinearSyncDialog() {
                   style={{
                     width: `${Math.round(fitted.w * stageZoom)}px`,
                     height: `${Math.round(fitted.h * stageZoom)}px`,
+                    cursor: stageCursor,
                   }}
                   onPointerDown={onStageDown}
                   onPointerMove={onStageMove}
@@ -1372,6 +1433,8 @@ export function LinearSyncDialog() {
                       width: `${(bandW / Math.max(1, out.width)) * 100}%`,
                     }}
                   />
+                  {/* adj1281：词行虚线只在**有词行**时出现；鼠标指到线上才变成上下调整光标（CSS） */}
+                  {showLyrics && strip.page.lyrics.length > 0 && (
                   <div
                     className="linear-guide-quci"
                     data-role="linear-guide-quci"
@@ -1387,6 +1450,7 @@ export function LinearSyncDialog() {
                     onPointerUp={onGuideUp}
                     onPointerCancel={onGuideUp}
                   />
+                  )}
                   <div
                     className="linear-guide-scale"
                     data-role="linear-guide-scale"

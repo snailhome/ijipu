@@ -75,8 +75,12 @@ export function stripFrameAt(tMs: number, strip: LinearStrip, o: StripLayOptions
    */
   const scale = o.stripH / Math.max(1, strip.height)
   const unit = Math.max(4, strip.noteSize * scale)
-  const blockH = Math.max(8, Math.round(unit * 1.15))
-  const blockTop = Math.round((bandTop + strip.baselineY * scale - unit * 0.95) * 10) / 10
+  /**
+   * adj1281（用户 2026-11-09「定位色块上下延伸 1/2」）：块高从 1.15 个数字高放到 **1.7 个**
+   * （≈ 上下各多出四分之一的数字高），仍然对齐在数字那一行、不罩到歌词。
+   */
+  const blockH = Math.max(8, Math.round(unit * 1.7))
+  const blockTop = Math.round((bandTop + strip.baselineY * scale - unit * 1.25) * 10) / 10
   const blockBottom = blockTop + blockH
   /**
    * adj1264（用户 2026-11-09「定位色块以一个音符宽度，固定宽度即可」）：

@@ -3539,21 +3539,73 @@ async function main() {
         // 拖动 = 谱带位置（读滑条值即可：那就是真实生效的 `topRatio`）
         const topOf = async () => Number(await evalJs(c, `document.querySelector('[aria-label="谱带位置"]').value`))
         const top0 = await topOf()
+        const scaleOfValue = async () => Number(await evalJs(c, `document.querySelector('[aria-label="谱面缩放"]').value`))
+        /**
+         * adj1281（用户 2026-11-09）：三种手势按"鼠标在哪条边"区分——
+         * 谱带内 = 移动；右边线 = 调宽度；下边线 = 调缩放。这里三个各点一次。
+         */
+        // ① 谱带内 → 移动
         await evalJs(
           c,
           `(() => {
             const cv = document.querySelector('[data-role="linear-stage"]')
-            const r = cv.getBoundingClientRect()
-            const opts = (y) => ({ bubbles: true, clientX: r.left + r.width / 2, clientY: y, pointerId: 1, button: 0 })
-            cv.dispatchEvent(new PointerEvent('pointerdown', opts(r.top + 40)))
-            cv.dispatchEvent(new PointerEvent('pointermove', opts(r.top + 40 + r.height * 0.25)))
-            cv.dispatchEvent(new PointerEvent('pointerup', opts(r.top + 40 + r.height * 0.25)))
+            const b = document.querySelector('[data-role="linear-guide-band"]')
+            if (!cv || !b) return false
+            const br = b.getBoundingClientRect()
+            const mid = { x: br.left + br.width / 2, y: br.top + br.height / 2 }
+            const opts = (x, y) => ({ bubbles: true, clientX: x, clientY: y, pointerId: 1, button: 0 })
+            cv.dispatchEvent(new PointerEvent('pointerdown', opts(mid.x, mid.y)))
+            cv.dispatchEvent(new PointerEvent('pointermove', opts(mid.x, mid.y + br.height * 0.8)))
+            cv.dispatchEvent(new PointerEvent('pointerup', opts(mid.x, mid.y + br.height * 0.8)))
             return true
           })()`,
         )
         await sleep(500)
         const top1 = await topOf()
-        check('adj1271 画布上按住往下拖 ⇒ 谱带位置跟着下移（鼠标直接调位置）', top1 > top0 + 0.05, `${top0} → ${top1}`)
+        check('adj1281 谱带内按住往下拖 ⇒ 谱带位置下移（鼠标在带内是"移动"手势）', top1 > top0 + 0.02, `${top0} → ${top1}`)
+
+        // ② 右边线 → 调谱带宽度
+        const widthOf = async () => Number(await evalJs(c, `document.querySelector('[data-role="linear-bandwidth"]').value`))
+        const wd0 = await widthOf()
+        await evalJs(
+          c,
+          `(() => {
+            const cv = document.querySelector('[data-role="linear-stage"]')
+            const b = document.querySelector('[data-role="linear-guide-band"]')
+            if (!cv || !b) return false
+            const br = b.getBoundingClientRect()
+            const y = br.top + br.height / 2
+            const opts = (x) => ({ bubbles: true, clientX: x, clientY: y, pointerId: 1, button: 0 })
+            cv.dispatchEvent(new PointerEvent('pointerdown', opts(br.right - 1)))
+            cv.dispatchEvent(new PointerEvent('pointermove', opts(br.right - br.width * 0.35)))
+            cv.dispatchEvent(new PointerEvent('pointerup', opts(br.right - br.width * 0.35)))
+            return true
+          })()`,
+        )
+        await sleep(600)
+        const wd1 = await widthOf()
+        check('adj1281 拖谱带右边线 ⇒ 谱带宽度变小（决定一行显示几拍）', wd1 < wd0 - 0.1, `${wd0} → ${wd1}`)
+
+        // ③ 下边线 → 调谱面缩放
+        const sc0 = await scaleOfValue()
+        await evalJs(
+          c,
+          `(() => {
+            const cv = document.querySelector('[data-role="linear-stage"]')
+            const b = document.querySelector('[data-role="linear-guide-band"]')
+            if (!cv || !b) return false
+            const br = b.getBoundingClientRect()
+            const x = br.left + br.width * 0.3
+            const opts = (y) => ({ bubbles: true, clientX: x, clientY: y, pointerId: 1, button: 0 })
+            cv.dispatchEvent(new PointerEvent('pointerdown', opts(br.bottom - 1)))
+            cv.dispatchEvent(new PointerEvent('pointermove', opts(br.bottom + br.height * 0.6)))
+            cv.dispatchEvent(new PointerEvent('pointerup', opts(br.bottom + br.height * 0.6)))
+            return true
+          })()`,
+        )
+        await sleep(700)
+        const sc1 = await scaleOfValue()
+        check('adj1281 拖谱带下边线 ⇒ 谱面缩放变大（不是"高度"这个概念了）', sc1 > sc0 + 0.1, `${sc0} → ${sc1}`)
 
         // 滚轮**不再**改缩放（用户 2026-11-09：「鼠标滚动是调整缩放比率，这不是我要的效果，取消」）
         const setRange = (sel, v) => `(() => {
@@ -3565,8 +3617,7 @@ async function main() {
             el.dispatchEvent(new Event('change', { bubbles: true }))
             return true
           })()`
-        const scaleOf = async () => Number(await evalJs(c, `document.querySelector('[aria-label="谱面缩放"]').value`))
-        const sc0 = await scaleOf()
+        const wheelSc0 = await scaleOfValue()
         await evalJs(
           c,
           `(() => {
@@ -3576,9 +3627,12 @@ async function main() {
           })()`,
         )
         await sleep(500)
-        const sc1 = await scaleOf()
-        check('adj1280 滚轮不再改缩放（谱面缩放只能从面板控件调）', sc1 === sc0, `${sc0} → ${sc1}`)
+        const wheelSc1 = await scaleOfValue()
+        check('adj1280 滚轮不再改缩放（谱面缩放只能从面板控件调）', wheelSc1 === wheelSc0, `${wheelSc0} → ${wheelSc1}`)
         // 谱带宽度：拖窄 ⇒ 谱带在画面里占比变小（外框宽度跟着变）
+        // 先复位到 100%（前面的手势测试已经把它拖窄过）
+        await evalJs(c, setRange('[data-role="linear-bandwidth"]', 1))
+        await sleep(500)
         const bandBox = async () =>
           evalJs(
             c,

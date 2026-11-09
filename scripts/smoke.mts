@@ -39584,8 +39584,8 @@ C: 一 二 三 四 五 六 七 八
   const blockH = g.blockBottom - g.blockTop
   const unit = base.noteSize * (lay.stripH / base.height)
   check(
-    'adj1275 定位色块只罩住这一行数字（高 ≈ 1.15 个数字高，不再是一整条竖带）',
-    Math.abs(blockH - Math.round(unit * 1.15)) <= 1 && blockH < lay.stripH * 0.5,
+    'adj1281 定位色块上下延伸后仍只罩这一行（高 ≈ 1.7 个数字高，不到谱带一半）',
+    Math.abs(blockH - Math.round(unit * 1.7)) <= 1 && blockH < lay.stripH * 0.6,
     `块高=${blockH.toFixed(1)} 数字高=${unit.toFixed(1)} 谱带高=${lay.stripH}`,
   )
   check(

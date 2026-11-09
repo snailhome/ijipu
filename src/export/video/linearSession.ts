@@ -273,8 +273,8 @@ export async function createLinearSession(opts: CreateLinearSessionOptions): Pro
     // ③ 谱带（adj1271：两端淡化在这一步做，只影响谱带这一层）
     blitBand(ctx, g)
     // ④ 跳跳球（x 固定；落地压扁）
-    /** adj1275（用户 2026-11-09「跳跳球太大了」）：球径按**色块高度**定，不再按整条谱带高 */
-    const r = Math.max(4, Math.round(bh * 0.26))
+    /** adj1281（用户 2026-11-09「跳跳球调整为现在的 1/2 大小」）：球径 = 块高 × 0.13 */
+    const r = Math.max(3, Math.round(bh * 0.13))
     ctx.save()
     ctx.fillStyle = style.ballColor
     ctx.beginPath()
