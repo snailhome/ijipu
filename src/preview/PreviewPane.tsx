@@ -44,6 +44,7 @@ import {
   beatPhaseOf,
   primaryVoiceOf,
   BALL_LANDING_TIMING,
+  BALL_LEAD_MS,
   BALL_SQUASH_X,
   BALL_SQUASH_Y,
 } from '@ijipu/engine'
@@ -1565,6 +1566,8 @@ function PlayheadLayer({
       noteSize * 3.2,
       beatBars,
       BALL_LANDING_TIMING,
+      // adj1286：整体提前 100ms（落点原本比色块切换晚约 100ms）
+      BALL_LEAD_MS,
     )
     if (bp && (bp.pageIndex === undefined || bp.pageIndex === page.index)) {
       const rad = noteSize * 0.28

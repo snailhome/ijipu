@@ -541,7 +541,7 @@ src/store/cardImageStore.ts             277   （卡片背景图等大附件；�
 | # | 事项 | 决定 |
 |---|---|---|
 | 1 | 仓库名 | `ijipu-cp` |
-| 2 | 中文名 | **爱出片**（cp = 出片，也取 Create & Play） |
+| 2 | 中文名 | **爱出片**（cp 的释义：**能出片，更出彩**） |
 | 3 | 标识 | 应用标识 `com.ijipu.cp`；命令 `ijipu-cp`；项目文件 `<名>.ijv.json` |
 | 4 | 分发 | **闭源**，GitHub **私有仓库**（见 11.1 的两个前提） |
 | 5 | 音源 | 抽 `packages/ijipu-audio`，两边 vendor 同一份 |
