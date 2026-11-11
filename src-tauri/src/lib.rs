@@ -1351,6 +1351,15 @@ pub fn run() {
             // 冷启动：双击 `.jps` 时路径就在本进程的命令行参数里（NSIS 写的是 `"ijipu.exe" "%1"`）。
             // v2 的 `Env` 默认已 manage（内容即 `std::env::args_os()`），用它避免非 UTF-8 参数 panic。
             queue_open_paths(app.handle(), jps_paths_from_os_args(app.env().args_os.clone()));
+            // 窗口图标（用户 2026-11-11）：与「爱出片 iJipu CP」区分开。
+            // 品牌图标（界面里的 logo）不变，只换窗口/任务栏图标；编译进 exe，不依赖安装目录里有没有 png。
+            if let Some(w) = app.get_webview_window("main") {
+                if let Ok(icon) =
+                    tauri::image::Image::from_bytes(include_bytes!("../../public/icons/Logo-jp.png"))
+                {
+                    let _ = w.set_icon(icon);
+                }
+            }
             // adj1084：出片窗口只干活、不给人看（前端跑完会自己退出）。
             // 隐藏而不是"不创建"：WebView2 里隐藏窗口照样能画离屏画布/编码。
             if cli_video::is_worker() {
