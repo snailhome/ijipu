@@ -28751,7 +28751,7 @@ C2: 歌，@那么我@是想要画你的手。@ {tp 1// 2/.} 你看我多么 {tp 
   const navHas = (nav: string, text: string): boolean => new RegExp(`<a\\b[^>]*>${text}</a>`).test(nav)
   const navMinimalOk = (nav: string): boolean =>
     navHas(nav, '功能') &&
-    /<a href="\/scores\/">乐谱库<\/a>/.test(nav) &&
+    /<a href="https:\/\/sl\.ijipu\.pages\.dev\/scores\/">乐谱库<\/a>/.test(nav) &&
     /<a href="\/manual\/">文档<\/a>/.test(nav) &&
     navHas(nav, '下载桌面端') &&
     /<a data-l="repoUrl"[^>]*>GitHub<\/a>/.test(nav) &&
@@ -28764,7 +28764,7 @@ C2: 歌，@那么我@是想要画你的手。@ {tp 1// 2/.} 你看我多么 {tp 
       !navMinimalOk(navPlain.replace('</a>', '</a><a href="/cli/">命令行手册</a>')) &&
       !navMinimalOk(navPlain.replace('</a>', '</a><a href="/soundfonts/">音色库推荐</a>')))
   check('adj1191 负对照：把「乐谱库」从顶栏拿掉 ⇒ 判据为假（证明它真的在量这一条）',
-    !navMinimalOk(navPlain.replace('<a href="/scores/">乐谱库</a>', '')))
+    !navMinimalOk(navPlain.replace('<a href="https://sl.ijipu.pages.dev/scores/">乐谱库</a>', '')))
   check('adj933/adj1080 顶栏只留一个 GitHub（应用仓库）；插件仓库入口在「Obsidian 插件」区',
     /<a data-l="repoUrl"[^>]*>GitHub<\/a>/.test(navHtml) &&
       !/obsidianRepoUrl/.test(navHtml) &&
@@ -28968,7 +28968,7 @@ C2: 歌，@那么我@是想要画你的手。@ {tp 1// 2/.} 你看我多么 {tp 
     'adj1190 `npm run build` 里包含 `scores:gen`（部署才会更新曲库）',
     pkg1190.scripts.build.includes('scores:gen'),
   )
-  check('adj1190 首页/页脚有曲库入口', readSrc('index.html').includes('href="/scores/"'))
+  check('adj1190 首页/页脚有曲库入口', readSrc('index.html').includes('href="https://sl.ijipu.pages.dev/scores/"'))
   check('adj1190 曲库共用样式 scores.css 存在', existsSync(join(scoresRoot, 'scores.css')))
 
   /* ---- adj1191（P1）：分享卡 / zip / ?src= ---- */

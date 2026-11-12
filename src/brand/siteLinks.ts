@@ -13,6 +13,7 @@ import { brand } from './tokens'
 /** `data-l` 的键 → 实际地址（值全部来自品牌 token） */
 const LINKS: Record<string, string> = {
   siteUrl: brand.siteUrl,
+  scoresUrl: brand.scoresUrl,
   repoUrl: brand.repoUrl,
   desktopDownloadUrl: brand.desktopDownloadUrl,
   // adj896：全部发布页（「更新记录」入口；与 desktopDownloadUrl 的 latest 不同）

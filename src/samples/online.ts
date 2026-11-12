@@ -33,7 +33,7 @@ export interface OnlineScoresResult {
 }
 
 const CACHE_KEY = 'ijipu.onlineScores.v1'
-const DATA_URL = `${brand.siteUrl}/scores/index.json`
+const DATA_URL = `${brand.scoresUrl}/scores/index.json`
 
 function normalizeScore(raw: unknown): OnlineScore | null {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null

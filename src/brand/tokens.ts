@@ -39,6 +39,8 @@ export const brand = {
    * 换域名/换仓库时只改这一处。
    */
   siteUrl: 'https://ijipu.pages.dev',
+  /** 独立乐谱站（ijipu-sl / 爱管谱管理） */
+  scoresUrl: 'https://sl.ijipu.pages.dev',
   /** Obsidian 插件仓库（同一位作者，用户在 Obsidian 里用得上） */
   obsidianRepoUrl: 'https://github.com/snailhome/obsidian-ijipu',
   /**
