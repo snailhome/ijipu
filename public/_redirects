@@ -1,0 +1,4 @@
+# 乐谱库已迁到独立的 ijipu-sl 站点；旧地址保留 301
+/scores/ https://ijipu-sl.pages.dev/scores/ 301
+/scores/* https://ijipu-sl.pages.dev/scores/:splat 301
+/s/:short https://ijipu-sl.pages.dev/s/:short 301

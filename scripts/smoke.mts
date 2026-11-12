@@ -28964,10 +28964,6 @@ C2: 歌，@那么我@是想要画你的手。@ {tp 1// 2/.} 你看我多么 {tp 
     samplesSrc1190.includes('public/scores/star/score.jps?raw') && !samplesSrc1190.includes("'B: 小星星'"),
   )
   const pkg1190 = JSON.parse(readFileSync('package.json', 'utf8')) as { scripts: Record<string, string> }
-  check(
-    'adj1190 `npm run build` 里包含 `scores:gen`（部署才会更新曲库）',
-    pkg1190.scripts.build.includes('scores:gen'),
-  )
   check('adj1190 首页/页脚有曲库入口', readSrc('index.html').includes('href="https://ijipu-sl.pages.dev/scores/"'))
   check('adj1190 曲库共用样式 scores.css 存在', existsSync(join(scoresRoot, 'scores.css')))
 
@@ -28990,13 +28986,6 @@ C2: 歌，@那么我@是想要画你的手。@ {tp 1// 2/.} 你看我多么 {tp 
   }
   check('adj1191 已生成的分享卡都是 1200×630 PNG', ogBad.length === 0, ogBad.join('；'))
   check('adj1191 八份谱都有分享卡 og.png（本地 `npm run score:og` 生成并提交）', ogCount >= 8, `${ogCount} 张`)
-  const genScoresSrc1191 = readSrc('scripts/gen-scores.mts')
-  check(
-    'adj1191 详情页接了 zip 下载（构建期用 `writeZip` 打 meta + README.md + jps + assets）',
-    genScoresSrc1191.includes('writeZip') &&
-      genScoresSrc1191.includes("name: 'README.md'") &&
-      genScoresSrc1191.includes("name: 'meta.json'"),
-  )
   check('adj1191 本地分享卡脚本与 npm 入口都在', existsSync(join(process.cwd(), 'scripts/gen-og.mjs')) &&
     pkg1190.scripts['score:og']?.includes('gen-og.mjs') === true)
   check(
@@ -29004,32 +28993,12 @@ C2: 歌，@那么我@是想要画你的手。@ {tp 1// 2/.} 你看我多么 {tp 
     readSrc('public/scores/scores.css').includes('.card[hidden]'),
   )
   check(
-    'adj1191 角标是**完整 URL 链接**（`https://ijipu.pages.dev/`，写全协议、可点回官网）',
-    genScoresSrc1191.includes('class="site-mark"><a href=') &&
-      readSrc('public/scores/scores.css').includes('.site-mark a'),
-  )
-  check(
-    'adj1250 乐谱库列表与详情页去掉冗余 kicker（列表「乐谱库」、详情「乐谱 · 全部乐谱」）',
-    !genScoresSrc1191.includes('乐谱 · <a href="/scores/">全部乐谱</a>') &&
-      !genScoresSrc1191.includes('<p class="kicker">乐谱库</p>'),
-  )
-  check(
-    'adj1192 详情页源码用引擎高亮（highlightModel + hl-* 类），且带行号',
-    genScoresSrc1191.includes('highlightModel(code)') &&
-      genScoresSrc1191.includes('class="hl-') &&
-      readSrc('public/scores/scores.css').includes('.src-line::before'),
+    'adj1191 角标样式仍是完整 URL 链接',
+    readSrc('public/scores/scores.css').includes('.site-mark a'),
   )
   check(
     'adj1193 曲库页有深浅主题切换（按钮 + data-theme-key + .theme-toggle 样式）',
-    genScoresSrc1191.includes('id="theme-toggle"') &&
-      genScoresSrc1191.includes('data-theme-key') &&
-      readSrc('public/scores/scores.css').includes('.theme-toggle'),
-  )
-  check(
-    'adj1194 乐谱库目录（scores-library/README.md）存在，生成器合并它而不是只读 public/scores',
-    existsSync(join(process.cwd(), 'scores-library', 'README.md')) &&
-      genScoresSrc1191.includes('scores-library') &&
-      genScoresSrc1191.includes('listLibrarySources'),
+    readSrc('public/scores/scores.css').includes('.theme-toggle'),
   )
   check(
     'adj1195 应用可导出乐谱包（ScorePackageDialog + writeZip + package 模态 + 导出面板入口）',
@@ -29039,9 +29008,9 @@ C2: 歌，@那么我@是想要画你的手。@ {tp 1// 2/.} 你看我多么 {tp 
       readSrc('src/ui/dock/ExportPanel.tsx').includes("openModal('package')"),
   )
   check(
-    'adj1197 首页示例只由 `示例谱` tag 驱动（glob 读 public/scores + scores-library）',
+    'adj1197 首页示例只由 `示例谱` tag 驱动（glob 读 public/scores）',
     readSrc('src/landing/samples.ts').includes("tags?.includes('示例谱')") &&
-      readSrc('src/landing/samples.ts').includes("import.meta.glob('../../scores-library/**/meta.json'") &&
+      readSrc('src/landing/samples.ts').includes("import.meta.glob('../../public/scores/**/meta.json'") &&
       BRAND_SAMPLES.length > 0,
   )
   check(
@@ -29052,12 +29021,10 @@ C2: 歌，@那么我@是想要画你的手。@ {tp 1// 2/.} 你看我多么 {tp 
       !existsSync('src/dialogs/ScoreMetaDialog.tsx'),
   )
   check(
-    'adj1200 背景/水印设置随包走（应用导出 overlay，站点读取 overlay）',
+    'adj1200 背景/水印设置随包走（应用导出 overlay；站点构建器在 ijipu-sl 维护）',
     readSrc('src/dialogs/ScorePackageDialog.tsx').includes('const overlay =') &&
       readSrc('src/dialogs/ScorePackageDialog.tsx').includes('offsetX: pageConfig.bgOffsetX') &&
-      readSrc('src/dialogs/ScorePackageDialog.tsx').includes('repeatGap: pageConfig.wmRepeatGap') &&
-      readSrc('scripts/gen-scores.mts').includes('const ov = meta.overlay') &&
-      readSrc('scripts/gen-scores.mts').includes('bgOffsetX: ov.bg.offsetX'),
+      readSrc('src/dialogs/ScorePackageDialog.tsx').includes('repeatGap: pageConfig.wmRepeatGap'),
   )
 
   // ---- ⑥ 文档页与应用内帮助同源：渲染器抽成了纯模块，且目录锚点与标题 id 逐个一致 ----

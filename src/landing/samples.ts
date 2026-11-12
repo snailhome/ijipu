@@ -55,7 +55,7 @@
 import moly from '../../public/samples/茉莉花.jps?raw'
 /**
  * adj1190（用户 2026-11-03 拍板「合一份」）：首页示例的源码**不再写在这个文件里**。
- * 2026-11-06 示例谱迁入本地乐谱库后：列表/源码由 `scores-library/**` 发布区提供；
+ * 2026-11-13 示例谱正式留在应用侧：列表/源码由 `public/scores/**` 提供；
  * `public/scores/<slug>/score.jps` 的固定 `?raw` 导入只保留给旧示例常量和欢迎页兜底。
  * 这里只做 `?raw` 导入 + 原有变量名别名。
  *
@@ -73,7 +73,7 @@ import auldLangSyneSrc from '../../public/scores/yydj/score.jps?raw'
  * adj1197（S4）：首页示例改为 **tag 驱动**。
  *
  * 唯一规则：`meta.tags` 里含 `示例谱` 的条目才进首页；顺序按 `order`。
- * 源码仍从曲库读（public/scores + scores-library），不在这里手写第二份。
+ * 源码仍从应用自己的示例读（public/scores），不在这里手写第二份。
  * 现有 7 首的静态 import 保留，只是为了不改动下面那一大段"这段演示什么语法"的历史注释；
  * 新加进库里的 `示例谱` 会自动走 glob，不用改这个文件。
  */
@@ -86,10 +86,10 @@ type HomeMeta = {
 }
 const HOME_METAS = {
   // 站点示例现在由本地乐谱库的发布区驱动；public/scores 只保留给下面的 ?raw 固定引用
-  ...import.meta.glob('../../scores-library/**/meta.json', { eager: true, import: 'default' }),
+  ...import.meta.glob('../../public/scores/**/meta.json', { eager: true, import: 'default' }),
 } as Record<string, HomeMeta>
 const HOME_SOURCES = {
-  ...import.meta.glob('../../scores-library/**/score.jps', { eager: true, query: '?raw', import: 'default' }),
+  ...import.meta.glob('../../public/scores/**/score.jps', { eager: true, query: '?raw', import: 'default' }),
 } as Record<string, string>
 
 const HOME_LABELS: Record<string, string> = {
