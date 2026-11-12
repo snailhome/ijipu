@@ -31,13 +31,12 @@ export function PracticeMarkLayer({ page, noteSize }: { page: ScorePageLike; not
   const countdown = useUiStore((s) => s.practiceCountdown)
   /** adj987l（用户口径 #4）：标记段线**只在试听面板打开时**显示（底栏的「试听」页签） */
   const showInDialog = useUiStore((s) => s.dockOpen && s.dockPanel === 'tryout')
-  /** adj1168（用户 2026-10-27）：对拍台打开时不再画标记段线（那里只对对拍，不显示试听标记） */
-  const syncDialogOpen = useUiStore((s) => s.modal === 'sync')
+  /** adj1168：对拍台已迁到爱出片，应用内不再有对拍浮层 */
   const cur = marks.find((m) => m.id === markId) ?? null
   /** 画哪一段：优先"已选中的标记"，其次"正在标的两端"；只有一个端点时只画那个小竖头 */
   const startId = cur?.startId ?? selStart ?? null
   const endId = cur?.endId ?? selStop ?? null
-  if (!showInDialog || syncDialogOpen) return null
+  if (!showInDialog) return null
   if (!startId && !endId) return null
   /**
    * 画法优先级：

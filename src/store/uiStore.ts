@@ -13,28 +13,15 @@ import { getRuntimeEnv, isCoarsePointerDevice } from '../brand/env'
 // adj966g：底栏默认页按**本端能力档**决定（要权限的那一档展开在工作区，PC/插件收起）
 import { hostProfile, shouldOpenWorkspaceDock } from './fileHost'
 // adj1173：节拍器音色（L1 用户偏好；取值域与合成音在 playback/metronome）
-import { DEFAULT_METRONOME_TIMBRE, METRONOME_TIMBRES, type MetronomeTimbre } from '../playback/metronome'
 // adj987（用户需求）：试听「练习段」的数据类型与命名（标记本身按文档存，见 practiceMarks.ts）
 import { defaultMarkName, nextMarkId, type PracticeMark } from './practiceMarks'
 // L1「用户个性」：编辑器偏好 + 字体覆盖（不进谱面；详见 docs/SETTINGS-AUDIT.md 分层）
 import { loadEditorFont, loadEditorFontSize, loadFontOverride, saveEditorFont, saveEditorFontSize, saveFontOverride } from './editorPrefs'
 import type { FontOverride } from '@ijipu/engine'
-import {
-  hasCardStyle,
-  isBuiltInCardStyleId,
-  normalizeCardStyle,
-  type CardStyle,
-} from '../export/video/cardTemplates'
-// adj1176：删除用户模板时顺手回收不再被引用的背景图（附件在 files/ 或 IndexedDB）
-import { deleteCardImage } from './cardImageStore'
 // adj965d：`OverlayLayer`（`'wm' | 'bg'`）的唯一出处是**引擎**（`overlayGesture.ts`）——
 // 它是"水印层/背景层"这个领域概念，应用与插件共用；store 只在这里给它一个"用户选中的那层"的槽位
 export type { OverlayLayer } from '@ijipu/engine'
 import type { OverlayLayer } from '@ijipu/engine'
-// adj1089：平移方式的取值域同样在引擎（`dynamic/camera.ts` 的 `PanMode`）——
-// 校验规则必须与 `buildCameraTrack` 认的三种一致，store 不另抄一份
-export type { PanMode } from '@ijipu/engine'
-import type { PanMode } from '@ijipu/engine'
 
 /**
  * adj563：**只保留 App 里真的还有渲染分支的模态**（原来还躺着 'about' / 'pageConfig' / 'playback' /
@@ -47,35 +34,8 @@ import type { PanMode } from '@ijipu/engine'
 // adj957（用户裁定）：加上 `'cli'` —— 命令行手册改用应用内 `DocDialog` 打开
 // （原先只能靠"系统默认程序打开随包 MD"，Windows 默认没有 .md 关联程序 ⇒ 多半弹「如何打开」）
 // adj963（用户要求）：加上 `'saveAs'` —— 「保存到工作区」专用对话框（插件模式的保存主入口）
-export type ModalKind = 'samples' | 'shortcuts' | 'manual' | 'syntax' | 'cli' | 'donate' | 'voicePicker' | 'saveAs' | 'cardStyle' | 'sync' | 'linearSync' | 'package'
+export type ModalKind = 'samples' | 'shortcuts' | 'manual' | 'syntax' | 'cli' | 'donate' | 'voicePicker' | 'saveAs' | 'package'
 
-/** 动态谱相机位比例（与引擎 `DynamicPresetId` 同形；store 不引引擎类型，避免反向依赖） */
-export type DynamicAspect = '9x16' | '1x1' | '16x9'
-
-/** adj1065：动态谱相机位的成片时长口径（3 分钟上限 / 整首） */
-export type DynamicMode = '3min' | 'full'
-
-/** adj1065：动态谱相机位的完整状态（预览、导出、标记段共用） */
-export interface DynamicCameraState {
-  on: boolean
-  aspect: DynamicAspect
-  /** 标记段范围；null = 整曲。`pass` = 用户在下拉里选的候选遍次（0 起），缺省按解析器的第一个候选 */
-  range: { startId: string; endId: string; pass?: number } | null
-  mode: DynamicMode
-  /**
-   * adj1164：相机位成片音色（GM program）。`null` = **自动随谱**（按谱面 `Y:`/`@`）；
-   * 数字 = 全篇统一音色，预览与成片共用；与试听的音色选择互不影响。
-   */
-  instrument: number | null
-}
-
-/**
- * adj1073：动态谱片头/片尾卡片模板（L1 用户偏好，持久化；不写进 .jps）。
- *
- * adj1176：取值不再只是 4 个预设 + `custom`，而是**任意模板 id**（内置 + 用户模板库里的 id）；
- * 用 `string` 是为了让"保存自定义模板后立刻能选中"不需要再改类型。
- */
-export type DynamicCardStyleId = string
 
 /**
  * adj462：底部 dock 的面板（互斥，同一时间只显示一块）。
@@ -153,179 +113,6 @@ export const PREVIEW_ZOOM_LIMITS: readonly [number, number] = [30, 400]
 const AUTO_WRAP_KEY = 'ijipu.autoWrap'
 const SHOW_SCRIPT_PAD_KEY = 'ijipu.showScriptPad'
 const SHOW_GUIDES_KEY = 'ijipu.showGuides'
-/** adj1073：动态谱片头/片尾卡片模板（L1 用户偏好；不写进谱面） */
-const DYNAMIC_CARD_STYLE_KEY = 'ijipu.dynamicCardStyle'
-/**
- * adj1176（用户 2026-11-01）：**用户卡片模板库**（L1，公共的一份，不分曲子）。
- *
- * 旧版只有一个 `ijipu.dynamicCardStyleCustom` 槽位；现在改成"可命名的一串模板"，
- * 相机位下拉直接列出来。旧的 `custom` 会在首次读取时**迁移成模板库里的一项**
- * （id 仍是 `custom`，名字「我的卡片」），旧键保留不删（方便降级）。
- *
- * 形状：`{ version: 1, items: CardStyle[] }`。背景图仍是 `ijipu-blob:<名>` 引用，
- * 图本体在 `files/`（桌面）或 IndexedDB（网页）。
- */
-const CARD_TEMPLATES_KEY = 'ijipu.cardTemplates'
-const CARD_TEMPLATES_VERSION = 1
-/** 旧版单槽自定义卡片（只读，用于迁移） */
-const LEGACY_CARD_STYLE_CUSTOM_KEY = 'ijipu.dynamicCardStyleCustom'
-/**
- * adj1089（用户 2026-10-23 口径）：动态视频与试听的**行中平移方式**（L1 用户偏好）。
- *
- * 为什么不塞进 `dynamicCamera`：那是 **L3 会话级**（关掉相机位就归零）；
- * "喜欢怎么看谱"属于"这个人怎么用" ⇒ L1、要跨运行记住。
- * 取值域在引擎（`PanMode`），这里只做读取回退与写入校验。
- */
-const PAN_MODE_KEY = 'ijipu.panMode'
-const PAN_MODES: readonly PanMode[] = ['follow', 'beat', 'bar']
-
-/** 读失败 / 旧版本没有这个键 / 脏值 ⇒ 回退 `beat`（adj1094 起**默认按拍平移**） */
-function loadPanMode(): PanMode {
-  try {
-    const v = localStorage.getItem(PAN_MODE_KEY)
-    return PAN_MODES.includes(v as PanMode) ? (v as PanMode) : 'beat'
-  } catch {
-    return 'beat'
-  }
-}
-
-/**
- * adj1094（用户 2026-10-23 口径）：**行末提前平移量**（单位：拍；L1 用户偏好）。
- *
- * 用户原话：「播放到行末时……等平移到下一行首时已经播放一小部分了，没有一个提前量看后继的谱子
- * ……添加一个变量，即行末提前平移量，默认半拍……可以调整到最多 2 拍」。
- *
- * 含义：换到下一行（横向平移 + 纵向换行）**提前多少拍**完成，默认 0.5 拍。
- * `0` = 回到旧行为（正好在行首那一下换行）。
- */
-const ROW_LEAD_BEATS_KEY = 'ijipu.rowLeadBeats'
-export const ROW_LEAD_BEATS_DEFAULT = 0.5
-export const ROW_LEAD_BEATS_MAX = 2
-
-/** adj1173：节拍器音色（L1；用户选择跨运行记住） */
-const METRONOME_TIMBRE_KEY = 'ijipu.metronomeTimbre'
-
-/** 读失败 / 旧版本没有这个键 / 脏值 ⇒ 回退木鱼 */
-function loadMetronomeTimbre(): MetronomeTimbre {
-  try {
-    const v = localStorage.getItem(METRONOME_TIMBRE_KEY)
-    return METRONOME_TIMBRES.includes(v as MetronomeTimbre) ? (v as MetronomeTimbre) : DEFAULT_METRONOME_TIMBRE
-  } catch {
-    return DEFAULT_METRONOME_TIMBRE
-  }
-}
-
-/** 读失败 / 旧版本没有这个键 / 越界 ⇒ 回退默认半拍（并钳到 [0, 2]） */
-function loadRowLeadBeats(): number {
-  try {
-    const raw = localStorage.getItem(ROW_LEAD_BEATS_KEY)
-    if (raw === null) return ROW_LEAD_BEATS_DEFAULT
-    const v = Number(raw)
-    if (!Number.isFinite(v)) return ROW_LEAD_BEATS_DEFAULT
-    return Math.min(ROW_LEAD_BEATS_MAX, Math.max(0, v))
-  } catch {
-    return ROW_LEAD_BEATS_DEFAULT
-  }
-}
-
-/**
- * adj1176：读用户模板库；第一次读时把旧的单槽自定义卡片迁移进来。
- *
- * 迁移必须**立刻写回新键**：否则用户把迁移出来的模板删掉后，下次启动又会被旧键复活。
- * 读坏了就回空表（不阻塞启动、也不覆盖磁盘上的原值——只有用户真的改了才会写）。
- */
-function loadCardTemplates(): CardStyle[] {
-  try {
-    const raw = localStorage.getItem(CARD_TEMPLATES_KEY)
-    if (raw !== null) return parseCardTemplates(raw)
-    const legacy = localStorage.getItem(LEGACY_CARD_STYLE_CUSTOM_KEY)
-    if (legacy === null) return []
-    const migrated = [normalizeCardStyle({ ...(JSON.parse(legacy) as Partial<CardStyle>), id: 'custom', name: '我的卡片' })]
-    saveCardTemplates(migrated)
-    return migrated
-  } catch {
-    return []
-  }
-}
-
-/** 解析模板库 JSON（数组或 `{version,items}` 都认，为以后换形状留余地） */
-function parseCardTemplates(raw: string): CardStyle[] {
-  const parsed = JSON.parse(raw) as unknown
-  const list = Array.isArray(parsed)
-    ? parsed
-    : parsed !== null && typeof parsed === 'object' && Array.isArray((parsed as { items?: unknown }).items)
-      ? ((parsed as { items: unknown[] }).items as unknown[])
-      : []
-  const out: CardStyle[] = []
-  const seen = new Set<string>()
-  for (const v of list) {
-    if (v === null || typeof v !== 'object') continue
-    const style = normalizeCardStyle(v as Partial<CardStyle>)
-    // 内置 id 是保留的：用户模板撞上就跳过（下拉里会重复、渲染也会走错分支）
-    if (isBuiltInCardStyleId(style.id) || seen.has(style.id)) continue
-    seen.add(style.id)
-    out.push(style)
-  }
-  return out
-}
-
-/** 写回模板库（返回是否真的写进了本机存储；失败时内存值仍保留） */
-function saveCardTemplates(items: CardStyle[]): boolean {
-  try {
-    localStorage.setItem(CARD_TEMPLATES_KEY, JSON.stringify({ version: CARD_TEMPLATES_VERSION, items }))
-    return true
-  } catch {
-    // 忽略隐私模式/配额异常：内存里仍然是用户刚保存的模板
-    return false
-  }
-}
-
-const initialCardTemplates = loadCardTemplates()
-
-function loadDynamicCardStyle(templates: readonly CardStyle[]): DynamicCardStyleId {
-  try {
-    const v = localStorage.getItem(DYNAMIC_CARD_STYLE_KEY)
-    if (v === 'custom') return templates.some((t) => t.id === 'custom') ? 'custom' : (templates[0]?.id ?? 'brand')
-    return hasCardStyle(v, templates) ? (v as string) : 'brand'
-  } catch {
-    return 'brand'
-  }
-}
-
-/** 生成模板 id（时间戳 + 随机尾数；不撞内置 id、也不撞已有 id） */
-function newCardTemplateId(items: readonly CardStyle[]): string {
-  const taken = new Set(items.map((t) => t.id))
-  for (let i = 0; i < 20; i += 1) {
-    const id = `tpl-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`
-    if (!taken.has(id) && !isBuiltInCardStyleId(id)) return id
-  }
-  return `tpl-${Date.now().toString(36)}-${items.length}`
-}
-
-/**
- * 一套模板引用的所有附件（背景图 + adj1178 的印章图片）。
- * 换图/删模板时用来判断"这张图还有没有人用"。
- */
-function styleImages(style: CardStyle | undefined): string[] {
-  if (style === undefined) return []
-  const out: string[] = []
-  if (typeof style.backgroundImage === 'string' && style.backgroundImage !== '') out.push(style.backgroundImage)
-  const sealImage = style.seal?.image
-  if (typeof sealImage === 'string' && sealImage !== '') out.push(sealImage)
-  return out
-}
-
-/**
- * 旧单槽自定义卡片（降级/迁移用）是否还引用这张图。
- * 是的话删模板时**不能**回收附件，否则老版本回退过去会是一张打不开的图。
- */
-function legacyCustomUsesImage(image: string): boolean {
-  try {
-    return localStorage.getItem(LEGACY_CARD_STYLE_CUSTOM_KEY)?.includes(image) === true
-  } catch {
-    return false
-  }
-}
 // adj315：应用级视图偏好——左右拆分排列方向（默认视图已取消，改为记住顶栏上次设置）
 const SPLITH_DIR_KEY = 'ijipu.splitHDir'
 // adj330：SpessaSynth 高质量采样——音源库 + 全局音色（GM program）
@@ -564,63 +351,6 @@ interface UiState {
   playbackTick: number
   /** 预览页排版辅助虚线开关 */
   showGuides: boolean
-  /**
-   * adj1065（用户口径）：**动态谱相机位**（L3 会话级）——叠在预览区上的成片取景器。
-   *
-   * 取代旧的「动态视频弹窗 + 预览区取景框」两条路：入口（导出菜单 / 试听标记段）
-   * 只设这一份状态，预览区里同一块相机画布负责画面、声音、进度和生成视频。
-   * 为什么放 store：相机位挂在预览层，入口在导出面板/试听弹窗，两者不在同一棵子树。
-   */
-  dynamicCamera: DynamicCameraState
-  setDynamicCamera: (patch: Partial<DynamicCameraState>) => void
-  /**
-   * adj1165：打开相机位的**唯一入口**（导出面板 / 试听「导出这段」共用）。
-   *
-   * 不传参数 = 沿用相机位上次的标记段/音色；传 `range` / `instrument` = 作为本次默认值
-   * （试听入口把当前标记段与试听音色带进来）。相机里仍可改，两者不是两套导出。
-   */
-  openDynamicCamera: (opts?: { range?: DynamicCameraState['range']; instrument?: number | null }) => void
-  /** adj1073：片头/片尾卡片模板（L1 用户偏好，落盘；预设 / 用户模板 id） */
-  dynamicCardStyle: DynamicCardStyleId
-  setDynamicCardStyle: (id: DynamicCardStyleId) => void
-  /**
-   * adj1176（用户 2026-11-01）：**用户卡片模板库**（L1，公共一份）。
-   *
-   * 相机位每首谱只记"用哪套"（写进 `xxx.jps.sync.json` 的 `card.template`），
-   * 样式本体留在库里：改一处，所有引用它的谱都跟着变。
-   */
-  cardTemplates: CardStyle[]
-  /** 保存（新增或更新）一套模板，返回它的 id；会立刻落盘 */
-  saveCardTemplate: (style: CardStyle) => { id: string; persisted: boolean }
-  /** 改名（只改 name，没这套就什么都不做） */
-  renameCardTemplate: (id: string, name: string) => void
-  /** 删除一套模板；正在用就切回品牌模板，不再被引用的背景图一并回收 */
-  deleteCardTemplate: (id: string) => void
-  /**
-   * adj1089（用户 2026-10-23 口径）：动态视频与试听的**行中平移方式**（L1，落 localStorage）。
-   *
-   * - `follow`：色块到画面右 4/5 才推，一次推到左 1/5；
-   * - `beat`（**adj1094 起默认**）：每拍移一次，把当前拍的色块放到画面中间；
-   * - `bar`：每小节移一次，同上。
-   *
-   * 三种都受"左右露白 ≤ 画面 10%"约束（引擎 `clampRowCenter`，出片与试听共用）。
-   */
-  panMode: PanMode
-  /** adj1089：写入前校验取值（只允许三种），脏值忽略、不落盘 */
-  setPanMode: (m: PanMode) => void
-  /**
-   * adj1094（用户 2026-10-23 口径）：**行末提前平移量**（单位：拍；L1，落 localStorage）。
-   *
-   * 三种平移模式共用：换到下一行（横向 + 纵向）提前这么多拍**完成**，好让观众提前看到下一行。
-   * 默认 0.5 拍，可调 0~2 拍；`0` = 正好在行首那一下换行（旧行为）。
-   */
-  rowLeadBeats: number
-  /** adj1094：写入前钳到 [0, ROW_LEAD_BEATS_MAX]，脏值忽略 */
-  setRowLeadBeats: (beats: number) => void
-  /** adj1173：节拍器音色（L1，落 localStorage；木鱼/梆子/齿轮/电子） */
-  metronomeTimbre: MetronomeTimbre
-  /** adj1173：写入前校验取值，脏值忽略、不落盘 */
-  setMetronomeTimbre: (t: MetronomeTimbre) => void
   /**
    * adj905q（用户规格见 `docs/PREVIEW-DEBUG-BOUNDARIES.md`）：**预览可视调试**开关。
    * 开启后在预览里叠加「时值格 / 墨迹 / 段层」三套边界虚线（几何来自引擎
@@ -978,23 +708,11 @@ export function enabledVoicesOf(
   return Object.prototype.hasOwnProperty.call(map, libId) ? (map[libId] ?? []) : DEFAULT_HQ_ENABLED
 }
 
-export const useUiStore = create<UiState>()((set, get) => ({
+export const useUiStore = create<UiState>()((set) => ({
   modal: null,
   playbackStartId: null,
   playbackTick: 0,
   showGuides: loadBool(SHOW_GUIDES_KEY, true),
-  // adj1065：动态谱相机位（L3 会话级，不落盘）
-  dynamicCamera: { on: false, aspect: '9x16', range: null, mode: '3min', instrument: null },
-  // adj1073：卡片模板（L1，落盘；未知 id 回退 brand）
-  dynamicCardStyle: loadDynamicCardStyle(initialCardTemplates),
-  // adj1176：用户模板库（L1，落盘；旧的单槽自定义已在上面的 load 里迁移）
-  cardTemplates: initialCardTemplates,
-  // adj1089：平移方式（L1，落盘；脏值/读失败回退 beat ⇒ adj1094 起默认按拍）
-  panMode: loadPanMode(),
-  // adj1094：行末提前平移量（L1，落盘；默认半拍）
-  rowLeadBeats: loadRowLeadBeats(),
-  // adj1173：节拍器音色（L1，落盘；缺省木鱼）
-  metronomeTimbre: loadMetronomeTimbre(),
   // adj905q：预览可视调试 —— **L3 会话级**，刻意不读 localStorage（重开即恢复默认关）
   debugBounds: false,
   // adj965d（EP-13）：预览区 Alt 手势默认调**背景层**（L3 会话级，不落盘）
@@ -1080,134 +798,6 @@ export const useUiStore = create<UiState>()((set, get) => ({
   bumpPlaybackTick: () => set((s) => ({ playbackTick: s.playbackTick + 1 })),
   // adj905q：预览可视调试开关（L3 会话级）——**不落盘**，重开应用即回到默认关
   setDebugBounds: (b) => set({ debugBounds: b }),
-  // adj1065：动态谱相机位开关/比例/范围/时长（L3 会话级，不落盘）
-  setDynamicCamera: (patch) => set((s) => ({ dynamicCamera: { ...s.dynamicCamera, ...patch } })),
-  // adj1165：两个入口共用同一相机位；参数只决定本次默认值
-  openDynamicCamera: (opts) =>
-    set((s) => ({
-      dynamicCamera: {
-        ...s.dynamicCamera,
-        on: true,
-        mode: '3min',
-        ...(opts?.range === undefined ? {} : { range: opts.range }),
-        ...(opts?.instrument === undefined ? {} : { instrument: opts.instrument }),
-      },
-    })),
-  // adj1073 / adj1176：卡片模板是 L1，落盘；只接受"内置或模板库里有的 id"
-  setDynamicCardStyle: (id) => {
-    if (!hasCardStyle(id, get().cardTemplates)) return
-    try {
-      localStorage.setItem(DYNAMIC_CARD_STYLE_KEY, id)
-    } catch {
-      // 忽略隐私模式/配额异常
-    }
-    set({ dynamicCardStyle: id })
-  },
-  /**
-   * adj1176：保存（新增或更新）一套用户模板。
-   *
-   * `style.id` 为空 = 新建（生成 `tpl-…`）；有 id = 覆盖那一套（对话框里"保存"）。
-   * 返回最终 id + **是否真的写进本机存储**（配额/隐私模式失败时内存仍保留，界面要如实提示）。
-   */
-  saveCardTemplate: (style) => {
-    const wantsNew = style.id === undefined || style.id === null || style.id === ''
-    const normalized = normalizeCardStyle(style)
-    const s = get()
-    const existing = wantsNew ? undefined : s.cardTemplates.find((t) => t.id === normalized.id)
-    const id = wantsNew ? newCardTemplateId(s.cardTemplates) : normalized.id
-    const entry: CardStyle = {
-      ...normalized,
-      id,
-      name: (normalized.name || '我的卡片').slice(0, 40),
-      description: normalized.description || '用户自定义卡片',
-    }
-    const items = existing === undefined
-      ? [...s.cardTemplates, entry]
-      : s.cardTemplates.map((t) => (t.id === id ? entry : t))
-    const persisted = saveCardTemplates(items)
-    // 换过图（背景图或印章图）：旧图不再被任何模板引用就回收（同名同图仍被引用时不能删）
-    const stillUsed = new Set(items.flatMap((t) => styleImages(t)))
-    for (const oldImage of styleImages(existing)) {
-      if (!stillUsed.has(oldImage) && !legacyCustomUsesImage(oldImage)) {
-        void deleteCardImage(oldImage)
-      }
-    }
-    set({ cardTemplates: items })
-    return { id, persisted }
-  },
-  renameCardTemplate: (id, name) => {
-    const trimmed = name.trim().slice(0, 40)
-    if (trimmed === '') return
-    const s = get()
-    if (!s.cardTemplates.some((t) => t.id === id)) return
-    const items = s.cardTemplates.map((t) => (t.id === id ? { ...t, name: trimmed } : t))
-    saveCardTemplates(items)
-    set({ cardTemplates: items })
-  },
-  deleteCardTemplate: (id) => {
-    const s = get()
-    const hit = s.cardTemplates.find((t) => t.id === id)
-    if (hit === undefined) return
-    const items = s.cardTemplates.filter((t) => t.id !== id)
-    saveCardTemplates(items)
-    const stillUsed = new Set(items.flatMap((t) => styleImages(t)))
-    for (const image of styleImages(hit)) {
-      if (!stillUsed.has(image) && !legacyCustomUsesImage(image)) void deleteCardImage(image)
-    }
-    set({ cardTemplates: items })
-    if (s.dynamicCardStyle === id) {
-      try {
-        localStorage.setItem(DYNAMIC_CARD_STYLE_KEY, 'brand')
-      } catch {
-        // 忽略
-      }
-      set({ dynamicCardStyle: 'brand' })
-    }
-  },
-  /**
-   * adj1089：平移方式（L1）。
-   *
-   * **写入前校验**：只允许 `PAN_MODES` 里的三种。脏值不落盘、也不改内存——
-   * 若把脏值写进去，下次启动 `loadPanMode` 会回退 `follow`，用户会以为"设置点了没生效"。
-   */
-  setPanMode: (m) => {
-    if (!PAN_MODES.includes(m)) return
-    try {
-      localStorage.setItem(PAN_MODE_KEY, m)
-    } catch {
-      /* 忽略隐私模式/配额异常 */
-    }
-    set({ panMode: m })
-  },
-  /**
-   * adj1094：行末提前平移量（L1，单位：拍）。
-   *
-   * **写入前钳制**：`[0, ROW_LEAD_BEATS_MAX]`、非有限值直接忽略（脏值不落盘、不改内存，
-   * 否则下次启动会回退默认，用户以为"设置没生效"）。允许 0.5 的步进由界面负责，这里不取整。
-   */
-  setRowLeadBeats: (beats) => {
-    if (!Number.isFinite(beats)) return
-    const v = Math.min(ROW_LEAD_BEATS_MAX, Math.max(0, beats))
-    try {
-      localStorage.setItem(ROW_LEAD_BEATS_KEY, String(v))
-    } catch {
-      /* 忽略 */
-    }
-    set({ rowLeadBeats: v })
-  },
-  /**
-   * adj1173：节拍器音色（L1）。
-   * 写入前校验：只接受 `METRONOME_TIMBRES` 里的值，脏值不落盘、不改内存。
-   */
-  setMetronomeTimbre: (t) => {
-    if (!METRONOME_TIMBRES.includes(t)) return
-    try {
-      localStorage.setItem(METRONOME_TIMBRE_KEY, t)
-    } catch {
-      /* 忽略隐私模式/配额异常 */
-    }
-    set({ metronomeTimbre: t })
-  },
   // adj965d：Alt 手势调哪一层（L3 会话级）——**不落盘**；默认背景层：
   // 需要摆位置的通常是垫进来的那张背景图（水印多为居中一个）
   setOverlayEditLayer: (l) => set({ overlayEditLayer: l }),

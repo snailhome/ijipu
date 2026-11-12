@@ -25,13 +25,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { buildPlaySequence, layoutScore, noteIdStringOf, resolvePracticeRange, slicePlaySequenceByRange, flattenScoreNotes, spotOfIn, hasNoteId } from '@ijipu/engine'
 import { useDocStore } from '../store/docStore'
 import { useUiStore } from '../store/uiStore'
-import { useSyncStore } from '../store/syncStore'
-import { flushSyncAutoSave } from '../store/syncExtras'
 import { docKeyOf, loadMarks, saveMarks } from '../store/practiceMarks'
 // adj1101：下拉项「段1 [ 33:1 - 34:2 ]」的文本（纯函数，smoke 直接断言）
 import { markOptionText } from './practiceMarkText'
-import { playbackCopy, dynamicVideoCopy } from '../brand/copy'
-import { canGenerateVideo, canUseDynamicVideo } from '../export/video/capability'
+import { playbackCopy } from '../brand/copy'
 
 
 export function PracticeMarkBar(): React.JSX.Element {
@@ -43,15 +40,6 @@ export function PracticeMarkBar(): React.JSX.Element {
   const selStop = useUiStore((s) => s.practiceSelStop)
   const setMarks = useUiStore((s) => s.setPracticeMarks)
   const setMarkId = useUiStore((s) => s.setPracticeMarkId)
-  // adj1065：整段动态谱 = 预览区相机位（关掉试听弹窗，否则挡住预览区）
-  const closeModal = useUiStore((s) => s.closeModal)
-  const openDynamicCamera = useUiStore((s) => s.openDynamicCamera)
-  /** adj1165：试听里选的具体音色也作为相机位的默认参数带过去（自动时为 null） */
-  const playbackHqVoice = useUiStore((s) => s.playbackHqVoice)
-  // adj1077：视频生成只开放给桌面壳；这里保留按钮但禁用，避免网站/插件“点了没反应”
-  // adj1078：网站/插件连相机位都不显示 ⇒ 整个按钮不渲染；桌面壳才出现
-  const dynamicVideoEnabled = canUseDynamicVideo()
-  const videoExportEnabled = canGenerateVideo()
   const setPass = useUiStore((s) => s.setPracticeMarkPass)
   const setSel = useUiStore((s) => s.setPracticeSel)
   const addMark = useUiStore((s) => s.addPracticeMark)
@@ -69,51 +57,21 @@ export function PracticeMarkBar(): React.JSX.Element {
 
   /** 文档身份（换文档 ⇒ 换一批标记）；对话框打开时从缓存载入 */
   const docKey = useMemo(() => docKeyOf({ fileName, binding, nativePath }), [fileName, binding, nativePath])
-  const syncDoc = useSyncStore((s) => s.doc)
-  const hasDoc = syncDoc !== null
-  const docMarks = syncDoc?.marks
-  const docMarkId = syncDoc?.markId
-  /** adj1155：数据没载完前不要回写（否则初始 `[]` 会把盘上的段删掉） */
   const [ready, setReady] = useState(false)
-  /**
-   * adj1155：优先用 sidecar 里的练习段（用户选方案 B：练习段跟着 `xxx.jps.sync.json` 走）；
-   * 旧 sidecar 没有 `marks` 字段时回退 localStorage，并顺手迁移到 sidecar。
-   */
   useEffect(() => {
     setReady(false)
-    if (docMarks !== undefined) {
-      setMarks(docMarks)
-      setMarkId(docMarkId !== undefined && docMarks.some((m) => m.id === docMarkId) ? docMarkId : '')
-      setReady(true)
-      return
-    }
-    const fromLocal = loadMarks(docKey)
-    setMarks(fromLocal)
-    // 有 sidecar（doc 已加载）但还没有 marks 字段 ⇒ 把本机缓存里的段迁进去
-    if (hasDoc) {
-      useSyncStore.getState().setExtras({ marks: fromLocal, markId: '' })
-      void flushSyncAutoSave()
-    }
+    setMarks(loadMarks(docKey))
+    setMarkId('')
     setReady(true)
-  }, [docKey, docMarks, docMarkId, hasDoc, setMarks, setMarkId])
-  /** 标记一变就落盘（本机缓存；空列表会删键）；sidecar 由自动保存负责 */
+  }, [docKey, setMarks, setMarkId])
+  /** 标记一变就落盘（本机缓存；空列表会删键） */
   useEffect(() => {
     if (!ready) return
     saveMarks(docKey, marks)
   }, [docKey, marks, ready])
 
-  /** 把当前 uiStore 的练习段/选中段镜像进 syncStore.doc（自动保存据此写 sidecar） */
-  const mirrorMarks = (patch?: { markId?: string; range?: null | { startId: string; endId: string; pass?: number } }) => {
-    const st = useUiStore.getState()
-    useSyncStore.getState().setExtras({
-      marks: st.practiceMarks,
-      markId: patch?.markId ?? st.practiceMarkId,
-      ...(patch?.range !== undefined ? { range: patch.range } : {}),
-    })
-  }
   const chooseMark = (id: string) => {
     setMarkId(id)
-    mirrorMarks({ markId: id })
   }
 
   const setPracticeRangeIds = useUiStore((s) => s.setPracticeRangeIds)
@@ -273,30 +231,6 @@ export function PracticeMarkBar(): React.JSX.Element {
               </option>
             ))}
           </select>
-          {dynamicVideoEnabled && (
-            <button
-              className="btn practice-btn practice-export-dyn"
-              onClick={() => {
-                const m = marks.find((x) => x.id === markId)
-                if (!m) return
-                // adj1065/adj1165：这一段交给预览区相机位；试听弹窗先关，才能看到取景
-                const range = { startId: m.startId, endId: m.endId, ...(m.pass !== undefined ? { pass: m.pass } : {}) }
-                openDynamicCamera({ range, instrument: playbackHqVoice })
-                // adj1155：相机导出段也写进 sidecar（刷新后仍是这一段）
-                mirrorMarks({ range })
-                closeModal()
-              }}
-              disabled={!videoExportEnabled || !marks.some((x) => x.id === markId)}
-              title={
-                videoExportEnabled
-                  ? '把当前标记段导出成动态谱视频（一遍，不含循环）'
-                  : dynamicVideoCopy.desktopOnly
-              }
-              aria-label="导出这段动态谱"
-            >
-              <span aria-hidden="true">⇩</span>
-            </button>
-          )}
           <button
             className={`btn practice-btn${selStart ? ' is-on' : ''}`}
             onClick={() => setSel('start', activeNoteId)}
@@ -330,11 +264,6 @@ export function PracticeMarkBar(): React.JSX.Element {
             onClick={() => {
               const m = addMark()
               if (!m) showNotice(playbackCopy.practiceNeedBoth, 'warn')
-              else {
-                // adj1155（用户口径）：添加练习段时**立刻**保存进 sidecar
-                mirrorMarks()
-                void flushSyncAutoSave()
-              }
             }}
             disabled={!canAdd}
             title={playbackCopy.practiceAddHint}
@@ -346,9 +275,6 @@ export function PracticeMarkBar(): React.JSX.Element {
             className="btn practice-btn"
             onClick={() => {
               deleteMark(markId)
-              // adj1155：删除也立刻保存（清空时写 `marks: []`，不能靠"缺字段"被旧文件复活）
-              mirrorMarks()
-              void flushSyncAutoSave()
             }}
             disabled={markId === ''}
             title={playbackCopy.practiceDeleteHint}
@@ -371,7 +297,6 @@ export function PracticeMarkBar(): React.JSX.Element {
               value={String(cur.pass ?? 0)}
               onChange={(e) => {
                 setPass(cur.id, Number(e.target.value))
-                mirrorMarks()
               }}
               title={playbackCopy.practicePassTitle}
             >

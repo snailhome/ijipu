@@ -20,7 +20,6 @@ import { runCli, EXIT, flattenScoreNotes, type CliIo } from '../packages/ijipu-c
 import { createPrefsFacade, importLegacyPrefs, mergedKeys, prefsValuesOf, PREFS_PREFIX } from '../src/store/prefsCore'
 // adj1085 P1：zip 与卡片图引用（设置导出导入 / 大图外置）
 import { readZip, writeZip } from '../src/export/zip'
-import { blobNameOf, dataUrlToBytes, isBlobRef } from '../src/store/cardImageStore'
 import { referencedBlobNamesForTest, exportSettingsZip, importSettingsZip } from '../src/store/settingsArchive'
 // adj942：**内嵌入口**（`ijipu.exe` 里跑的就是这一份）——这里真跑一遍它的接线 ✓
 import { runEmbeddedCli, type EmbedHost } from '../packages/ijipu-cli/src/embedEntry'
@@ -2021,26 +2020,8 @@ console.log('\n— adj1085 P1 大图外置 / 设置 zip —')
     `entries=${[...back.keys()].join(',')}`,
   )
 
-  const ref = 'ijipu-blob:abcd0123.png'
-  check(
-    'adj1085 P1 引用只认 `ijipu-blob:<hex>.<ext>`，且能取出文件名',
-    isBlobRef(ref) && blobNameOf(ref) === 'abcd0123.png' && !isBlobRef('data:image/png;base64,AA=='),
-  )
-
-  // 1x1 PNG 的 data URL：解码回 8 字节头（PNG 签名）
-  const png = 'data:image/png;base64,iVBORw0KGgo='
-  const parsed = dataUrlToBytes(png)
-  check(
-    'adj1085 P1 data URL 能解回二进制（旧内联图迁移用）',
-    parsed !== null && parsed.mime === 'image/png' && parsed.bytes.length === 8 && parsed.bytes[1] === 0x50,
-    JSON.stringify(parsed?.bytes.slice(0, 4)),
-  )
-
-  const names = referencedBlobNamesForTest({
-    'ijipu.dynamicCardStyleCustom': '{"backgroundImage":"ijipu-blob:aa11.png"}',
-    'ijipu.other': 'not a ref',
-  })
-  check('adj1085 P1 导出时能列出配置里引用的附件（去重）', names.length === 1 && names[0] === 'aa11.png', names.join(','))
+  const zipOnly = writeZip([{ name: 'settings.json', data: enc.encode('{"values":{"ijipu.theme":"ink"}}') }])
+  check('adj1085 P1 设置包只剩 settings.json（卡片附件已迁到爱出片）', readZip(zipOnly).size === 1, '')
 
   // 网页/插件路径：没有桌面 prefs 时，导出/导入走 localStorage（这里用内存桩模拟）
   const mem = new Map<string, string>()

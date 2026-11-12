@@ -43,9 +43,7 @@ import { useDocStore } from '../store/docStore'
 import { useUiStore, enabledVoicesOf } from '../store/uiStore'
 // adj729：嵌入版里音源优先取**插件目录**那份（宿主给的 URL；随文库一起走）
 import { hostBankUrl } from '../store/hostBridge'
-import { linearSyncCopy, playbackCopy, syncCopy } from '../brand/copy'
-// adj1121：试听栏的「对拍…」入口走与动态谱视频同一个能力闸门（桌面专属 / dev 放开）
-import { canUseDynamicVideo } from '../export/video/capability'
+import { playbackCopy } from '../brand/copy'
 import { createHqCache, prefetchHqLibraryProgress, resolveHqBank } from '../playback/spessaCache'
 // adj1011：`resolveActiveLibrary` = "当前用哪个库"的唯一判据（与导出/面板同源）
 import { SpessaSynthBackend, resolveActiveLibrary, hasBuiltinBank, firstEnabledInstrumentRef, enabledInstrumentRefs, hqBankFailureText } from '../playback/spessaSynthBackend'
@@ -95,7 +93,6 @@ export function PlaybackDialog({ inline = false }: { inline?: boolean } = {}) {
   const setPlaybackStart = useUiStore((s) => s.setPlaybackStart)
   const playbackTick = useUiStore((s) => s.playbackTick)
   // adj1121：试听栏的「对拍…」入口（桌面专属；试听是底栏面板，关掉对拍台它还在）
-  const openModal = useUiStore((s) => s.openModal)
   // adj332：已启用音色集合——试听音色下拉只列这些（避免 128 项全列）
   const playbackHqEnabled = useUiStore(enabledVoicesOf)
   /** adj1030：民乐页签勾选的名字 —— 底栏音色列表要把它们并进来，否则"勾了却看不到" */
@@ -909,31 +906,7 @@ export function PlaybackDialog({ inline = false }: { inline?: boolean } = {}) {
               <ToolIcon name="stop" size={14} />
               停止(S)
             </button>
-            {/* adj1121（用户 2026-10-24）：「对拍」放进**试听栏**（对拍本来就是边听边对的活）。
-                试听是底栏面板、不是模态，所以关掉对拍台之后它还在这儿。
-                桌面专属（与动态谱视频同一个能力闸门）；网站/插件不显示入口。 */}
-            {canUseDynamicVideo() && (
-              <button
-                className="btn playback-btn"
-                onClick={() => openModal('sync')}
-                title={syncCopy.title}
-              >
-                {/* 没有"节拍器/对拍"这类图标（`public/icons/` 里没有），宁可不放图标，
-                    也不借用齿轮（`settings`）——那会让人以为点开的是设置 */}
-                {syncCopy.syncOpen}
-              </button>
-            )}
-            {/* adj1264：连续动态谱（单行横滚）对拍台——与动态谱视频同一道桌面闸门；
-                方案 §八 P8：入口放试听栏 + 导出面板各一条 */}
-            {canUseDynamicVideo() && (
-              <button
-                className="btn playback-btn"
-                onClick={() => openModal('linearSync')}
-                title={linearSyncCopy.title}
-              >
-                {linearSyncCopy.title}
-              </button>
-            )}
+            {/* 对拍/连续谱已迁到爱出片（iJipu CP），应用内不再提供入口 */}
           </div>
         </div>
 

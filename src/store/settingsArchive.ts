@@ -14,33 +14,20 @@
  */
 import { readZip, writeZip, type ZipEntry } from '../export/zip'
 import { prefsInstalled, prefsSnapshotValues, mergePrefs, flushPrefsNow } from './prefs'
-import {
-  BLOB_REF_PREFIX,
-  readCardImageBytes,
-  writeCardImageBytes,
-} from './cardImageStore'
 
 const ENC = new TextEncoder()
 const DEC = new TextDecoder()
 
-const REF_RE = /ijipu-blob:([a-f0-9]+\.(?:png|jpg|jpeg|webp|gif))/gi
-const FILE_RE = /^files\/([a-f0-9]+\.(?:png|jpg|jpeg|webp|gif))$/i
-
 const MAX_JSON_BYTES = 5 * 1024 * 1024
-const MAX_FILE_BYTES = 20 * 1024 * 1024
 
 export interface ArchiveStats {
   keys: number
   files: number
 }
 
-/** 收集一份配置里引用到的附件名 */
+/** 收集一份配置里引用到的附件名（卡片功能已迁到爱出片，当前无附件） */
 function referencedBlobs(values: Record<string, string>): string[] {
-  const out = new Set<string>()
-  for (const v of Object.values(values)) {
-    for (const m of v.matchAll(REF_RE)) out.add(m[1])
-  }
-  return [...out]
+  return Object.keys(values).slice(0, 0)
 }
 
 /** 网页/插件：直接从 localStorage 读 `ijipu.*`（桌面壳由 prefs 快照提供） */
@@ -84,13 +71,6 @@ export async function exportSettingsZip(): Promise<Uint8Array> {
   await flushPrefsNow()
   const values = prefsInstalled() ? prefsSnapshotValues() : readLocalPrefs()
   const files: ZipEntry[] = []
-  let count = 0
-  for (const name of referencedBlobs(values)) {
-    const got = await readCardImageBytes(BLOB_REF_PREFIX + name)
-    if (got === null) continue
-    files.push({ name: `files/${got.name}`, data: got.bytes })
-    count += 1
-  }
   files.unshift({
     name: 'settings.json',
     data: ENC.encode(
@@ -113,80 +93,12 @@ export async function exportSettingsZip(): Promise<Uint8Array> {
         '爱记谱 iJipu 本机配置备份',
         '',
         '导入：应用 → 设置（全局）→ 本机配置 →「导入设置…」',
-        'settings.json 是 ijipu.* 键值；files/ 是卡片背景图等附件，不要改名。',
+        'settings.json 是 ijipu.* 键值。',
         '导入只合并同名键，不删除本机独有的设置。',
       ].join('\n'),
     ),
   })
   return writeZip(files)
-}
-
-/** 附件引用在导入后仍能读到吗（读不到就清掉那张图） */
-async function dropMissingCardImage(values: Record<string, string>): Promise<boolean> {
-  const isMissing = async (bg: unknown): Promise<boolean> =>
-    typeof bg === 'string' && bg.startsWith(BLOB_REF_PREFIX) && (await readCardImageBytes(bg)) === null
-
-  let changed = false
-
-  // adj1074 的旧单槽自定义卡片
-  const legacyKey = 'ijipu.dynamicCardStyleCustom'
-  const legacyRaw = values[legacyKey]
-  if (typeof legacyRaw === 'string') {
-    try {
-      const parsed = JSON.parse(legacyRaw) as { backgroundImage?: unknown } & Record<string, unknown>
-      if (await isMissing(parsed.backgroundImage)) {
-        values[legacyKey] = JSON.stringify({ ...parsed, backgroundImage: null })
-        changed = true
-      }
-    } catch {
-      /* 旧键坏了：忽略（不因为一条坏数据让整个导入失败） */
-    }
-  }
-
-  // adj1176 的模板库（`{version, items}` 或裸数组都认）
-  const libKey = 'ijipu.cardTemplates'
-  const libRaw = values[libKey]
-  if (typeof libRaw === 'string') {
-    try {
-      const parsed = JSON.parse(libRaw) as unknown
-      const items = Array.isArray(parsed)
-        ? parsed
-        : parsed !== null && typeof parsed === 'object' && Array.isArray((parsed as { items?: unknown }).items)
-          ? ((parsed as { items: unknown[] }).items as unknown[])
-          : []
-      let touched = false
-      const next: unknown[] = []
-      for (const v of items) {
-        if (v === null || typeof v !== 'object') continue
-        const entry = v as { backgroundImage?: unknown; seal?: unknown } & Record<string, unknown>
-        let fixed: Record<string, unknown> = entry
-        let touchedEntry = false
-        if (await isMissing(entry.backgroundImage)) {
-          fixed = { ...fixed, backgroundImage: null }
-          touchedEntry = true
-        }
-        // adj1178：印章图片也要检查（缺图就清空图、保留文字印章）
-        const seal = entry.seal
-        if (seal !== null && typeof seal === 'object' && !Array.isArray(seal)) {
-          const s = seal as { image?: unknown } & Record<string, unknown>
-          if (await isMissing(s.image)) {
-            fixed = { ...fixed, seal: { ...s, image: null } }
-            touchedEntry = true
-          }
-        }
-        if (touchedEntry) touched = true
-        next.push(fixed)
-      }
-      if (touched) {
-        const wrapped = Array.isArray(parsed) ? next : { ...(parsed as Record<string, unknown>), items: next }
-        values[libKey] = JSON.stringify(wrapped)
-        changed = true
-      }
-    } catch {
-      /* 库坏了：忽略 */
-    }
-  }
-  return changed
 }
 
 /**
@@ -218,16 +130,9 @@ export async function importSettingsZip(zip: Uint8Array): Promise<ArchiveStats &
   }
   if (Object.keys(values).length === 0) throw new Error('设置包里没有可导入的 ijipu.* 项')
 
-  let files = 0
-  for (const [path, data] of entries) {
-    const m = FILE_RE.exec(path)
-    if (!m) continue
-    if (data.byteLength > MAX_FILE_BYTES) throw new Error(`附件 ${path} 超过 20 MB，已拒绝导入`)
-    await writeCardImageBytes(m[1], data)
-    files += 1
-  }
-
-  const droppedImage = await dropMissingCardImage(values)
+  const files = 0
+  // 卡片附件已随视频功能迁到爱出片；应用设置包里只有 settings.json
+  const droppedImage = false
   // 桌面壳走 prefs 快照（会落 settings.json）；网页/插件写回 localStorage（插件由宿主桥落 data.json）
   const merged = prefsInstalled() ? await mergePrefs(values) : writeLocalPrefs(values)
   await flushPrefsNow()

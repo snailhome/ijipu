@@ -23,7 +23,7 @@ import { clampEditorFontSize, EDITOR_FONT_OPTIONS, EDITOR_FONT_SIZE_RANGE, local
 // adj629x：恢复默认的草稿**整份替换**（纯函数，见该文件头的踩坑说明）
 import { draftAfterReset } from './pageConfigReset'
 import { THEMES, type ThemeMode } from '../brand/themes'
-import { uiCopy, numCopy, cliPathCopy, dynamicVideoCopy } from '../brand/copy'
+import { uiCopy, numCopy, cliPathCopy } from '../brand/copy'
 // adj944：桌面版判定（网页版没有读写 PATH 的能力 ⇒ 界面如实禁用并说明）
 // adj954：环境判定统一走 brand/env.ts（原 brand/platform.ts 已合并删除）
 import { isDesktopShell } from '../brand/env'
@@ -33,7 +33,6 @@ import { PATH_MAX_CHARS, type CliPathStatus } from '../../packages/ijipu-cli/src
 import { SoundBankPanel } from './SoundBankPanel'
 import type { PageConfig } from '@ijipu/engine'
 // adj1089：平移方式的取值域（与 uiStore / 出片同一份）
-import type { PanMode } from '@ijipu/engine'
 // adj426：主题按钮用 ToolIcon（与顶栏三状态按钮共用图标：自动主题/浅色主题/深色主题）
 import { ToolIcon } from '../ui/ToolIcon'
 // adj526：数值"按住上下拖"+`−`/`+` 步进（手机端没有原生上下小按钮，靠这两条路径改数）
@@ -211,11 +210,7 @@ export function PageConfigDialog({
   const fontOverride = useUiStore((s) => s.fontOverride)
   const setFontOverride = useUiStore((s) => s.setFontOverride)
   // adj1089：动态视频/试听的行中平移方式（L1 本机偏好，默认跟随）
-  const panMode = useUiStore((s) => s.panMode)
-  const setPanMode = useUiStore((s) => s.setPanMode)
-  // adj1094：行末提前平移量（L1，单位拍，默认 0.5）
-  const rowLeadBeats = useUiStore((s) => s.rowLeadBeats)
-  const setRowLeadBeats = useUiStore((s) => s.setRowLeadBeats)
+
 
   const [draft, setDraft] = useState<PageConfig>({ ...pageConfig })
   // adj603：默认子页签取本 section 的第一个（全局 → 版面、谱面 → 布局）
@@ -696,29 +691,6 @@ export function PageConfigDialog({
         // adj1089：上面再挂一组"本机偏好"——动态视频/试听的平移方式（L1，随「导出设置」一起备份）
         return (
           <>
-            <div className="pcfg-group-title">{dynamicVideoCopy.panModeGroup}</div>
-            <Row label={dynamicVideoCopy.panModeLabel}>
-              <select value={panMode} onChange={(e) => setPanMode(e.target.value as PanMode)}>
-                <option value="follow">{dynamicVideoCopy.panModeFollow}</option>
-                <option value="beat">{dynamicVideoCopy.panModeBeat}</option>
-                <option value="bar">{dynamicVideoCopy.panModeBar}</option>
-              </select>
-            </Row>
-            <div className="ijipu-form-hint">{dynamicVideoCopy.panModeHint}</div>
-            {/* adj1094（用户要求）：行末提前平移量——三种模式共用，默认半拍、最多 2 拍 */}
-            <Row label={dynamicVideoCopy.rowLeadLabel}>
-              <select
-                value={String(rowLeadBeats)}
-                onChange={(e) => setRowLeadBeats(Number(e.target.value))}
-              >
-                <option value="0">{dynamicVideoCopy.rowLead0}</option>
-                <option value="0.5">{dynamicVideoCopy.rowLead05}</option>
-                <option value="1">{dynamicVideoCopy.rowLead1}</option>
-                <option value="1.5">{dynamicVideoCopy.rowLead15}</option>
-                <option value="2">{dynamicVideoCopy.rowLead2}</option>
-              </select>
-            </Row>
-            <div className="ijipu-form-hint">{dynamicVideoCopy.rowLeadHint}</div>
             <LocalDataPanel />
           </>
         )

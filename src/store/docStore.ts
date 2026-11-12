@@ -42,7 +42,6 @@ import { normalizePastedSource } from './importSource'
 // adj538：桌面壳的「外部打开」（双击 .jps）——纯网页下这些函数一律惰性/空转，见该模块注释
 import { pickPrimary, pickJpsFile, readNativeProbe, saveJpsFileNative, writeExternalFile, type ExternalFile } from './externalOpen'
 // adj1158：另存为成功后把内存 sync doc「接管」到新路径（不清掉锚点/音量）
-import { adoptSyncDocOwner } from './syncOwner'
 // adj540：工作区目录（Android/移动端"选一个文件夹当工作区"，纯网页，不需要壳）
 import {
   createFile,
@@ -1464,8 +1463,6 @@ export const useDocStore = create<DocState>()((set, get) => ({
       // adj363：写入期间用户可能继续输入，内容已变则保留未保存标记
       const tUi = performance.now()
       set({ fileHandle: handle, fileName: name, dirty: get().code !== code, nativePath: null, binding: null })
-      // adj1158：网页 FSA 另存为同样接管 sync doc（同一份谱换了文件名，别清掉锚点）
-      adoptSyncDocOwner({ fileName: name, nativePath: null, binding: null })
       phaseLog.tail('ui', performance.now() - tUi)
       reportSaved(t0, phaseLog, name)
       return true
@@ -1940,8 +1937,6 @@ async function saveFileAsNative(): Promise<boolean> {
     // 保存对话框期间用户可能继续输入：内容变了就保留未保存标记
     dirty: useDocStore.getState().code !== code,
   })
-  // 同一份谱换了路径：sync doc（锚点/音量/练习段）跟着接管，别被"换文件清理"清掉
-  adoptSyncDocOwner({ fileName: name, nativePath: path, binding: null })
   ui.showNotice(`${uiCopy.saveOk} ${name}`, 'ok')
   console.info(`[iJipu] 原生另存为：${path}`)
   return true

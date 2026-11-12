@@ -21,8 +21,6 @@ import { seedQueryFromSelection } from './editor/findReplace'
 import { PreviewPane } from './preview/PreviewPane'
 import { useDocStore } from './store/docStore'
 import { useUiStore } from './store/uiStore'
-// adj1155：打开文件时读 sidecar extras，并在改动时自动写回（练习段/相机段/音量不再刷新即丢）
-import { useSyncSidecarExtras } from './store/syncExtras'
 // adj538：桌面壳「外部打开」（双击 .jps）——拉取待打开队列 + 监听后续打开请求
 import { drainExternalFiles, hasShell, onExternalOpen } from './store/externalOpen'
 // adj900：从 URL 文本串导入源码（官网首页「在应用里试听这段」带过来的）
@@ -57,13 +55,6 @@ const VoicePickerDialog = lazy(() => import('./dialogs/VoicePickerDialog').then(
 const FileDiffDialog = lazy(() => import('./dialogs/FileDiffDialog').then((m) => ({ default: m.FileDiffDialog })))
 // adj963（用户要求）：「保存到工作区」专用对话框（插件嵌入版的保存主入口）
 const SaveAsDialog = lazy(() => import('./dialogs/SaveAsDialog').then((m) => ({ default: m.SaveAsDialog })))
-const CardStyleDialog = lazy(() => import('./dialogs/CardStyleDialog').then((m) => ({ default: m.CardStyleDialog })))
-// adj1119：对拍台（应用内独立台面；相机位「对拍…」触发）
-const SyncDialog = lazy(() => import('./dialogs/SyncDialog').then((m) => ({ default: m.SyncDialog })))
-// adj1264：连续动态谱（单行横滚）对拍台——试听栏与导出面板各一条入口
-const LinearSyncDialog = lazy(() =>
-  import('./dialogs/LinearSyncDialog').then((m) => ({ default: m.LinearSyncDialog })),
-)
 // adj1195：导出乐谱包（zip）——乐谱库上传用；三端轻功能
 const ScorePackageDialog = lazy(() =>
   import('./dialogs/ScorePackageDialog').then((m) => ({ default: m.ScorePackageDialog })),
@@ -78,8 +69,7 @@ function App() {
   const themeMode = useUiStore((s) => s.themeMode)
   // adj1000：深色预览柔化档位（挂到 <html data-soften>，由 styles/theme.css 消费）
   const previewSoften = useUiStore((s) => s.previewSoften)
-  // adj1155：sidecar extras（练习段/相机段/音量）—打开时读、改动时自动写回
-  useSyncSidecarExtras()
+  // adj1155：sidecar extras 已迁到爱出片；应用只保留练习段（practiceMarks）
   const systemLight = useUiStore((s) => s.systemLight)
   const setSystemLight = useUiStore((s) => s.setSystemLight)
   const splitPct = useUiStore((s) => s.splitPct)
@@ -704,11 +694,8 @@ function App() {
       {modal === 'voicePicker' && <Suspense fallback={null}><VoicePickerDialog /></Suspense>}
       {modal === 'saveAs' && <Suspense fallback={null}><SaveAsDialog /></Suspense>}
       {/* adj1074：自定义卡片风格（相机位「自定义…」触发） */}
-      {modal === 'cardStyle' && <Suspense fallback={null}><CardStyleDialog /></Suspense>}
       {/* adj1119：对拍台（独立台面） */}
-      {modal === 'sync' && <Suspense fallback={null}><SyncDialog /></Suspense>}
       {/* adj1264：连续动态谱对拍台（横滚条带 + 背景视频 + 出片） */}
-      {modal === 'linearSync' && <Suspense fallback={null}><LinearSyncDialog /></Suspense>}
       {modal === 'package' && <Suspense fallback={null}><ScorePackageDialog /></Suspense>}
       {/* adj928：两栏源码差异框（确认条 → 「查看差异」；左本地 / 右外部，可直接做决定） */}
       {fileDiff && <Suspense fallback={null}><FileDiffDialog /></Suspense>}

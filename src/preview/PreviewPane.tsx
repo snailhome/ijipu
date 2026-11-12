@@ -79,7 +79,6 @@ import { firstEnabledInstrumentRef, enabledInstrumentRefs } from '../playback/sp
 import { measureFontMeta } from './fontMeta'
 import { brand, ui as uiColors } from '../brand/tokens'
 // adj1033：动态谱取景框（固定框 + 框内相机画面）
-import { DynamicFrameOverlay } from './DynamicFrameOverlay'
 
 /**
  * adj380：播放高亮元素「加/去」高亮——**除 class 外直接写 fill 属性**。
@@ -842,7 +841,6 @@ export function PreviewPane({ disableGuides = false }: { disableGuides?: boolean
   return (
     <div className="preview-pane" ref={paneRef}>
       {/* adj1033：动态谱取景框（固定在视口上，不随内容滚动；开关在 uiStore） */}
-      <DynamicFrameOverlay />
       <div className="pages" ref={containerRef} style={{ gap: PAGE_GAP_PX }} onClick={onClick} onDoubleClick={onDoubleClick} onPointerDown={onPointerDown}>
         {pagesHtml.map((svg, i) => {
           const page = layout.pages[i]
@@ -1294,16 +1292,16 @@ function PlayheadLayer({
   // adj1048：拍网格（跳跳球按**拍**落，不按音落）；相位由 beatPhaseOf 投票得出
   const beatMs = useDocStore((s) => s.playheadBeatMs)
   const beatBars = useDocStore((s) => s.playheadBarStartsMs)
-  // adj1089：试听跟随滚动读**同一个**平移方式（出片侧是 `renderer.ts` 读的同一个键）
-  const panMode = useUiStore((s) => s.panMode)
+  // 视频出片已迁到爱出片；试听跟随固定用 follow
+  const panMode: 'follow' | 'beat' | 'bar' = 'follow'
   // adj1089：`beat` 模式的拍网格起点（第一拍的时刻）
   const anchorMs = useDocStore((s) => s.playheadAnchorMs)
   // adj1089：同一拍 / 同一小节里只居中一次（逐帧都算就退化成连续跟随）
   const panKeyRef = useRef('')
   // adj1092：本页的段（按拍/小节平移要用它判断"行变了"与"新行的第一块"）
   const segsOfPage = useMemo(() => track.filter((s) => s.pageIndex === page.index), [track, page.index])
-  // adj1094：行末提前平移量（拍 → ms）；10:00 起默认半拍，最多 2 拍
-  const rowLeadBeats = useUiStore((s) => s.rowLeadBeats)
+  // adj1094：行末提前平移量（拍 → ms）；默认半拍
+  const rowLeadBeats = 0.5
   const rowLeadMs = Math.max(0, Math.min(2, rowLeadBeats)) * Math.max(0, beatMs)
   // adj1090：同一视觉行里只按"行"滚一次（首次播放 / 换行各一次）
   const rowKeyRef = useRef('')
