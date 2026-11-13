@@ -559,11 +559,10 @@ export function buildLinearStrip(
   }
 
   /**
-   * 高度**与歌词开关无关**（`adj1267`）：关掉歌词只少画字，谱带不缩——
-   * 条带在画布上的缩放是按 `height` 算的，一缩字号就跟着变（开关一按整幅画面跳一下）。
-   *
-   * adj1273：高度改成**按内容算**（谱表下沿 / 歌词下沿取大的），不再用"字号 × 1.9 + 歌词 × 1.4"估算——
+   * adj1273：高度按内容算（谱表下沿 / 歌词下沿取大的），不再用"字号 × 1.9 + 歌词 × 1.4"估算——
    * 估算值在"间距按比例放大"之后会把最后一行歌词裁掉几像素。
+   *
+   * 2026-11-14 用户改口：不显示歌词时，谱带高度要相应减小，不再为了"缩放不跳"保留歌词行高度。
    */
   let contentBottom = baselineY + noteSize * 0.7
   let staffBottomY = contentBottom
@@ -571,7 +570,12 @@ export function buildLinearStrip(
     contentBottom = Math.max(contentBottom, baselineY + m.staffBottom)
     staffBottomY = Math.max(staffBottomY, baselineY + m.staffBottom)
   }
-  contentBottom = Math.max(contentBottom, lyricBottom)
+  /**
+   * 高度按内容算；**不显示歌词时不再给歌词行留高度**（用户 2026-11-14：
+   * 「当不显示歌词时，谱带高度要相应减小」）。歌词行本身仍参与 `lyricBottom` 计算，
+   * 只是不并进最终高度。
+   */
+  contentBottom = withLyrics ? Math.max(contentBottom, lyricBottom) : contentBottom
   // adj1274：小节号现在画在**线下方**，条带底部要给它留出位置
   if (withBarNumbers) contentBottom = Math.max(contentBottom, staffBottomY + BAR_NUMBER_BOTTOM_GAP + barBoxH + 2)
   const height = Math.ceil(contentBottom + 4)
