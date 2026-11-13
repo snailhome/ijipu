@@ -24,7 +24,7 @@
     "preview:render": "vite build --config vite.smoke.config.ts && node dist-smoke/preview.cjs",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build",
+    "tauri:build": "node scripts/auto-version.mjs && tauri build",
     "check:installer": "node scripts/check-installer.mjs",
     "build:assets": "node scripts/build-assets-installer.mjs",
     "check:assets": "node scripts/check-assets-installer.mjs",
