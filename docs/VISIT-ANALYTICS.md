@@ -1,6 +1,6 @@
 # 访问统计（Cloudflare Pages Functions + D1）
 
-统计四个页面的 PV / UV：
+统计这些页面的 PV / UV：
 
 | 页面 | path |
 |---|---|
@@ -17,6 +17,26 @@
 首页页脚的 PV 读公开接口 `/api/pv`（只返回总 PV）；页面明细仍走 `/api/stats`。
 
 并按 `web` / `pwa` / `desktop` 区分来源。
+
+## 0. 乐谱库已迁到独立站点（统计仍复用主站这一套）
+
+2026-11-13 起，乐谱库从 `https://ijipu.pages.dev/scores/` 迁到独立站点
+`https://ijipu-sl.pages.dev/scores/`（仓库 `ijipu-sl`，Cloudflare Pages 项目 `ijipu-sl`）。
+主站只保留 301：`ijipu/public/_redirects` 把 `/scores/`、`/scores/*`、`/s/:short` 跳到新站。
+
+- **不另建一套统计**：新站是纯静态 Pages，没有 `functions/`；它的
+  `site/public/analytics.js` 跨域 `POST` 到主站 `https://ijipu.pages.dev/api/visit`，
+  继续写进主站 D1 的同一张 `visits` 表，`path` 仍是 `/scores/`、`/scores/<slug>/`。
+- **为什么跨域能成**：主站 `/api/visit` 的 CORS 是 `*`（含 `OPTIONS` 预检）；
+  Cloudflare Pages 的静态资源默认也带 `Access-Control-Allow-Origin: *`
+  （统计页跨域取 `/scores/index.json` 解析标题靠的就是这个默认头，给新站加 `_headers` 时别覆盖掉）。
+- **301 本身不计数**：301 响应没有页面、不跑脚本；用户落到新站才记一次，不会双计。
+- **已知的历史断点**：2026-11-05 有 10 首谱把短码从 `score-mw…` 改成 `score-xxxx`
+  （`score-mw1i3te2` → `score-xnjk` 等），改名前的 PV 留在旧 slug 行，改名后写新 slug；
+  “乐谱点击排名”会把同一首显示成两行（旧行没有标题）。这是改短码造成的，**不是**域名迁移造成的。
+  按用户 2026-11-14 口径：**不做**旧 slug 的 301，也**不合并**旧 slug 的统计行。
+- **什么时候才另建**：只有乐谱站要完全脱离主站时，才在 `ijipu-sl` 里加 Functions + D1；
+  现在不要建。
 
 ## 1. 建 D1 数据库
 
@@ -68,6 +88,9 @@ Authorization: Bearer <STATS_TOKEN>
 
 Pages 会自动部署仓库根目录的 `functions/api/*.js`。数据库绑定和 `STATS_TOKEN` 在控制台设置后重新部署一次生效。
 
+乐谱站（`ijipu-sl`）不需要再建 Functions 或 D1：它的 `site/public/analytics.js` 由构建脚本
+`site/copy-static.mjs` 复制进 `dist/`，运行时跨域上报到主站。
+
 ## 5. 查看
 
 打开：
@@ -82,6 +105,8 @@ https://ijipu.pages.dev/stats/
 - 每日 PV / UV 变化曲线；
 - 乐谱点击排名（按 PV 排序，带占比条）。
 
+乐谱库（迁到 `ijipu-sl` 之后）的数据也在这一个页面里，不需要另开统计页。
+
 令牌只存本机 localStorage，不放在 URL 里。
 
 ## 6. 数据口径
@@ -89,6 +114,9 @@ https://ijipu.pages.dev/stats/
 - 同一天、同一 path、同一 visitor、同一 channel 一行；
 - `views` 每次访问 +1 ⇒ **PV = SUM(views)**；
 - `UV = COUNT(*)`，同一天同一 visitor 只算一次；
-- visitor 是浏览器/应用本地随机 id，不存 IP、UA；
+- visitor 是浏览器/应用本地随机 id，不存 IP、UA；**按域名隔离**——主站与新站各有一个 visitor id，
+  所以 UV 只在同一个 path 内自洽，迁移当天同一个人可能在旧站/新站各算一次；
 - localhost / 127.0.0.1 / dev 不上报；
+- 301 跳转本身不计：旧地址 `/scores/` 只做跳转、没有页面，落到新站才记一次；
+- 跨站上报（新站 → 主站）可能被广告拦截/企业网络拦掉，数字会比同源时略低，属已知偏差；
 - 统计接口失败不影响页面和应用。
