@@ -1717,6 +1717,13 @@ export const scorePackageCopy = {
   cancelBtn: '取消',
   busy: '正在打包…',
   done: '已导出乐谱包',
+  /** adj1288：桌面壳导出完成后可直接打开文件/文件夹 */
+  doneAt: (path: string) => `乐谱包已导出：${path}`,
+  doneWeb: '乐谱包已开始下载',
+  canceled: '已取消导出',
+  openFile: '打开文件',
+  openFolder: '打开文件夹',
+  openFailed: (reason: string) => `打不开：${reason}`,
   needTitle: '主标题不能为空',
   needComposer: '作曲 / 作词不能为空',
   needSource: '来源不能为空（公版写「传统」/ 授权写授权方）',

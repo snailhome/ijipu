@@ -1144,6 +1144,46 @@ async fn save_mp4_file(
     Ok(Some(p.to_string_lossy().into_owned()))
 }
 
+/// adj1288：桌面壳导出乐谱包（zip）——原生保存对话框 + 一次写盘 + 回读校验。
+///
+/// 与 `save_mp4_file` 同一套理由：浏览器下载拿不到真实路径，导出完成就无法
+/// 提供「打开文件 / 打开文件夹」；这里返回绝对路径供成功提示使用。
+#[tauri::command]
+async fn save_zip_file(
+    app: tauri::AppHandle,
+    name: String,
+    b64: String,
+) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let picked = tauri::async_runtime::spawn_blocking(move || {
+        app.dialog()
+            .file()
+            .set_title("保存乐谱包")
+            .set_file_name(&name)
+            .add_filter("ZIP 乐谱包", &["zip"])
+            .blocking_save_file()
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    let Some(fp) = picked else {
+        return Ok(None); // 用户取消
+    };
+    let mut p = fp
+        .as_path()
+        .ok_or_else(|| "保存对话框没有返回本地路径".to_string())?
+        .to_path_buf();
+    if p.extension().is_none() {
+        p.set_extension("zip");
+    }
+    let bytes = crate::b64::decode(&b64).ok_or_else(|| "乐谱包数据不是合法 base64".to_string())?;
+    std::fs::write(&p, &bytes).map_err(|e| format!("{}: {}", p.display(), e))?;
+    let back = std::fs::metadata(&p).map_err(|e| format!("回读失败 {}: {}", p.display(), e))?;
+    if back.len() != bytes.len() as u64 {
+        return Err("写入后文件长度与预期不一致".to_string());
+    }
+    Ok(Some(p.to_string_lossy().into_owned()))
+}
+
 /// adj1183：打开刚导出的文件，或在资源管理器里定位它（reveal=true）。
 ///
 /// 走 `tauri-plugin-opener` 的 Rust API（不经过前端 scope 检查）；路径只来自我们自己的保存对话框。
@@ -1406,6 +1446,7 @@ pub fn run() {
             list_system_fonts,
             // adj1183：导出视频成功提示 —— 原生保存 MP4 + 打开文件/文件夹
             save_mp4_file,
+            save_zip_file,
             open_local_path,
             ws_list_dir,
             ws_dir_exists,

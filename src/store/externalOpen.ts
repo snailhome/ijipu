@@ -120,6 +120,24 @@ export async function saveJpsFileNative(name: string, text: string): Promise<str
 }
 
 /**
+ * adj1288：桌面壳导出乐谱包（zip）——原生保存对话框 + 返回绝对路径。
+ * 用户取消返回 `null`；写盘/回读失败抛错。
+ */
+export async function saveZipFileNative(name: string, b64: string): Promise<string | null> {
+  const g = tauri()
+  if (!g?.core?.invoke) throw new Error('当前环境不支持原生保存')
+  const r = await g.core.invoke('save_zip_file', { name, b64 })
+  return typeof r === 'string' && r !== '' ? r : null
+}
+
+/** adj1288：打开刚导出的文件，或在资源管理器里定位（reveal=true）。 */
+export async function openLocalPath(path: string, reveal: boolean): Promise<void> {
+  const g = tauri()
+  if (!g?.core?.invoke) throw new Error('当前环境不支持打开本地文件')
+  await g.core.invoke('open_local_path', { path, reveal })
+}
+
+/**
  * 监听"后续再有文件要打开"（应用已运行时再次双击）：返回取消监听的函数。
  * 注意：**冷启动**那一次不走这里（事件可能早于本函数注册），而是由调用方在挂载时
  * 先 `drainExternalFiles()` 拉取一次——两条路都指向同一个队列，故不会漏也不会重。

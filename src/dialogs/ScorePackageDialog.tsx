@@ -15,7 +15,8 @@ import { Modal } from '../ui/Modal'
 import { useDocStore } from '../store/docStore'
 import { useUiStore } from '../store/uiStore'
 import { getOverlaySnapshot } from '../store/overlayAssets'
-import { base64ToBytes, writeZip, type ZipEntry } from '../export/zip'
+import { base64ToBytes, bytesToBase64, writeZip, type ZipEntry } from '../export/zip'
+import { hasShell, openLocalPath, saveZipFileNative } from '../store/externalOpen'
 import { scorePackageCopy as C } from '../brand/copy'
 import { APP_VERSION } from '../brand/version'
 
@@ -232,21 +233,42 @@ export function ScorePackageDialog() {
       )
 
       const zip = writeZip(files)
-      const out = zip.buffer.slice(zip.byteOffset, zip.byteOffset + zip.byteLength) as ArrayBuffer
-      const blob = new Blob([out], { type: 'application/zip' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
       // adj1244：默认文件名 = 主标题，副标题-短时间戳.zip
       const stamp = Date.now().toString(36)
       const stem = `${title}${subtitle ? `，${subtitle}` : ''}`
         .replace(/[\\/:*?"<>|]/g, '-')
         .replace(/[，\s-]+$/g, '')
         .slice(0, 60)
-      a.href = url
-      a.download = `${stem || 'ijipu-score'}-${stamp}.zip`
-      a.click()
-      URL.revokeObjectURL(url)
-      showNotice(C.done)
+      const downloadName = `${stem || 'ijipu-score'}-${stamp}.zip`
+
+      if (hasShell()) {
+        // adj1288：桌面壳走原生保存，拿真实路径才能提供打开文件/文件夹
+        const path = await saveZipFileNative(downloadName, bytesToBase64(zip))
+        if (path === null) {
+          showNotice(C.canceled, 'warn')
+          closeModal()
+          return
+        }
+        const open = (reveal: boolean): void => {
+          void openLocalPath(path, reveal).catch((e: unknown) => {
+            showNotice(C.openFailed(e instanceof Error ? e.message : String(e)), 'error')
+          })
+        }
+        showNotice(C.doneAt(path), 'ok', [
+          { label: C.openFile, run: () => open(false) },
+          { label: C.openFolder, run: () => open(true) },
+        ])
+      } else {
+        const out = zip.buffer.slice(zip.byteOffset, zip.byteOffset + zip.byteLength) as ArrayBuffer
+        const blob = new Blob([out], { type: 'application/zip' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = downloadName
+        a.click()
+        URL.revokeObjectURL(url)
+        showNotice(C.doneWeb)
+      }
       closeModal()
     } catch (e) {
       setErr(C.fail(e instanceof Error ? e.message : String(e)))

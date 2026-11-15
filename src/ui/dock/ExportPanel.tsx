@@ -312,10 +312,17 @@ export function ExportPanel() {
           </button>
         ))}
       </div>
-      {/* adj1195：乐谱库上传用的 zip（不是普通图片/音频导出，走独立对话框） */}
+      {/* adj1288：按钮显示方式与上面各格式一致：名称 + 扩展名角标 */}
       <div className="dock-field">
-        <button type="button" className="btn" onClick={() => openModal('package')} disabled={busy !== null}>
-          {scorePackageCopy.title}
+        <button
+          type="button"
+          className="btn"
+          onClick={() => openModal('package')}
+          disabled={busy !== null}
+          title={scorePackageCopy.title}
+        >
+          <span className="export-btn-text">{scorePackageCopy.title}</span>
+          <span className="export-btn-ext">.zip</span>
         </button>
         <span className="dock-muted">zip：meta / README / jps / 背景水印</span>
       </div>
