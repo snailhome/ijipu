@@ -11,7 +11,7 @@ import { DEFAULT_THEME, DEFAULT_THEME_MODE, type ThemeMode } from '../brand/them
 // adj954：运行环境/设备判据统一走品牌层唯一出处（原先本文件自己写了一份 matchMedia）
 import { getRuntimeEnv, isCoarsePointerDevice } from '../brand/env'
 // adj966g：底栏默认页按**本端能力档**决定（要权限的那一档展开在工作区，PC/插件收起）
-import { hostProfile, shouldOpenWorkspaceDock } from './fileHost'
+import { hostProfile, shouldOpenTryoutDock, shouldOpenWorkspaceDock } from './fileHost'
 // adj1173：节拍器音色（L1 用户偏好；取值域与合成音在 playback/metronome）
 // adj987（用户需求）：试听「练习段」的数据类型与命名（标记本身按文档存，见 practiceMarks.ts）
 import { defaultMarkName, nextMarkId, type PracticeMark } from './practiceMarks'
@@ -317,8 +317,12 @@ function detectSystemLight(): boolean {
  */
 function initialDock(): { open: boolean; panel: DockPanelKey } {
   try {
+    const env = getRuntimeEnv()
+    const onlineScore = new URLSearchParams(window.location.search).has('src')
+    // adj1289：网页版默认展开试听（线上谱打开即听）；手机端普通打开仍交给工作区判据
+    if (shouldOpenTryoutDock(env, onlineScore)) return { open: true, panel: 'tryout' }
     const w = window as unknown as { showOpenFilePicker?: unknown; showDirectoryPicker?: unknown }
-    const profile = hostProfile(getRuntimeEnv(), typeof w.showOpenFilePicker === 'function')
+    const profile = hostProfile(env, typeof w.showOpenFilePicker === 'function')
     const canPickDir = typeof w.showDirectoryPicker === 'function'
     if (shouldOpenWorkspaceDock(profile, canPickDir)) return { open: true, panel: 'workspace' }
   } catch {

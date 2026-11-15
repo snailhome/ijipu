@@ -208,6 +208,19 @@ export function shouldOpenWorkspaceDock(p: FileHostProfile, canPickDir: boolean)
 }
 
 /**
+ * adj1289：网页版默认展开「试听」底栏。
+ *
+ * 网页版最常见的用途是从乐谱站打开线上 `.jps`（`?src=`）直接试听；桌面浏览器没有
+ * "先选文件"的需求，把试听放出来比让用户自己找底栏更顺手。
+ * 手机端普通打开仍保留「工作区」默认（受限档需要授权文件夹）；但带 `?src=` 的线上谱
+ * 优先试听。桌面壳 / 插件不变（沿用各自的文件习惯）。
+ */
+export function shouldOpenTryoutDock(env: RuntimeEnv, onlineScore: boolean): boolean {
+  if (env.shell !== 'web') return false
+  return onlineScore || env.device === 'desktop'
+}
+
+/**
  * **文档状态**（adj966d，用户要求：状态栏要能看出"这份是草稿还是已存到文件 / 手里是新版还是旧版"）。
  *
  * 为什么要一个纯函数：这三个问题（绑没绑文件 · 与文件一致吗 · 文件被外部改了吗）分别散在

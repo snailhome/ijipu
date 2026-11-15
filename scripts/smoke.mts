@@ -301,7 +301,7 @@ import { foldKeys, TOPBAR_DONATE_KEY, TOPBAR_FIXED_KIDS } from '../src/ui/topbar
 // adj538：桌面壳「外部打开」——多文件取舍是纯逻辑，可在 Node 里直接断言（模块不碰 window 顶层）
 import { pickPrimary, hasShell, type ExternalFile } from '../src/store/externalOpen.ts'
 // adj966：文件宿主能力与降级决策（纯函数 ⇒ 逐端逐档断言，不必真跑三端；口径见 docs/FILE-MODEL.md）
-import { hostIdOf, hostProfile, decideWriteMode, decideWatch, decideWriteGate, shouldGuidePersistPermission, shouldOpenWorkspaceDock, docStateOf } from '../src/store/fileHost.ts'
+import { hostIdOf, hostProfile, decideWriteMode, decideWatch, decideWriteGate, shouldGuidePersistPermission, shouldOpenWorkspaceDock, shouldOpenTryoutDock, docStateOf } from '../src/store/fileHost.ts'
 import type { FileHostProfile } from '../src/store/fileHost.ts'
 // adj966b：外部改动轮询编排（定时器/IO 全注入 ⇒ 在 Node 里真跑时序）
 import { EXT_POLL_MS, watchTick, startExternalWatch } from '../src/store/externalChangeWatch.ts'
@@ -27652,6 +27652,22 @@ function runAdj966Tests() {
     shouldOpenWorkspaceDock(hostProfile(mobileWeb, true), true) &&
       shouldOpenWorkspaceDock(hostProfile(mobileWeb, true), false) === false &&
       shouldOpenWorkspaceDock(lim, false) === false, '')
+  check('adj1289 网页版默认试听：桌面 Web / PWA 与带 ?src= 的线上谱优先试听；手机普通打开仍留工作区；桌面壳/插件不变',
+    shouldOpenTryoutDock(web, false) &&
+      shouldOpenTryoutDock(web, true) &&
+      shouldOpenTryoutDock(pwa, true) &&
+      shouldOpenTryoutDock(mobileWeb, true) &&
+      shouldOpenTryoutDock(mobileWeb, false) === false &&
+      shouldOpenTryoutDock(tauri, true) === false &&
+      shouldOpenTryoutDock(host, true) === false,
+    JSON.stringify({
+      桌面Web: shouldOpenTryoutDock(web, false),
+      桌面Web_线上谱: shouldOpenTryoutDock(web, true),
+      手机Web_普通: shouldOpenTryoutDock(mobileWeb, false),
+      手机Web_线上谱: shouldOpenTryoutDock(mobileWeb, true),
+      桌面壳: shouldOpenTryoutDock(tauri, true),
+      插件: shouldOpenTryoutDock(host, true),
+    }))
   {
     const uiSrc = String(readFileSync('src/store/uiStore.ts', 'utf8'))
     const topSrc = String(readFileSync('src/ui/TopBar.tsx', 'utf8'))
