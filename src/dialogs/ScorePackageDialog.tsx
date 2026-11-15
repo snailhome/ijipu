@@ -241,24 +241,7 @@ export function ScorePackageDialog() {
         .slice(0, 60)
       const downloadName = `${stem || 'ijipu-score'}-${stamp}.zip`
 
-      if (hasShell()) {
-        // adj1288：桌面壳走原生保存，拿真实路径才能提供打开文件/文件夹
-        const path = await saveZipFileNative(downloadName, bytesToBase64(zip))
-        if (path === null) {
-          showNotice(C.canceled, 'warn')
-          closeModal()
-          return
-        }
-        const open = (reveal: boolean): void => {
-          void openLocalPath(path, reveal).catch((e: unknown) => {
-            showNotice(C.openFailed(e instanceof Error ? e.message : String(e)), 'error')
-          })
-        }
-        showNotice(C.doneAt(path), 'ok', [
-          { label: C.openFile, run: () => open(false) },
-          { label: C.openFolder, run: () => open(true) },
-        ])
-      } else {
+      const downloadZip = (): void => {
         const out = zip.buffer.slice(zip.byteOffset, zip.byteOffset + zip.byteLength) as ArrayBuffer
         const blob = new Blob([out], { type: 'application/zip' })
         const url = URL.createObjectURL(blob)
@@ -268,6 +251,34 @@ export function ScorePackageDialog() {
         a.click()
         URL.revokeObjectURL(url)
         showNotice(C.doneWeb)
+      }
+
+      if (hasShell()) {
+        // adj1288：桌面壳走原生保存，拿真实路径才能提供打开文件/文件夹
+        try {
+          const path = await saveZipFileNative(downloadName, bytesToBase64(zip))
+          if (path === null) {
+            showNotice(C.canceled, 'warn')
+            closeModal()
+            return
+          }
+          const open = (reveal: boolean): void => {
+            void openLocalPath(path, reveal).catch((e: unknown) => {
+              showNotice(C.openFailed(e instanceof Error ? e.message : String(e)), 'error')
+            })
+          }
+          showNotice(C.doneAt(path), 'ok', [
+            { label: C.openFile, run: () => open(false) },
+            { label: C.openFolder, run: () => open(true) },
+          ])
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e)
+          // dev 沿用旧的已编译壳时还没有 save_zip_file：退回浏览器下载，至少给出完成提示
+          if (!/not found|unknown command|save_zip_file/i.test(msg)) throw e
+          downloadZip()
+        }
+      } else {
+        downloadZip()
       }
       closeModal()
     } catch (e) {
