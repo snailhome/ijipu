@@ -906,12 +906,14 @@ export function PageConfigDialog({
                 <option value={2}>平顶</option>
               </select>
             </Row>
-            {/* adj297/adj602：两端对齐最小小节数。
+            {/* adj297/adj602：两端对齐最少小节。
                 adj925（用户裁定）：**只对末行生效** —— 非末行一律两端对齐（撑满），
                 只有**末行**才按它判（小节数 < 该值 ⇒ 自然对齐、行尾留白）。
                 adj602（用户要求）：从「间距」组挪到**音符布局**组——它决定的是"行内怎么排"，
-                与间距无关（放在间距里会被当成"调间隙"去找）。 */}
-            <Row label="两端对齐最小小节数" mark={isNonDefault('align_min_bars')}>
+                与间距无关（放在间距里会被当成"调间隙"去找）。
+                adj1300（用户要求）：文案由「两端对齐最小小节数」改短为「两端对齐最少小节」
+                （9 个字 → 8 个字；右栏 320 档标签列只有 96px，长标签会折两行）。 */}
+            <Row label="两端对齐最少小节" mark={isNonDefault('align_min_bars')}>
               <NumInput label="" value={draft.align_min_bars} onChange={(v) => updateDraft({ align_min_bars: v })} />
             </Row>
             {/* adj625（用户要求）：**方框小节序号**——复选框开关 + 序号的"每隔几个小节"。
@@ -1289,7 +1291,7 @@ function FontSelect({ value, onChange }: { value: string; onChange: (v: string) 
  */
 function Row({ label, mark, children }: { label: string; mark?: boolean; children: React.ReactNode }) {
   return (
-    // adj418：标签列给足宽度且不换行（「两端对齐最小小节数」这类长标签不再折成两行）。
+    // adj418：标签列给足宽度且不换行（「两端对齐最少小节」这类长标签不再折成两行）。
     // adj482：布局**全部交给 CSS**（`.pcfg-row` / `.pcfg-row-label` / `.pcfg-row-ctl` 已从内联搬到
     // index.css）——内联样式会压过 dock 里的覆盖规则，导致"按当页最长标签对齐"的规则无法生效。
     <div className="pcfg-row">

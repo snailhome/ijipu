@@ -2570,8 +2570,8 @@ async function main() {
           subTabs.n === 4 && subTabs.spread <= 2 && Math.abs(subTabs.filled - subTabs.rowW) <= 4,
           JSON.stringify(subTabs),
         )
-        // ② 标签列从"当页最长标签"（可到 108px）收到 96px：320 档下控件拿到 ≥150px
-        //    （adj1299 从 76px 放宽到 96px——见下面阶段 E 那一段的实测表）
+        // ② 标签列从"当页最长标签"（可到 108px）定到 108px：320 档下控件拿到 ≥150px
+        //    （adj1299 从 76px 放宽到 96px、adj1300 再定到 108px——见下面阶段 E 那一段的实测表）
         const setRow = await evalJs(
           c,
           `(() => {
@@ -2588,8 +2588,8 @@ async function main() {
            })()`,
         )
         check(
-          'adj1299 右栏 @320 设置行的**标签列放宽到 96px**（= 最长标签自然宽 94 + 2 余量），控件仍有 ≥150px',
-          !!setRow && setRow.labelW >= 94 && setRow.labelW <= 98 && setRow.ctlW >= 150,
+          'adj1300 右栏 @320 设置行的**标签列 108px**（8 字标签自然宽 106 + 2 余量），控件仍有 ≥150px',
+          !!setRow && setRow.labelW >= 106 && setRow.labelW <= 110 && setRow.ctlW >= 150,
           JSON.stringify(setRow),
         )
       }
@@ -3179,11 +3179,36 @@ async function main() {
         )
       await goDock('narrow', '0', 'stageE1')
       await openScoreLayout()
-      const fit96 = await labelLines()
+      const fit108 = await labelLines()
       check(
-        'adj1299 右栏 @320 谱面「曲部与词部间距」**一行放得下**（标签列 96 ≥ 自然宽 94：文字 84 + 红 `*` 占位 10）',
-        !!fit96 && fit96.lines === 1 && fit96.w >= 94 && fit96.w <= 98,
-        JSON.stringify(fit96),
+        'adj1300 右栏 @320 谱面「曲部与词部间距」**一行放得下**（标签列 108 ≥ 自然宽 94：文字 84 + 红 `*` 占位 10）',
+        !!fit108 && fit108.lines === 1 && fit108.w >= 106 && fit108.w <= 110,
+        JSON.stringify(fit108),
+      )
+      // adj1300：改短两个 8 字标签 + 列宽 96 → 108 ⇒ 320 档 17 个字段的标签**全部一行**
+      const allLabels = await evalJs(
+        c,
+        `(() => {
+           const pane = document.querySelector('.right-dock .pane-score:not([hidden])')
+           if (!pane) return null
+           const items = [...pane.querySelectorAll('.pcfg-row-label')].map((l) => {
+             const lh = parseFloat(getComputedStyle(l).lineHeight) || 15
+             const r = l.getBoundingClientRect()
+             return { text: (l.textContent || '').trim(), lines: Math.round(r.height / lh) }
+           })
+           return {
+             n: items.length,
+             wrapped: items.filter((x) => x.lines >= 2).map((x) => x.text),
+             renamed: items
+               .filter((x) => x.text.includes('两端对齐') || x.text.includes('替谱'))
+               .map((x) => x.text + '/' + x.lines + '行'),
+           }
+         })()`,
+      )
+      check(
+        'adj1300 右栏 @320 谱面**17 个字段的标签全部一行**（两个 8 字标签改短 + 列宽 108；最长自然宽 106）',
+        !!allLabels && allLabels.n === 17 && allLabels.wrapped.length === 0 && allLabels.renamed.length === 2,
+        JSON.stringify(allLabels),
       )
       // **负对照**：同一套 DOM 把标签列临时压回 76px ⇒ 这个标签必须变两行（证明上面那条不是白绿）
       await evalJs(
@@ -3201,7 +3226,7 @@ async function main() {
       await evalJs(c, `(() => { const el = document.getElementById('tmp-label-76'); if (el) el.remove(); return true })()`)
       await sleep(300)
       check(
-        'adj1299 **负对照**：标签列压回 76px 时同一个标签变两行（96px 这条判据真的在量东西）',
+        'adj1300 **负对照**：标签列压回 76px 时同一个标签变两行（108px 这条判据真的在量东西）',
         !!fit76 && fit76.lines >= 2,
         JSON.stringify(fit76),
       )

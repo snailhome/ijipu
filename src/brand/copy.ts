@@ -136,7 +136,9 @@ export const uiCopy = {
   segmentRowGapBzLabel: 'bz 段上下间距',
   segmentRowGapDsbLabel: 'dsb 段上下间距',
   // adj629e：替谱行与其**下方歌词行**的间距
-  segmentRowGapTpLabel: '替谱行与下方歌词间距',
+  // adj1300（用户要求）：文案改短 —— 「替谱行与下方歌词间距」→「替谱下至词行间距」（10 字 → 8 字，
+  // 右栏 320 档标签列 96px 下原来会折两行）
+  segmentRowGapTpLabel: '替谱下至词行间距',
   segmentRowGapHint:
     '临时叠加段的纵向间距（px）。bz、dsb 为段层与主旋律的间距；' +
     'tp 为替谱行与其下方歌词行的间距，拖动时移动的是替谱层，下方歌词行不动。' +

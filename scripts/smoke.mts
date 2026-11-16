@@ -28221,8 +28221,8 @@ function runAdj1294Tests() {
       '',
     )
     check(
-      'adj1299 CSS：设置**标签列 96px**（adj1298 的 76px 不够：最长标签自然宽 94 = 文字 84 + 红 `*` 占位 10）+ 极窄档（容器 ≤280）标签与控件上下排',
-      /\.right-dock \.pcfg-fields \.pcfg-row \{[\s\S]{0,160}?grid-template-columns: minmax\(0, 96px\) minmax\(0, 1fr\);/.test(
+      'adj1300 CSS：设置**标签列 108px**（8 字标签自然宽 106 = 96 + 红 `*` 占位 10，留 2px 余量）+ 极窄档（容器 ≤280）标签与控件上下排',
+      /\.right-dock \.pcfg-fields \.pcfg-row \{[\s\S]{0,160}?grid-template-columns: minmax\(0, 108px\) minmax\(0, 1fr\);/.test(
         cssCode,
       ) &&
         /@container \(max-width: 280px\) \{[\s\S]{0,240}?\.right-dock \.pcfg-fields \.pcfg-row \{[\s\S]{0,120}?grid-template-columns: minmax\(0, 1fr\);/.test(
@@ -28253,9 +28253,10 @@ function runAdj1294Tests() {
       )
     }
     check(
-      'adj1298 CSS **负向**：上面这些覆盖全在 `.right-dock` 之下——底栏仍是"试听两栏 / 子页签按内容宽 / 标签列 96px（由 --pcfg-label-w 算）"',
+      'adj1298 CSS **负向**：上面这些覆盖全在 `.right-dock` 之下——底栏仍是"试听两栏 / 子页签按内容宽 / 标签列按 `--pcfg-label-w` 算（不写死 108）"',
       !/\.tool-dock \.playback-panel \.dock-split \{[\s\S]{0,120}?display: contents/.test(cssCode) &&
         !/\.tool-dock \.jp-tab \{[\s\S]{0,240}?flex: 1 1 0;/.test(cssCode) &&
+        !/\.tool-dock \.pcfg-fields \.pcfg-row \{[\s\S]{0,160}?minmax\(0, 108px\)/.test(cssCode) &&
         !/\.tool-dock \.pcfg-fields \.pcfg-row \{[\s\S]{0,160}?minmax\(0, 96px\)/.test(cssCode) &&
         !/\.tool-dock \.pcfg-fields \.pcfg-row \{[\s\S]{0,160}?minmax\(0, 76px\)/.test(cssCode) &&
         !/\.tool-dock-body \{[\s\S]{0,700}?scrollbar-gutter: auto;/.test(cssCode),
@@ -28286,6 +28287,21 @@ function runAdj1294Tests() {
         /className="btn ws-filter-clear"[\s\S]{0,400}?<ToolIcon name="close"/.test(wsSrc1299) &&
           !/className="btn ws-filter-clear"[\s\S]{0,400}?✕/.test(wsSrc1299) &&
           /className=\{`btn ws-filter-all[\s\S]{0,800}?\{workspaceCopy\.filterAll\}/.test(wsSrc1299),
+        '',
+      )
+    }
+
+    // ⑯ 阶段 E 追加（adj1300，用户 2026-11-16 要求）：两个最长设置标签改短。
+    //    右栏 320 档标签列 96px：原来 9 字（118px）/ 10 字（130px）的两个标签改成 8 字（106px）。
+    {
+      const pcd1300 = String(readFileSync('src/dialogs/PageConfigDialog.tsx', 'utf8'))
+      const copy1300 = String(readFileSync('src/brand/copy.ts', 'utf8'))
+      check(
+        'adj1300 两个最长设置标签改短：`两端对齐最少小节`（原 9 字）/ `替谱下至词行间距`（原 10 字），旧文案不在渲染处',
+        pcd1300.includes('label="两端对齐最少小节"') &&
+          !pcd1300.includes('label="两端对齐最小小节数"') &&
+          copy1300.includes("segmentRowGapTpLabel: '替谱下至词行间距'") &&
+          !copy1300.includes("segmentRowGapTpLabel: '替谱行与下方歌词间距'"),
         '',
       )
     }
