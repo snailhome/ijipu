@@ -4367,8 +4367,8 @@ check('作者末行贴区域下沿（adj629u）', tAuthorLast !== null && Math.a
     )
     check(
       'adj1308 一个 emoji 簇（ZWJ 组合 / 带变体选择符）只算**一个字**宽，不按码位数累加（码位显式构造，防字面量丢 U+200D）',
-      authorGlyphW(zwjFamily, 12) === emojiW && authorGlyphW(heartEmoji, 12) === emojiW, // 👨👩👧', 12) === emojiW && authorGlyphW('❤️', 12) === emojiW,
-      JSON.stringify({ zwj: authorGlyphW(zwjFamily, 12), heart: authorGlyphW(heartEmoji, 12), one: emojiW }), // 👨👩👧', 12), heart: authorGlyphW('❤️', 12), one: emojiW }),
+      authorGlyphW(zwjFamily, 12) === emojiW && authorGlyphW(heartEmoji, 12) === emojiW,
+      JSON.stringify({ zwj: authorGlyphW(zwjFamily, 12), heart: authorGlyphW(heartEmoji, 12), one: emojiW }),
     )
     const emojiSrc = 'V: 1.0\nB: 测试曲\nZ: 苏一 曲\nZ: 蜗牛🐌 制谱\nD: C\nP: 4/4\nQ: 1 2 3 4 |\n'
     const emojiSvg = renderScoreToSvg(layoutScore(parseJps(emojiSrc), defaultPageConfig))[0]
