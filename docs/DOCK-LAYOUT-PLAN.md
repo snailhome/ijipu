@@ -1,8 +1,10 @@
 # 底栏 / 右栏 / 告警抽屉 改造方案（adj1290 起）
 
-> 状态：**阶段 A 已完成**（`adj1290`，2026-11-16）；阶段 B / C 待实施。
-> 编号：`adj1290` 起（当前最新 `adj1289`）。
+> 状态：**阶段 A 已完成**（`adj1290`）；**阶段 B 已完成**（`adj1294`/`adj1295`/`adj1296`，2026-11-16）；
+> 阶段 C 待实施。
+> 编号：`adj1290` 起（当前最新 `adj1296`）。
 > 本文件是这次改动的唯一方案口径。**改法有变，先改这里，再动代码。**
+> 落地时与方案有出入的地方，都在对应小节里用「⚠ 落地改法」标出（共三处，见 §3.2 / §4.3 / §六·阶段 B）。
 
 ---
 
@@ -109,6 +111,20 @@
 所以右栏页签条 = **只有页签项 + 两端溢出箭头**。需要一个纯页签条组件
 （`dockPanels.ts` 抽 `TABS` 时一并把「页签项」抽成组件，两个壳各自组装条子）。
 
+⚠ **落地改法（adj1295）**：这一条**没有照做**——右栏自己写了一份只含「页签项 + 两端溢出箭头」的
+精简实现（`ui/RightDock.tsx` 里约 120 行），**没有**把底栏那条抽成共用组件。理由：
+
+1. 底栏那份承载着 `adj556/adj561/adj567` 三个已被真机反复校准的行为（箭头始终占位、
+   当前页签滚进视界、滚轮转横向），且 smoke 里有 **19 处源码断言**钉着它的写法；
+2. 阶段 B 的验收里有一条硬判据——**「底栏模式行为必须与改造前完全一致」**。动底栏热文件
+   换来的"少写一份 120 行"不值得拿这条判据去赌；
+3. 两壳的页签条**本来就不一样**：右栏没有「收起 / 高度档位 / ✕」，方向还可能竖起来。
+
+⇒ 具体差异（这是"两份实现"能接受的前提，改的时候两边都要看）：
+`ui/RightDock.tsx` 的 `syncOv/pageBy/alignActive` 与 `ToolDock` 的
+`syncTabOverflow/pageTabsBy/alignActiveTab` 一一对应；右栏多一个 `vertical` 分支（纵轴）。
+以后真要合并，**先改本节**，再一起改两处 + 那 19 条断言。
+
 ### 3.3 告警抽屉
 
 ```
@@ -168,6 +184,12 @@
 **首次无存档时才用**；用户改过设置就以存档为准。判据与 `adj1289` 的
 `shouldOpenTryoutDock` 互不影响（那个管"打开时展开哪个面板"，这个管"壳在哪一边"）。
 
+⚠ **落地改法（adj1294）**：函数签名是 `defaultDockMode(env: RuntimeEnv)`，**不是** `(profile)`。
+原因：`FileHostProfile` 判不出「手机」与「桌面版 Firefox/Safari」——两者都是 `limited` 档，
+按 profile 判会把桌面浏览器误判成手机。`RuntimeEnv.device`（粗指针判据）才是"这是不是手机"的
+唯一口径（`adj974` 立的同一套）。另外补一条：**插件嵌入版（`shell === 'host'`）默认也是底栏**——
+它通常挂在 Obsidian 的侧栏/窄面板里，右栏会直接把可用宽吃掉一半。
+
 ### 4.4 宽度换算（纯函数，要断言）
 
 ```
@@ -175,7 +197,12 @@ dockWidthPx(档位, 视口宽, 是否手机)
   PC：      narrow 320 / wide 480，且夹 min(档位, 45vw)
   手机：    narrow 50vw / wide 66vw
 ```
+
 手机上不再用 320/480 硬值——320 在 375 宽的手机上几乎全屏。
+
+⚠ 落地补一道：PC 档的 `45vw` 自身再兜一个 **180px 下限**（窗口窄到 400px 以下时 45vw 不到 180，
+再按比例收就完全看不清面板内容）。⚠ 手**机**档不夹——它本来就按屏宽比例给。
+断言里的实际数字：`(窄,1440)=320`、`(宽,1440)=480`、`(窄,700)=315`、`(窄,375,手机)=188`、`(宽,375,手机)=250`。
 
 ---
 
@@ -200,6 +227,12 @@ dockWidthPx(档位, 视口宽, 是否手机)
 | `--jp-right-dock-w` | 右栏当前宽度（由 `dockWidthPx` 算，写到 `.app-body` 的 style 上） |
 | `--jp-right-dock-tabs-w` | 竖排页签条宽度（约 44~56px） |
 | `--jp-problems-drawer-h` | 抽屉最大高度（头 + 5 行） |
+
+⚠ 落地改法：`--jp-right-dock-w` **挂在 `<html>` 上**（由 `RightDock` 用
+`document.documentElement.style.setProperty` 写、关闭/切回底栏时摘掉），不是 `.app-body`。
+因为除了右栏自己的宽度，**右上角的 Toast / 更新提示也要让位**——它们 `position: fixed` 贴右，
+会正好压在右栏上；挂在根上，`.toast { right: calc(20px + var(--jp-right-dock-w, 0px)) }`
+一条就够（改这两条既有断言时已同步，见 §八）。
 
 ---
 
@@ -252,34 +285,82 @@ dockWidthPx(档位, 视口宽, 是否手机)
 - [ ] `expandDock()` 不再因为"有告警"而切面板（`adj591` 的行为下线）。
 - [ ] 抽屉打开不挤压操作底栏的高度（两者独立）。
 
-### 阶段 B：右栏壳（adj1293 ~ adj1296）
+### 阶段 B：右栏壳（adj1293 ~ adj1296）——✅ **已完成**
 
-- 新增 `src/ui/dock/dockPanels.ts`：把 `TABS`（key/label/icon/kbd）+ 懒加载面板映射 +
-  `DockBody` 从 `ToolDock.tsx` 抽出来，两个壳共用。**只抽这些，不动高度模型。**
-- 新增 `src/ui/RightDock.tsx`：宽度模型（两档）、顶部工具条三按钮、页签两种位置、竖排滚动。
-- `App.tsx`：加 `.app-body`；按 `dockSide` 决定渲染 `ToolDock` / `RightDock`。
-- `uiStore`：加 4 个 L1 键 + `setDockSide` / `setDockFloat` / `setDockWidth` / `setDockTabsPos`。
-- `TopBar`：加常驻图标按钮（进折叠预算）。
-- `PageConfigDialog`「版面」页签：加「操作方式」下拉（手机上只给两项）。
-- `copy.ts`：新文案集中（模式名、三个按钮的 title、设置项说明）。
+**落地情况（adj1294/adj1295/adj1296，2026-11-16 实测）**
+
+- 新增 `src/ui/RightDock.tsx`（约 430 行，含注释）：宽度两档、顶部工具条三按钮、
+  页签组两种位置（底部横排 / 右侧竖排 `writing-mode: vertical-rl` + 上下滚 + 上下箭头）。
+- `store/fileHost.ts`：新增 `defaultDockMode(env)` / `dockWidthPx(档位, 视口宽, 是否手机)`
+  两个纯函数 + `DockSide`/`DockWidth`/`DockTabsPos` 三个类型。
+- `store/uiStore.ts`：4 个 L1 键（`ijipu.dockSide` / `dockFloat` / `dockWidth` / `dockTabsPos`）
+  + `setDockSide` / `setDockFloat` / `setDockWidth` / `setDockTabsPos` / `setDockMode` /
+  `toggleRightDock`；`DockMode`（三选一的合成视图）与 `dockModeOf()`。
+- `App.tsx`：加 `.app-body`（横向容器 + 浮动定位上下文），`<RightDock />` 在它之内；
+  `adj552` 那套「底栏放进编辑列」的结构**一行没动**。
+- `ToolDock.tsx`：加一条自锁 `if (!dockOpen || dockSide !== 'bottom') return null`
+  （ESC / Ctrl+H 两条监听也各加了一句 `dockSide` 守卫，免得在右栏模式下动作一个看不见的底栏）。
+- `TopBar.tsx` + `ui/topbarFold.ts`：`支持` 右侧、`更多` 之前的**常驻**按钮；
+  `FoldInput` 新增 `rightDockW`（常驻槽位**恒扣宽**，不算折叠链的一员），并有隐形测量副本。
+- `PageConfigDialog.tsx`：「版面」页签第一行新增**操作方式**下拉（手机上不渲染「右侧栏」）。
+- `editor/EditorPane.tsx`：编辑区左下角那个「展开底栏」悬浮按钮**只在底栏模式**出现
+  （右栏模式关起来时，入口是顶栏那个常驻开关——两个入口挂两个名字会让人以为"展开底栏把右边展开了"）。
+- `brand/copy.ts`：新增 `dockRightCopy`（三个按钮名/提示、模式名、设置项文案）。
+- `index.css`：文件末尾新增一节（`.app-body` / `.right-dock` / 竖排页签 / Toast 让位），
+  另有两条既有规则被**按新口径**更新（见下）。
+
+**四道门 + 真浏览器**
+- `smoke` ✓（exit 0；新增 29 条断言：默认壳/宽度换算/状态/结构/折叠预算/三条负向判据/CSS）
+- `lint` 0 error（77 warning，与改前同数）、`tsc -b` ✓、`build` ✓
+- `verify:app-ui` **114/114**（92 → 114，新增 22 条真浏览器用例；实测数据见下）
+
+**真浏览器实测（1440×900 / 390×844）**
+- PC 首次无存档：右栏 `w=320 / l=1120 / t=40 / b=874 / position:absolute` —— **整幅高度**
+  （顶边贴 TopBar 下沿、底边贴状态栏顶边），且 `.app-main` 仍是 1440（浮动**不挤占**）。
+- 插入模式（宽档 480）：右栏 `pos=static`、`.app-main` `w=960 = 1440 − 480` —— 真的挤窄。
+- 竖排页签：`.right-dock-tabs.is-vert` 在 `.right-dock-main` 里、`writing-mode: vertical-rl`、
+  8 个页签齐全、竖条宽 52px。
+- 手机（粗指针 + iPhone UA + 390 宽）：默认**底栏**（`.right-dock` 不存在）、设置里
+  操作方式只有 `bottom,float` 两项。
+- **8 个面板 × 两壳逐个点开**（机器扫，替代方案 §十 原定的手工核对）：右栏 8 个、底栏 8 个，
+  每块面板都"露出来 + 宽高 > 0"，扫完应用仍活着（编辑区与右栏都在）。
+- **宽屏左右拆分**（`splitH`）三者共存：底栏仍在编辑列（`adj552` 不变）、告警抽屉仍从
+  `left=0` 铺到 `right=1440`（阶段 A 的痛点在这一档成立）、右栏仍是整幅高度且浮动不挤窄内容。
+
+**既有断言按新口径改了两处（不是放宽）**
+| 位置 | 旧口径 | 新口径 | 为什么 |
+|---|---|---|---|
+| `verify:app-ui` 的 adj1013 | 提示右缘贴视口右（`vw − right ≤ 30`） | 贴**右栏左缘**（`vw − 右栏宽 − right ≤ 30`） | 右栏出现后，贴视口右边的提示会被右栏压住；"不压住底栏/内容"的意图不变，让位量 = 右栏宽 |
+| `smoke` 的 adj530 折叠夹具 | 无 `rightDockW` 字段 | 补 `rightDockW: 0` | 新增的常驻槽位必须进预算；夹具里记 0（那次 `gap: 0`）⇒ 老阈值一个都不用改 |
 
 **验收判据（正向）**
-- [ ] 三种方式都能进 8 个面板，面板状态互通（切壳不丢当前面板）。
-- [ ] 插入模式：预览/编辑真的变窄；浮动模式：宽度不变、盖在右侧。
-- [ ] 两档宽度切换生效；手机上是 1/2 与 2/3 屏宽。
-- [ ] 页签组位置两种都能切；竖排时图标在上、文字竖排、可上下滚。
-- [ ] 顶栏按钮在窄屏下**仍然可见**（没被折进「更多」）。
-- [ ] 手机上设置里没有「右侧栏」选项；默认底栏。
+- [x] 三种方式都能进 8 个面板，面板状态互通（切壳不丢当前面板）——右栏与底栏共用 `uiStore.dockPanel`。
+- [x] 插入模式：预览/编辑真的变窄；浮动模式：宽度不变、盖在右侧。
+- [x] 两档宽度切换生效；手机上是 1/2 与 2/3 屏宽。
+- [x] 页签组位置两种都能切；竖排时图标在上、文字竖排、可上下滚。
+- [x] 顶栏按钮在窄屏下**仍然可见**（不进折叠链，且宽度恒扣预算）。
+- [x] 手机上设置里没有「右侧栏」选项；默认底栏。
 
 **验收判据（负向）**
-- [ ] 浮动栏点栏外关闭；但点**工作区操作菜单**（portal 到 body）**不**关闭。
-- [ ] 右栏**没有**最小化状态；ESC 只在浮动模式关闭它。
-- [ ] 底栏模式的行为与改造前**完全一致**（回归）。
+- [x] 浮动栏点栏外关闭；但点**工作区操作菜单**（portal 到 body）**不**关闭。
+      （真浏览器用例：往 body 放一个 `.ws-menu`、真鼠标点它 ⇒ 右栏还在。真工作区菜单要授权
+      文件夹才出得来，本轮没有铺那个夹具——判据本身走的是同一条代码路径。）
+- [x] 右栏**没有**最小化状态；ESC 只在浮动模式关闭它。
+- [x] 底栏模式的行为与改造前**完全一致**（回归）：底栏源码只多了两处守卫，
+      `adj552` 结构、19 处页签源码断言、`verify:app-ui` 的既有底栏/抽屉/输入条用例全部照旧通过。
 
 ### 阶段 C：面板窄栏适配（adj1297 起，逐面板）
 
 按用户口径：**只保证不崩、不裁内容**。逐面板在 320 / 480 下看一遍，
 难看的地方单独开 adj，不在本阶段硬啃。
+
+**阶段 B 收尾时亲眼看到的（截图留档，交给阶段 C）**
+- **设置面板 @320px（插入档）**：`.pcfg-row` 的标签列与控件列挤在一起，"左右排列"那一行的
+  下拉框压到标签文字上；「编辑器字体」的 `select` 右端超出右缘（被裁一点）。
+- **工作区面板 @195px（手机 1/2 屏宽的浮动栏）**：空态那列文字被压成一个字一行，且与右侧
+  「新工作区」按钮列的边界重叠。⇒ 阶段 C 要么给这类两栏面板在窄栏下换成上下排，
+  要么给它一个最小宽度（右栏在手机上再窄就不给这个面板）。
+- 试听 / 导出 / 关于 / 查找替换 / 导入 在 320 与 480 下**基本可用**（不裁、不崩）。
 
 ---
 
@@ -288,23 +369,24 @@ dockWidthPx(档位, 视口宽, 是否手机)
 ### 新增
 | 文件 | 内容 |
 |---|---|
-| `src/ui/ProblemsDrawer.tsx` | 告警抽屉 |
-| `src/ui/RightDock.tsx` | 右栏壳 |
-| `src/ui/dock/dockPanels.ts` | 页签定义 + 面板懒加载映射 + **纯页签条组件**（只含 tabstrip + 溢出箭头，不含收起/档位/✕；两壳共用） |
-| `public/icons/右侧边栏.png` | 顶栏图标（从 cp 的 svg 转） |
+| `src/ui/ProblemsDrawer.tsx` | 告警抽屉 ✅（adj1290） |
+| `src/ui/RightDock.tsx` | 右栏壳 ✅（adj1295） |
+| `src/ui/dock/dockPanels.tsx` | 页签定义 + 面板懒加载映射 + 可见页签判据 ✅（adj1293）。⚠ 方案里的「纯页签条组件」**没抽**，见 §3.2 |
+| `public/icons/右侧边栏.png` | 顶栏图标（从 cp 的 svg 转）✅（adj1293） |
 | `docs/DOCK-LAYOUT-PLAN.md` | 本文件 |
 
 ### 删除
 | 文件 | 原因 |
 |---|---|
-| `src/ui/dock/ProblemPanel.tsx` | 改为抽屉 |
-| `src/ui/dock/problemsHeight.ts` | 抽屉不做 JS 测高 |
+| `src/ui/dock/ProblemPanel.tsx` | 改为抽屉 ✅（adj1290） |
+| `src/ui/dock/problemsHeight.ts` | 抽屉不做 JS 测高 ✅（adj1290） |
 
 ### 修改（代码）
-`src/App.tsx`、`src/ui/ToolDock.tsx`、`src/ui/EditorFootBar.tsx`、`src/ui/EditorPane.tsx`、
-`src/ui/TopBar.tsx`、`src/ui/toolIcons.ts`、`src/store/uiStore.ts`、`src/store/fileHost.ts`、
-`src/dialogs/PageConfigDialog.tsx`、`src/dialogs/ShortcutsDialog.tsx`、`src/brand/copy.ts`、
-`src/index.css`、`public/sw.js`、`public/icons/`
+`src/App.tsx` ✅、`src/ui/ToolDock.tsx` ✅、`src/ui/EditorFootBar.tsx` ✅、`src/ui/EditorPane.tsx` ✅、
+`src/ui/TopBar.tsx` ✅、`src/ui/topbarFold.ts` ✅（方案漏列：折叠预算的新槽位在这里）、
+`src/ui/toolIcons.ts` ✅、`src/store/uiStore.ts` ✅、`src/store/fileHost.ts` ✅、
+`src/dialogs/PageConfigDialog.tsx` ✅、`src/dialogs/ShortcutsDialog.tsx` ✅、`src/brand/copy.ts` ✅、
+`src/index.css` ✅、`public/sw.js` ✅、`public/icons/` ✅
 
 ### 修改（断言）
 `scripts/smoke.mts`（32423 行，`dock` 出现 676 次）与 `scripts/verify-app-ui.mjs`。
@@ -323,6 +405,10 @@ dockWidthPx(档位, 视口宽, 是否手机)
 ⚠ 那 19 处「直接读 `ToolDock.tsx` 源码做正则断言」的地方，阶段 B 抽 `dockPanels.ts`
 后会红几条——要改成读新文件，**不要**为了迁就旧正则而放弃抽取。
 
+⚠ **落地结果（adj1295）**：页签条**没有抽**（理由见 §3.2 的「落地改法」），所以那 19 处
+源码断言**一条都没红**；`dockPanels.tsx` 仍只是 adj1293 抽出来的「页签定义 + 面板映射 +
+可见页签判据」三样。阶段 B 实际动过的断言只有两处（见 §六·阶段 B 末尾的对照表）。
+
 ---
 
 ## 八、已知的坑
@@ -330,18 +416,34 @@ dockWidthPx(档位, 视口宽, 是否手机)
 1. **portal 菜单被误判为「栏外」**。工作区的操作菜单 portal 到 `body`（`adj540`）。
    浮动栏「点外部关闭」不能用 `contains()` 一判了事，要判 `composedPath` 里有没有
    浮动栏或它的菜单节点；否则点菜单就把栏关了。
+   ✅ 已落地：`RightDock` 的判据是「**路径里有 `.app-body` 才算栏外**」+ `.ws-menu` /
+   `.menu-dropdown` / `.modal` 显式豁免。`app-body` 那一条同时挡住了 portal 菜单（它根本不在
+   内容区里），所以顶栏下拉、状态栏、告警抽屉点了都不会关右栏。
 2. **顶栏折叠预算**（`adj453`）。新按钮常驻就必须进预算（跟 `donateSlot` / `moreSlot` 一起扣宽），
    否则窄屏下"开关右栏"的按钮自己躲进「更多」下拉。
+   ✅ 已落地：`FoldInput.rightDockW` + 子项数 +1（它自己占一个 flex 间距），smoke 有算式断言。
+   ⚠ 它**不进** `TOOL_PRIORITY`——那是"谁先被折进更多"的表，常驻按钮不该出现在里面。
 3. **高度算式在右栏里失去意义**。`问题面板 5 行`、`工作区 5 行`、设置面板 `min(55vh,460px)`
    这些是给「矮而宽」算的；右栏是「高而窄」，不旁路会莫名其妙把内容裁成一条。
-4. **Toast / UpdatePrompt 压右下角**（`adj1013` 为底栏调过位置）。右栏出现后会盖住它们，要一起改。
+   ✅ 已落地：右栏根节点**不带** `dock-settings` 类（那条 `height: min(55vh,460px)` 因此不命中），
+   并用 `.right-dock { max-height: none; height: 100% }` 覆盖底栏的上限。
+   面板内部的高度算式（`ToolDock` 的 AUTO_FIT）**不参与右栏**——右栏走 flex 填满 + 内部滚动。
+4. **Toast / UpdatePrompt 与右栏打架**（adj1013 把提示挪到了**右上角**，正好是右栏的位置）。
+   ✅ 已落地：`--jp-right-dock-w` 挂在 `<html>` 上，`.toast` / `.update-prompt` 的 `right`
+   加上这个变量；`verify:app-ui` 的 adj1013 判据同步改成"贴右栏左缘"。
 5. **`initialDock()` 的兜底面板是 `'problems'`**（`uiStore.ts`）。删页签必须同步改，
-   否则 PC 首次展开时 `dockPanel` 指向一个不存在的面板。
+   否则 PC 首次展开时 `dockPanel` 指向一个不存在的面板。（adj1290 已改成 `'tryout'`。）
 6. **`adj1289` 的网页版默认试听**（`shouldOpenTryoutDock`）不受影响，别顺手改。
+   ⚠ 组合起来有个**用户可见的后果**（阶段 B 之后才有）：桌面网页版首次打开 =
+   「右侧浮动栏 + 试听面板已展开」，会盖住右边 320px。这是 §二 那两条默认值叠加的结果，
+   不是 bug；若用户觉得太抢眼，改的应该是"右栏默认收起"这一条（要拍板）。
 7. **图标必须走 alpha 通道**。`ToolIcon` 靠 mask 上色，PNG 要是透明底、白色形状；
    直接拿彩色 svg 转出来会变成一块黑或一块白。
 8. **`ToolDock.tsx` 是热点文件**（1183 行 + 129 处 CSS 选择器 + 19 处源码断言），
    `index.css` 6602 行。本方案会长时间占着它们，先在本会话认领。
+9. **右栏宽度只能由 `dockWidthPx()` 算**（`store/fileHost.ts`）。别在组件里另写一套
+   `innerWidth * 0.45`——宽度同时喂给"右栏自己"和"Toast 让位"，两处各算一份必然漂移
+   （`AGENTS §六之二·4` 数值口径同源）。
 
 ---
 
@@ -369,5 +471,12 @@ npm run verify:app-ui    # 真浏览器（改交互必须跑，见 src/AGENTS.md
 
 手工核对（每阶段结束都要过）：
 - 三种操作方式 × 8 个页签，逐个点开看有没有崩、有没有被裁。
-- 手机尺寸（375×667）下：默认底栏、设置里无「右侧栏」、宽度按 1/2 与 2/3。
-- 宽屏左右拆分（`splitH` / `splitHE`）下：抽屉贯穿整幅、右栏整幅高度。
+  ✅ 阶段 B 起**已机器化**：`verify:app-ui` 的两条 `sweep`（右栏 8 个 + 底栏 8 个，
+  判据是"面板露出来 + 宽高都 > 0"）。它挡得住"崩 / 被裁成 0"，挡不住"难看"——
+  难看留给阶段 C。
+- 手机尺寸（375×667）下：默认底栏、设置里无「右侧栏」、宽度按 1/2 与 2/3。✅ 已机器化。
+- 宽屏左右拆分（`splitH` / `splitHE`）下：抽屉贯穿整幅、右栏整幅高度。✅ 已机器化
+  （`splitH` 下量：底栏在编辑列、抽屉 `left=0 / right=1440`、右栏整幅高度且浮动不挤窄）。
+- 「手机上右栏宽度按 1/2 与 2/3」目前只有**纯函数断言**（`dockWidthPx(…, true)`），
+  没有在手机视口下真量过右栏像素宽——因为手机默认底栏、要量它得先手动切到「右侧浮动栏」。
+  阶段 C 逐面板看窄栏时顺手补。
