@@ -466,6 +466,12 @@ function check(name: string, cond: boolean, detail?: string) {
       /const settingsEntries[\s\S]{0,400}?entryTheme/.test(top),
     '',
   )
+  check(
+    'adj1309 顶栏量宽只认最外层 `[data-tool-key]`（内层同名按钮会把 34px 覆盖成图标 16px，主题按钮被裁）',
+    /el\.parentElement\?\.closest\('\[data-tool-key\]'\)/.test(top) &&
+      /if \(el\.parentElement\?\.closest\('\[data-tool-key\]'\)\) return/.test(top),
+    '',
+  )
 }
 
 /**

@@ -1060,9 +1060,20 @@ export function TopBar() {
       // 测量每个按钮宽——**按 key 取**（不依赖测量容器里的 DOM 顺序，与 toolDefs 一一对应）。
       // 注意量的是包裹 span 的**第一个元素子节点**：包裹层是 `display:contents`（为了与实际
       // 工具条布局一致）本身不产生盒子，getBoundingClientRect 恒为 0，直接量它会得到全 0 宽度。
+      // adj1309：**别被"按钮自己也带 key"骗到**——adj1301 给真实按钮加了 `data-tool-key`
+      // （小工具条要按 key 找锚点），测量容器里于是出现"外层 span[key] > 按钮[key]"两层同名节点；
+      // 旧循环把内层按钮也量了一遍，取它的 `firstElementChild`（图标，宽 16）**覆盖**掉外层量到的
+      // 34，宽度预算整体偏小 → 主题按钮被判定"放得下"、实际却被 `overflow-x: clip` 裁掉
+      // （窄屏 412~460px 实拍：顶栏没有主题按钮，「更多」里也没有）。只认最外层节点即可。
       const widthByKey = new Map<string, number>()
       mes.querySelectorAll<HTMLElement>('[data-tool-key]').forEach((el) => {
-        const box = el.firstElementChild instanceof HTMLElement ? el.firstElementChild : el
+        if (el.parentElement?.closest('[data-tool-key]')) return // 内层同名节点，跳过
+        const box =
+          el.matches('button') || el.firstElementChild === null
+            ? el
+            : el.firstElementChild instanceof HTMLElement
+              ? el.firstElementChild
+              : el
         widthByKey.set(el.dataset.toolKey ?? '', box.getBoundingClientRect().width)
       })
       /**

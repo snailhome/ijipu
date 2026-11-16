@@ -404,6 +404,59 @@ async function main() {
         themeSubLabels.some((l) => l.startsWith('深色')),
       themeSubLabels.join(' ／ '),
     )
+    // adj1309（用户实报「主题按钮没有」的回归）：折叠预算量宽时，adj1301 给真实按钮加的
+    // `data-tool-key` 让「外层 span > 内层按钮」同名两层都被量到，内层取到图标宽 16px 覆盖了
+    // 按钮宽 34px ⇒ 预算偏小，主题按钮被判"放得下"、实际被 `overflow-x: clip` 裁掉，
+    // 且因为没进 hiddenKeys，「更多」里也没有。判据：主题按钮必须**要么完整可见、要么在更多里**，
+    // 工具条本身不得横向溢出。
+    if (await evalJs(c, `!!document.querySelector('.topbar-hamburger.open')`)) {
+      await evalJs(c, `document.querySelector('.topbar-hamburger-btn').click(), true`)
+      await sleep(200)
+    }
+    const foldProblems = []
+    for (const width of [360, 412, 440, 460]) {
+      await c.send('Emulation.setDeviceMetricsOverride', { width, height: 820, deviceScaleFactor: 2, mobile: true })
+      await sleep(400)
+      const seen = await evalJs(
+        c,
+        `(() => {
+           const tb = document.querySelector('.topbar > .topbar-toolbar')
+           const btn = tb.querySelector('.topbar-theme-mode')
+           const tr = btn ? btn.getBoundingClientRect() : null
+           const br = tb.getBoundingClientRect()
+           return {
+             visible: !!tr && tr.width > 0 && tr.left >= br.left - 1 && tr.right <= br.right + 1,
+             scrollW: tb.scrollWidth,
+             clientW: tb.clientWidth,
+           }
+         })()`,
+      )
+      let inMore = false
+      if (await evalJs(c, `!!document.querySelector('.topbar-overflow > .topbar-overflow-btn')`)) {
+        await evalJs(c, `document.querySelector('.topbar-overflow > .topbar-overflow-btn').click(), true`)
+        await sleep(250)
+        inMore = await evalJs(
+          c,
+          `[...document.querySelectorAll('.topbar-overflow-dropdown .menu-entry, .topbar-overflow-dropdown .menu-group-title')].some((e) => e.textContent.trim().startsWith('深浅模式'))`,
+        )
+        await evalJs(c, `document.querySelector('.topbar-overflow > .topbar-overflow-btn').click(), true`)
+        await sleep(150)
+      }
+      if (!seen.visible && !inMore) foldProblems.push(`${width}px：既不可见也不在「更多」`)
+      if (seen.scrollW > seen.clientW + 1) foldProblems.push(`${width}px：工具条被裁 ${seen.scrollW}>${seen.clientW}`)
+    }
+    check(
+      'adj1309 窄屏主题按钮「可见或在更多里」不许凭空消失（量宽被内层按钮 16px 覆盖的回归）；工具条不横向溢出',
+      foldProblems.length === 0,
+      foldProblems.join('；'),
+    )
+    await c.send('Emulation.setDeviceMetricsOverride', { width: 420, height: 820, deviceScaleFactor: 2, mobile: true })
+    await sleep(300)
+    // 本段结束时把菜单恢复成**打开**状态：紧随其后的用例假定菜单还开着（它先点一下收起）
+    if (!(await evalJs(c, `!!document.querySelector('.topbar-hamburger.open')`))) {
+      await evalJs(c, `document.querySelector('.topbar-hamburger-btn').click(), true`)
+      await sleep(200)
+    }
     // adj1306：页面必须声明 color-scheme（安卓 Chrome 自动深色否则会压暗 mask 图标）
     const schemeMeta = await evalJs(c, `document.querySelector('meta[name="color-scheme"]')?.content ?? ''`)
     const appScheme = await evalJs(c, `getComputedStyle(document.querySelector('.app')).colorScheme`)
