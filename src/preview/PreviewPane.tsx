@@ -555,7 +555,12 @@ export function PreviewPane({ disableGuides = false }: { disableGuides?: boolean
       }
     } else {
       const anchor = metaAnchorPt(metaAnchorOf(key), pageW, cfg)
-      bx = base ? base.x : Number(el.getAttribute('x')) - anchor.x
+      /**
+       * adj1304：作者开启「两端对齐」后，`author_i` 的 `<text>` x 是 **label 左缘**（不是右缘），
+       * 拖拽基准必须用渲染端写下的 `data-meta-anchor-x`（真正的右边界）才不会一拖就跳。
+       */
+      const baseXAttr = el.getAttribute('data-meta-anchor-x') ?? el.getAttribute('x')
+      bx = base ? base.x : Number(baseXAttr) - anchor.x
       by = base ? base.y : Number(el.getAttribute('y')) - anchor.y
     }
     metaDragRef.current = { key, startX: e.clientX, startY: e.clientY, baseX: bx, baseY: by, baseCfg: { ...cfg } }

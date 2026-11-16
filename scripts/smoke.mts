@@ -136,6 +136,8 @@ import { slideOf, slidePlan, slideStepMs, SLIDE_SYMBOLS, SLIDE_STEP_MIN_MS, SLID
 import { midiToPitchName } from '@ijipu/engine/playback/midi.ts'
 import { DOT_R, DOT_R_DOT, H_GAP, INNER_GAP, BEAM_H, LAYER_GAP, VOLTA_BAR_GAP, VOLTA_RAISE, NOTE_COMMENT_FONT_RATIO, NOTE_COMMENT_RAISE, noteScaleOf, lowDotY, octaveDotY, beamY, octaveTopY, BARLINE_DOT_R, BARLINE_W_THIN, BARLINE_W_THICK, BARLINE_LINE_GAP, BARLINE_DOT_GAP, barlinePad, barlineTotalW, barlineGeometry, GRACE_SIZE_RATIO, GRACE_BEAM_GAP, GRACE_BEAM_TOP_RATIO, GRACE_LINE_W, GRACE_SLOT_RATIO, GRACE_SLOT_RATIO_MULTI, BAR_NUMBER_SIZE_RATIO, DIGIT_HEIGHT_RATIO, DOT_AFTER_DIGIT_GAP, markFontSize, digitInkH, DIGIT_INK_ASC_RATIO, barNumberBoxW, barNumberFontSize, barNumberBoxH, BAR_NUMBER_SCALE, BAR_NUMBER_PAD, BAR_NUMBER_STROKE, BAR_NUMBER_BOTTOM_GAP, SEGMENT_LAYER_YSCALE, SEGMENT_BRACE_ASPECT, SEGMENT_BRACE_MIN_W, TP_BRACKET_GAP, NOTE_BOTTOM_RATIO, SLUR_APEX_H, SLUR_SAG, slurApexY, VOLTA_INK_GAP, digitBottomY, digitInkW, digitTopY, MODIFIER_LAYERS_ABOVE, MODIFIER_LAYERS_BELOW, accidentalGap, tyBaselineY, HS_FONT_SIZE, barDownMarkInk, barDownMarkSpan, hasBarDownMark } from '@ijipu/engine/layout/spacing.ts'
 import { clampMetaPos, metaCornerOffsets, metaAuthorRowY } from '@ijipu/engine/layout/metaAnchors.ts'
+// adj1304：作者（Z:）两端对齐的纯几何
+import { splitAuthorLine, alignAuthorLines } from '@ijipu/engine/layout/authorAlign.ts'
 // adj630b：谱尾说明行基线（渲染端与预览端同一个函数，smoke 据此核对渲染结果）
 import { notesRowBaseline } from '@ijipu/engine/layout/spacing.ts'
 import { markReserveRatio, MARK_INK_H_RATIO } from '@ijipu/engine/layout/spacing.ts'
@@ -4243,6 +4245,64 @@ const tAuthor = getMeta('author_0')
 check('作者右下（右对齐，末行贴区域下沿往上排，adj629u）', tAuthor !== null && Math.abs(tAuthor.x - RIGHT_EDGE) < 0.5 && Math.abs(tAuthor.y - (MT + defaultPageConfig.descAreaH + metaAuthorRowY(0, AUTHORS_ER, defaultPageConfig.miaoshu_size))) < 0.5, JSON.stringify(tAuthor))
 const tAuthorLast = getMeta(`author_${AUTHORS_ER - 1}`)
 check('作者末行贴区域下沿（adj629u）', tAuthorLast !== null && Math.abs(tAuthorLast.y - (MT + defaultPageConfig.descAreaH + metaAuthorRowY(AUTHORS_ER - 1, AUTHORS_ER, defaultPageConfig.miaoshu_size))) < 0.5, JSON.stringify(tAuthorLast))
+
+// ---- adj1304：作者（Z:）两端对齐 ----
+{
+  const a1 = splitAuthorLine('作曲 张三')
+  const a2 = splitAuthorLine('词曲制作 李四')
+  const a3 = splitAuthorLine('作者') // 没有空格 ⇒ 整行都是值
+  const a4 = splitAuthorLine('  编曲   王五  ')
+  check(
+    'adj1304 作者行按**最后一个空格**拆：前面=标签、后面=值；无空格整行是值；多个空格按最后一个算',
+    a1.label === '作曲' && a1.value === '张三' && a2.label === '词曲制作' && a2.value === '李四' && a3.label === '' && a3.value === '作者' && a4.label === '编曲' && a4.value === '王五',
+    JSON.stringify({ a1, a2, a3, a4 }),
+  )
+  const zSrc = 'V: 1.0\nB: 测试曲\nZ: 作曲 张三\nZ: 词曲制作 李四\nZ: 编曲 王五\nD: C\nP: 4/4\nQ: 1 2 3 4 |\n'
+  const zParsed = parseJps(zSrc)
+  const authorSize = Math.max(9, defaultPageConfig.miaoshu_size - 1)
+  const cols = alignAuthorLines(['作曲 张三', '词曲制作 李四', '编曲 王五'], authorSize)
+  check(
+    'adj1304 列宽：「最长字符行」= 最长标签（词曲制作 4 字 = 4×字号），值列取最宽值，间隙半字',
+    Math.abs(cols.labelW - authorSize * 4) < 0.01 && Math.abs(cols.valueW - authorSize * 2) < 0.01 && Math.abs(cols.gap - authorSize * 0.5) < 0.01 && cols.hasLabel === true,
+    JSON.stringify({ labelW: cols.labelW, valueW: cols.valueW, gap: cols.gap }),
+  )
+  const zOn = renderScoreToSvg(layoutScore(zParsed, { ...defaultPageConfig, author_justify: true }))[0]
+  const zOff = renderScoreToSvg(layoutScore(zParsed, { ...defaultPageConfig, author_justify: false }))[0]
+  check(
+    'adj1304 默认配置里**已打开**作者两端对齐（用户在空配置下就该看到新排法）',
+    defaultPageConfig.author_justify === true,
+    JSON.stringify({ author_justify: defaultPageConfig.author_justify }),
+  )
+  const labels = [...zOn.matchAll(/<text class="meta-author-label" x="([\d.]+)"[^>]*?textLength="([\d.]+)"[^>]*?>([^<]*)</g)].map((m) => ({
+    x: Number(m[1]),
+    len: Number(m[2]),
+    text: m[3],
+  }))
+  const labelRight = RIGHT_EDGE - cols.valueW - cols.gap
+  check(
+    'adj1304 开启后每行 label **都拉伸到最长标签宽**（textLength 一致、右缘同一列）',
+    labels.length === 3 &&
+      labels.every((l) => Math.abs(l.len - cols.labelW) < 0.01 && Math.abs(l.x + l.len - labelRight) < 0.01) &&
+      labels.map((l) => l.text).join(',') === '作曲,词曲制作,编曲',
+    JSON.stringify({ labels, labelRight }),
+  )
+  const values = [...zOn.matchAll(/<text data-meta="author_(\d+)" x="([\d.]+)" y="[\d.]+" data-meta-anchor-x="([\d.]+)"/g)].map((m) => ({
+    i: Number(m[1]),
+    x: Number(m[2]),
+    anchorX: Number(m[3]),
+  }))
+  check(
+    'adj1304 值部分仍**右对齐到右边距**（author_i x = 右内容边界，与旧版一致）',
+    values.length === 3 && values.every((v) => Math.abs(v.x - RIGHT_EDGE) < 0.01 && Math.abs(v.anchorX - RIGHT_EDGE) < 0.01),
+    JSON.stringify(values),
+  )
+  check(
+    'adj1304 **负向**：选项关闭时输出保持旧版（没有 label 元素，每行一个 text、x = 右边界）',
+    !zOff.includes('meta-author-label') &&
+      (zOff.match(/<text data-meta="author_\d+" x="[\d.]+" y="[\d.]+" text-anchor="end"/g) ?? []).length === 3,
+    '',
+  )
+}
 const tKey = getMeta('keyline')
 // adj176：调号/拍号/节拍整体右移 6px（为字母左侧升降号角标留空间）
 // keyline x = 左边距 + 6，y = 描述头区域下沿 + 贴角偏移（有节拍行时 = 节拍行之上一行）
@@ -17994,7 +18054,14 @@ function runAdj605Tests() {
     markedKeys.length >= 25 && unregistered.length === 0,
     `未登记：${unregistered.join(',')}`,
   )
-  // adj629z：`docs/SETTINGS-AUDIT.md` 的「默认」列也必须跟着引擎走 —— 改默认值最容易漏文档
+  // adj1304（用户要求）：谱面设置新增「描述头」组 + 「作者两端对齐」行（L2；默认开，勾掉即回旧排法）
+  check(
+    'adj1304 谱面设置新增「描述头」组 + 「作者两端对齐」行（勾选写入 `author_justify`）',
+    cfgNoComment.includes('className="pcfg-group-title">描述头') &&
+      cfgNoComment.includes('label="作者两端对齐"') &&
+      cfgNoComment.includes('author_justify'),
+    '',
+  )
   // （插件 README 也有同一类断言，见 obsidian-ijipu/scripts/smoke-frontmatter.mts §[3f]）
   const auditSrc = String(readFileSync('docs/SETTINGS-AUDIT.md', 'utf8'))
   const auditRow = (marker: string) =>
@@ -28024,9 +28091,9 @@ function runAdj1294Tests() {
       JSON.stringify({ 按钮数: (miniSrc.match(/className="playback-mini-btn"/g) ?? []).length }),
     )
     check(
-      'adj1301 小工具条**只在"右栏 + 浮动 + 已收起 + 会话进行中"时出现**（底栏/插入/栏开着都不显示），宽高与右栏顶部按钮一致',
+      'adj1303 小工具条**只在"右栏 + 浮动 + 已收起 + （试听页签 或 正在播放）"时出现**（点停止不隐藏；不在试听页签且没在播才隐藏），宽高与右栏顶部按钮一致',
       /side === 'right' && float && !open/.test(miniSrc) &&
-        miniSrc.includes('bridge.playing || bridge.starting') &&
+        /panel === 'tryout' \|\| bridge\.playing \|\| bridge\.starting/.test(miniSrc) &&
         /\.playback-mini \{[\s\S]{0,200}?position: fixed;/.test(cssCss) &&
         /\.playback-mini-btn \{[\s\S]{0,200}?width: 28px;[\s\S]{0,80}?height: 28px;/.test(cssCss),
       '',

@@ -3190,7 +3190,8 @@ async function main() {
         !!fit108 && fit108.lines === 1 && fit108.w >= 106 && fit108.w <= 110,
         JSON.stringify(fit108),
       )
-      // adj1300：改短两个 8 字标签 + 列宽 96 → 108 ⇒ 320 档 17 个字段的标签**全部一行**
+      // adj1300：改短两个 8 字标签 + 列宽 96 → 108 ⇒ 320 档标签**全部一行**
+      // （adj1304 新增「描述头 → 作者两端对齐」行后 17 → 18 个字段）
       const allLabels = await evalJs(
         c,
         `(() => {
@@ -3211,8 +3212,8 @@ async function main() {
          })()`,
       )
       check(
-        'adj1300 右栏 @320 谱面**17 个字段的标签全部一行**（两个 8 字标签改短 + 列宽 108；最长自然宽 106）',
-        !!allLabels && allLabels.n === 17 && allLabels.wrapped.length === 0 && allLabels.renamed.length === 2,
+        'adj1300 右栏 @320 谱面**18 个字段的标签全部一行**（两个 8 字标签改短 + 列宽 108；最长自然宽 106）',
+        !!allLabels && allLabels.n === 18 && allLabels.wrapped.length === 0 && allLabels.renamed.length === 3,
         JSON.stringify(allLabels),
       )
       // **负对照**：同一套 DOM 把标签列临时压回 76px ⇒ 这个标签必须变两行（证明上面那条不是白绿）
@@ -3491,16 +3492,73 @@ async function main() {
           'adj1301 关栏期间**播放会话没断**：经小工具条「设置」重新展开，试听按钮仍是「暂停(A)」（没有被卸载重置）',
           stillPlaying === true,
         )
-        // 再关栏，点停止 ⇒ 工具条自动消失、面板回到播放态
+        // adj1303（用户追加）：点「停止」**不隐藏**工具条（只把会话收尾）；
+        // 只有右栏**切到别的页签**时才隐藏。
         await evalJs(c, `document.querySelector('.topbar-right-dock').click(), true`)
         await waitFor(c, `!!document.querySelector('.playback-mini')`, '阶段 F 第二次关栏工具条')
         await evalJs(c, `document.querySelectorAll('.playback-mini-btn')[1].click(), true`)
-        await waitFor(c, `!document.querySelector('.playback-mini')`, '阶段 F 停止后工具条消失')
-        const stoppedF = await evalJs(
+        await sleep(450)
+        const afterStop = await evalJs(
           c,
-          `(() => { const b = document.querySelector('.right-dock[hidden] .pane-tryout .playback-actions .playback-btn'); return !!b && /播放\\(A\\)/.test(b.textContent || '') })()`,
+          `(() => {
+             const bar = document.querySelector('.playback-mini')
+             const btns = bar ? [...bar.querySelectorAll('.playback-mini-btn')] : []
+             const panelBtn = document.querySelector('.right-dock[hidden] .pane-tryout .playback-actions .playback-btn')
+             return {
+               bar: !!bar,
+               first: btns[0]?.getAttribute('title') ?? '',
+               stopDisabled: btns[1] ? btns[1].disabled : null,
+               panelText: panelBtn ? panelBtn.textContent || '' : '',
+             }
+           })()`,
         )
-        check('adj1301 小工具条「停止」生效：工具条消失、试听按钮回到「播放(A)」', stoppedF === true)
+        check(
+          'adj1303 点「停止」后小工具条**不隐藏**（播放键回到「播放」、停止键置灰，面板回到「播放(A)」）',
+          afterStop.bar === true && afterStop.first.includes('播放') && afterStop.stopDisabled === true && /播放\(A\)/.test(afterStop.panelText),
+          JSON.stringify(afterStop),
+        )
+        // 切到别的页签（导出）再收起 ⇒ 工具条隐藏（只有试听页签才显示）
+        await evalJs(c, `document.querySelector('.topbar-right-dock').click(), true`)
+        await waitFor(c, `!!document.querySelector('.right-dock:not([hidden])')`, '阶段 F 重开右栏')
+        await evalJs(c, `document.querySelector('.right-dock [data-key="export"]').click(), true`)
+        await sleep(350)
+        await evalJs(c, `document.querySelector('.topbar-right-dock').click(), true`)
+        await sleep(400)
+        check(
+          'adj1303 右栏切到**别的页签**（导出）再收起 ⇒ 小工具条隐藏（不在试听页签且没在播）',
+          (await evalJs(c, `!!document.querySelector('.playback-mini')`)) === false,
+        )
+        // adj1303：**正在播放**时即使切到别的页签、再收起 ⇒ 工具条仍显示（"试听页签 **或** 正在播放"）
+        await evalJs(c, `document.querySelector('.topbar-right-dock').click(), true`)
+        await waitFor(c, `!!document.querySelector('.right-dock:not([hidden])')`, '阶段 F 再开右栏')
+        await evalJs(c, `document.querySelector('.right-dock [data-key="tryout"]').click(), true`)
+        await waitFor(
+          c,
+          `!!document.querySelector('.right-dock .pane-tryout:not([hidden]) .playback-actions .playback-btn')`,
+          '阶段 F 再开试听',
+          80,
+        )
+        await evalJs(c, `document.querySelector('.right-dock .pane-tryout .playback-actions .playback-btn').click(), true`)
+        await waitFor(
+          c,
+          `(() => { const b = document.querySelector('.right-dock .pane-tryout .playback-actions .playback-btn'); return !!b && /暂停\\(A\\)/.test(b.textContent || '') })()`,
+          '阶段 F 再次播放',
+          120,
+        )
+        await evalJs(c, `document.querySelector('.right-dock [data-key="export"]').click(), true`)
+        await sleep(350)
+        await evalJs(c, `document.querySelector('.topbar-right-dock').click(), true`)
+        await waitFor(c, `!!document.querySelector('.playback-mini')`, '播放中切页签仍显示工具条')
+        check(
+          'adj1303 **播放中**切到别的页签再收起 ⇒ 小工具条仍显示（"试听页签 或 正在播放"）',
+          (await evalJs(c, `(() => { const b = document.querySelectorAll('.playback-mini-btn')[0]; return !!b && (b.getAttribute('title') || '').includes('暂停') })()`)) === true,
+        )
+        await evalJs(c, `document.querySelectorAll('.playback-mini-btn')[1].click(), true`)
+        await waitFor(c, `!document.querySelector('.playback-mini')`, '停止后（非试听页签）工具条隐藏')
+        check(
+          'adj1303 停掉后且不在试听页签 ⇒ 小工具条隐藏',
+          (await evalJs(c, `!!document.querySelector('.playback-mini')`)) === false,
+        )
       }
 
     c.close()

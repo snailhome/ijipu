@@ -8,8 +8,9 @@
  *
  * ## 三条边界
  *
- * 1. **只在"浮动右栏 + 已收起 + 会话进行中"时出现**：底栏模式、插入模式、栏还开着都不显示
- *    （栏开着时试听面板自己就有这三个按钮）。
+ * 1. **只在"浮动右栏 + 已收起 + （试听页签 或 正在播放）"时出现**：底栏模式、插入模式、栏还开着
+ *    都不显示（栏开着时试听面板自己就有这三个按钮）。`adj1303`：**点「停止」不消失**（只要还停在
+ *    试听页签），切到别的页签时只要**还在播**也保留；只有"不在试听页签且没在播"才隐藏。
  * 2. **不持有播放状态**：状态与动作都来自 `store/playbackBridge`（由 `dialogs/PlaybackDialog.tsx`
  *    登记），所以这里不会与面板里的按钮各自漂移。
  * 3. **位置跟着顶栏的「试听」按钮**：按钮可见就居中在它下方；窄屏被折进「更多」时退化为
@@ -36,11 +37,21 @@ export function PlaybackMiniBar() {
   const side = useUiStore((s) => s.dockSide)
   const float = useUiStore((s) => s.dockFloat)
   const open = useUiStore((s) => s.dockOpen)
+  const panel = useUiStore((s) => s.dockPanel)
   const setDockPanel = useUiStore((s) => s.setDockPanel)
   const bridge = useSyncExternalStore(subscribePlaybackBridge, getPlaybackBridge, getPlaybackBridge)
   const [pos, setPos] = useState<MiniBarPos | null>(null)
 
-  const visible = side === 'right' && float && !open && bridge !== null && (bridge.playing || bridge.starting)
+  /**
+   * adj1303（用户 2026-11-16 追加）：**"右栏收着 + （当前页签是试听 **或** 正在播放）"**——
+   * 与"播没在播"只在一半上有关系：
+   *  · 停在试听页签 ⇒ **一直显示**（点「停止」也不消失，工具条变成"播放 / 停止(禁用) / 设置"）；
+   *  · 切到别的页签、但**还在播放** ⇒ 也**不隐藏**（用户要能随时暂停/停止）；
+   *  · 只有"既不在试听页签、又没在播"才隐藏。
+   * `bridge` 仍要求存在（说明试听面板本会话挂载过，能接命令）。
+   */
+  const visible =
+    side === 'right' && float && !open && bridge !== null && (panel === 'tryout' || bridge.playing || bridge.starting)
 
   useLayoutEffect(() => {
     if (!visible) {

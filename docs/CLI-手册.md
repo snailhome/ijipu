@@ -605,7 +605,7 @@ margin_right = 33   [来自：命令行 -s]
 ```text
 > ijipu cli settings -i samples\ershenbu.jps
 settings 需要键名（位置参数），例如：settings -i <谱> margin_right
-  可用键 54 个：settings -i <谱> -t effective 可全量列出；可选字段：heights、metaPos、lyricShrink、showInstrument、segmentRowGap
+  可用键 55 个：settings -i <谱> -t effective 可全量列出；可选字段：heights、metaPos、lyricShrink、showInstrument、segmentRowGap
 ```
 
 一次查看全部生效设置：
@@ -679,7 +679,7 @@ Q:1 2 3 4|
 ```text
 > ijipu cli doctor
 iJipu CLI doctor
-  可设置项：54 个（含可选字段 5 个）
+  可设置项：55 个（含可选字段 5 个）
   能力：svg ✓｜midi ✓｜位图(png/jpg/pdf) ✗（需桌面端隐藏窗口渲染）｜音频(wav) ✗（需音色库合成）｜视频(mp4) ✗（需桌面端隐藏窗口）
   提示：位图/音频在桌面端 exe 内可用；独立 Node 环境只能用 svg/midi ✓
 ```

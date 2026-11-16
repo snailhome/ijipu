@@ -1326,7 +1326,7 @@ console.log('\n— 命令行（A·P1–P4）—')
       lines: ['生效设置（来源：命令行 > 源内 # jps-config > 代码默认）'],
       code: EXIT.ok,
     },
-    { what: 'doctor', argv: ['doctor'], lines: ['可设置项：54 个（含可选字段 5 个）', '能力：svg ✓｜midi ✓'], code: EXIT.ok },
+    { what: 'doctor', argv: ['doctor'], lines: ['可设置项：55 个（含可选字段 5 个）', '能力：svg ✓｜midi ✓'], code: EXIT.ok },
     { what: 'completions bash', argv: ['completions', 'bash'], lines: ['# iJipu bash 补全（桌面端）'], code: EXIT.ok },
     { what: 'completions 用法错', argv: ['completions', 'foo'], lines: ['completions 支持 bash | zsh | powershell（收到 “foo”）'], code: EXIT.usage },
     // adj960（用户实报）：逐项输出**必须带文件名** ⇒ 下面两条按完整行钉（含行首的文件名）

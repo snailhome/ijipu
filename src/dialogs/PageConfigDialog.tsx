@@ -119,6 +119,8 @@ const TAB_CONFIG_KEYS: Partial<Record<TabId, readonly string[]>> = {
     'margin_left',
     'margin_right',
     'descAreaH',
+    // adj1304：描述头组——作者（Z:）两端对齐（L2，随谱走）
+    'author_justify',
     'body_margin_top',
     'height_ciqu',
     'height_quci',
@@ -820,6 +822,21 @@ export function PageConfigDialog({
               <NumInput label="下" range={RANGE.margin_bottom} value={draft.margin_bottom} onChange={(v) => updateDraft({ margin_bottom: v })} />
               <NumInput label="左" range={RANGE.margin_left} value={draft.margin_left} onChange={(v) => updateDraft({ margin_left: v })} />
               <NumInput label="右" range={RANGE.margin_right} value={draft.margin_right} onChange={(v) => updateDraft({ margin_right: v })} />
+            </Row>
+
+            {/* adj1304（用户 2026-11-16 要求）：新增「描述头」组——作者（Z:）两端对齐。
+                多个 Z: 行时，每行**最后一个空格之前**的标签（作曲/作词…）按最长标签拉齐；
+                Z 整体仍右对齐到右边距（值部分不动）。L2：随谱保存。 */}
+            <div className="pcfg-group-title">描述头</div>
+            <Row label="作者两端对齐" mark={isNonDefault('author_justify')}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+                <input
+                  type="checkbox"
+                  checked={draft.author_justify === true}
+                  onChange={(e) => updateDraft({ author_justify: e.target.checked })}
+                />
+                多个 Z: 行时，把最后一个空格前的标签拉齐
+              </label>
             </Row>
 
             <div className="pcfg-group-title">间距(px)</div>
