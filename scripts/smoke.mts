@@ -137,7 +137,7 @@ import { midiToPitchName } from '@ijipu/engine/playback/midi.ts'
 import { DOT_R, DOT_R_DOT, H_GAP, INNER_GAP, BEAM_H, LAYER_GAP, VOLTA_BAR_GAP, VOLTA_RAISE, NOTE_COMMENT_FONT_RATIO, NOTE_COMMENT_RAISE, noteScaleOf, lowDotY, octaveDotY, beamY, octaveTopY, BARLINE_DOT_R, BARLINE_W_THIN, BARLINE_W_THICK, BARLINE_LINE_GAP, BARLINE_DOT_GAP, barlinePad, barlineTotalW, barlineGeometry, GRACE_SIZE_RATIO, GRACE_BEAM_GAP, GRACE_BEAM_TOP_RATIO, GRACE_LINE_W, GRACE_SLOT_RATIO, GRACE_SLOT_RATIO_MULTI, BAR_NUMBER_SIZE_RATIO, DIGIT_HEIGHT_RATIO, DOT_AFTER_DIGIT_GAP, markFontSize, digitInkH, DIGIT_INK_ASC_RATIO, barNumberBoxW, barNumberFontSize, barNumberBoxH, BAR_NUMBER_SCALE, BAR_NUMBER_PAD, BAR_NUMBER_STROKE, BAR_NUMBER_BOTTOM_GAP, SEGMENT_LAYER_YSCALE, SEGMENT_BRACE_ASPECT, SEGMENT_BRACE_MIN_W, TP_BRACKET_GAP, NOTE_BOTTOM_RATIO, SLUR_APEX_H, SLUR_SAG, slurApexY, VOLTA_INK_GAP, digitBottomY, digitInkW, digitTopY, MODIFIER_LAYERS_ABOVE, MODIFIER_LAYERS_BELOW, accidentalGap, tyBaselineY, HS_FONT_SIZE, barDownMarkInk, barDownMarkSpan, hasBarDownMark } from '@ijipu/engine/layout/spacing.ts'
 import { clampMetaPos, metaCornerOffsets, metaAuthorRowY } from '@ijipu/engine/layout/metaAnchors.ts'
 // adj1304：作者（Z:）两端对齐的纯几何
-import { splitAuthorLine, alignAuthorLines } from '@ijipu/engine/layout/authorAlign.ts'
+import { splitAuthorLine, alignAuthorLines, authorGlyphW } from '@ijipu/engine/layout/authorAlign.ts'
 // adj630b：谱尾说明行基线（渲染端与预览端同一个函数，smoke 据此核对渲染结果）
 import { notesRowBaseline } from '@ijipu/engine/layout/spacing.ts'
 import { markReserveRatio, MARK_INK_H_RATIO } from '@ijipu/engine/layout/spacing.ts'
@@ -4350,6 +4350,48 @@ check('作者末行贴区域下沿（adj629u）', tAuthorLast !== null && Math.a
       (zOff.match(/<text data-meta="author_\d+" x="[\d.]+" y="[\d.]+" text-anchor="end"/g) ?? []).length === 3,
     '',
   )
+
+  // ---- adj1308（用户实报）：标签里带 emoji ⇒ 被估成 0.55em，textLength 压出负字距 ----
+  //    实测基准（Chrome headless canvas.measureText，12px，本引擎默认字体栈，2026-11-16）：
+  //    汉字 12、🐌 16.477（1.373em）、❤️ 16.477、M 11.725、J 4.752、'.' 2.889
+  {
+    const MEAS_EMOJI = 16.477
+    // ZWJ 组合必须用码位显式构造：源码里的 emoji 字面量保存时可能丢掉 U+200D（这次就丢了）
+    const zwjFamily = String.fromCodePoint(0x1f468, 0x200d, 0x1f469, 0x200d, 0x1f467)
+    const heartEmoji = String.fromCodePoint(0x2764, 0xfe0f)
+    const emojiW = authorGlyphW('🐌', 12)
+    check(
+      'adj1308 emoji 至少按实测 1.37 字宽估（估小会让 textLength 发出负字距 ⇒ 字形互压）',
+      emojiW >= MEAS_EMOJI - 0.01,
+      `emoji=${emojiW.toFixed(2)} 实测=${MEAS_EMOJI}`,
+    )
+    check(
+      'adj1308 一个 emoji 簇（ZWJ 组合 / 带变体选择符）只算**一个字**宽，不按码位数累加（码位显式构造，防字面量丢 U+200D）',
+      authorGlyphW(zwjFamily, 12) === emojiW && authorGlyphW(heartEmoji, 12) === emojiW, // 👨👩👧', 12) === emojiW && authorGlyphW('❤️', 12) === emojiW,
+      JSON.stringify({ zwj: authorGlyphW(zwjFamily, 12), heart: authorGlyphW(heartEmoji, 12), one: emojiW }), // 👨👩👧', 12), heart: authorGlyphW('❤️', 12), one: emojiW }),
+    )
+    const emojiSrc = 'V: 1.0\nB: 测试曲\nZ: 苏一 曲\nZ: 蜗牛🐌 制谱\nD: C\nP: 4/4\nQ: 1 2 3 4 |\n'
+    const emojiSvg = renderScoreToSvg(layoutScore(parseJps(emojiSrc), defaultPageConfig))[0]
+    const emojiLabels = [...emojiSvg.matchAll(/<text class="meta-author-label" x="([\d.]+)"[^>]*?textLength="([\d.]+)"[^>]*?>([^<]*)</g)].map((m) => ({
+      x: Number(m[1]),
+      len: Number(m[2]),
+      text: m[3] ?? '',
+    }))
+    const emojiRow = emojiLabels.find((l) => l.text.includes('🐌'))
+    const need = 2 * 12 + MEAS_EMOJI
+    check(
+      'adj1308 含 emoji 的 label：textLength ≥ 实测自然宽（2 汉字 + 1 emoji = 40.48）⇒ 字距不会为负',
+      emojiLabels.length === 2 && emojiRow !== undefined && emojiRow.len >= need - 0.01,
+      JSON.stringify({ emojiLabels, need }),
+    )
+    // 负向：旧口径（非 CJK 一律 0.55em）估出 30.6 < 自然宽 40.48 ⇒ 这条能抓住老 bug 复发
+    const oldEst = [...'蜗牛🐌'].reduce((s, ch) => s + (/[\u3000-\u303f\uff00-\uffef]|\p{Script=Han}/u.test(ch) ? 12 : 12 * 0.55), 0)
+    check(
+      'adj1308 **负向**：旧口径（非 CJK = 0.55em）估出 30.6 < 自然宽 40.48（证明上面的判据真能拦住回归）',
+      oldEst < need - 0.01,
+      `old=${oldEst.toFixed(2)} need=${need.toFixed(2)}`,
+    )
+  }
 }
 const tKey = getMeta('keyline')
 // adj176：调号/拍号/节拍整体右移 6px（为字母左侧升降号角标留空间）
