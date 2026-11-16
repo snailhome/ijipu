@@ -18,6 +18,14 @@
   --jp-deep-space-blue-border: #24315e;
 
   /* 界面语义色 */
+  /**
+   * adj1310（用户实报：切换深浅色后图标发灰、与背景接近）：
+   * 图标专用墨色，**不要用 `currentColor`**——Chrome 的老 bug（crbug 487489）：
+   * `background: currentColor` 在 `color` 变化时不一定重绘，mask 图标会保留上一个主题的颜色。
+   * 把颜色落到元素自己的 `background-color` 变量上，主题一变 background-color 的计算值就变，
+   * 必然触发重绘（浅色对应值见下方 `[data-mode='light']`）。
+   */
+  --jp-icon-ink: #eef2ff;
   --jp-bg-app: var(--jp-deep-space-blue-dark);
   --jp-bg-panel: var(--jp-deep-space-blue-panel);
   --jp-bg-panel-hover: #1e2950;
@@ -91,6 +99,8 @@
 /* 黛蓝浅色 = 品牌默认浅色 */
 [data-mode='light'] {
   --jp-bg-app: #f2f5fb;
+  /* adj1310：浅色图标墨色（近黑，保证 16px 细线也有足够对比；不跟文字次级灰走） */
+  --jp-icon-ink: #0d1222;
   --jp-bg-panel: #ffffff;
   --jp-bg-panel-hover: #e9eef8;
   --jp-bg-panel-active: #dfe7f5;

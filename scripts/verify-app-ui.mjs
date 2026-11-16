@@ -2941,12 +2941,21 @@ async function main() {
                return m ? m[1].split(',').slice(0, 3).map((v) => Number(v.trim())) : null
              }
              const lum = (c3) => (c3 ? (0.2126 * c3[0] + 0.7152 * c3[1] + 0.0722 * c3[2]) / 255 : null)
+             const ics = btn && btn.querySelector('.tool-icon') ? getComputedStyle(btn.querySelector('.tool-icon')) : null
+             const bgLum = lum(rgb(cs.backgroundColor))
+             const iconLum = ics ? lum(rgb(ics.backgroundColor)) : null
+             const contrast = bgLum !== null && iconLum !== null
+               ? (Math.max(bgLum, iconLum) + 0.05) / (Math.min(bgLum, iconLum) + 0.05)
+               : null
              return {
                mode: document.documentElement.getAttribute('data-mode'),
                bg: cs.backgroundColor,
-               bgLum: lum(rgb(cs.backgroundColor)),
+               bgLum,
                fgLum: bcs ? lum(rgb(bcs.color)) : null,
-               iconMask: btn && btn.querySelector('.tool-icon') ? getComputedStyle(btn.querySelector('.tool-icon')).maskImage.length : 0,
+               iconBg: ics ? ics.backgroundColor : '',
+               iconLum,
+               iconContrast: contrast,
+               iconMask: ics ? ics.maskImage.length : 0,
              }
            })()`,
         )
@@ -2960,6 +2969,11 @@ async function main() {
             lightDock.fgLum < 0.5 &&
             lightDock.iconMask > 0,
           JSON.stringify(lightDock),
+        )
+        check(
+          'adj1310 浅色下图标用 `--jp-icon-ink`（近黑），与右栏底色的对比度 ≥ 7:1（实报：切换后图标发灰、与背景接近）',
+          !!lightDock && lightDock.iconLum !== null && lightDock.iconLum < 0.2 && lightDock.iconContrast !== null && lightDock.iconContrast >= 7,
+          JSON.stringify({ iconBg: lightDock?.iconBg, iconLum: lightDock?.iconLum, contrast: lightDock?.iconContrast }),
         )
       }
 

@@ -12288,6 +12288,22 @@ smoke 五条含"来源切换成对"结构断言与负对照） |
   要么在「更多」里」，并断言工具条 `scrollWidth ≤ clientWidth`（被裁就红）；③ smoke 钉住"只认最外层"的守卫，
   防止以后为了省事把 `return` 删掉。
 
+### E-2026-592 切换深浅色后 mask 图标保留旧主题颜色 ⇒ 浅色下图标发灰、与背景接近（`adj1310`，用户实报）
+
+- **现象**：手机切到「浅色」后，顶栏/右栏/菜单里的 PNG 图标明显发灰，与浅色底对比很低；
+  文字标签仍是正常深色。深色下图标正常（用户原话：`深色如图1，图标颜色正常了，浅色如图2，还是颜色接近`）。
+- **根因**：图标是 `.tool-icon` 用 CSS mask 画的，颜色写成 `background-color: currentColor`。
+  Chrome 的已知 bug（crbug 487489：`background: currentColor` 在 `color` 变化时不保证重绘）
+  使 mask 层保留了切换前的图标颜色；文字是另一套绘制路径，所以只有图标"卡住"。
+- **解决**：图标颜色不再跟 `currentColor` 走，改由主题令牌 `--jp-icon-ink` 给：
+  深色 `#eef2ff`、浅色 `#0d1222`（`styles/theme.css` 的 `:root` / `[data-mode='light']`）。
+  `.tool-icon { background-color: var(--jp-icon-ink, currentColor); }`——主题一变，
+  `background-color` 的计算值就变，必然触发重绘；同时浅色墨色近黑，细线也有足够对比。
+- **预防**：① 凡是"靠 `currentColor` 上色的 mask/SVG 图标"，在主题切换场景都要怀疑重绘；
+  改用**随主题变化的 CSS 变量**直接落到 `background-color`；② `verify-app-ui` 量浅色右栏图标的
+  实际 `background-color` 与对比度（≥ 7:1），不是只看"图标节点还在"；③ smoke 钉住
+  `.tool-icon` 用 `--jp-icon-ink`、两套墨色都存在，防止以后改回 `currentColor`。
+
 
 
 

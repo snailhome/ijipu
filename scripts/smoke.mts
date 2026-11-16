@@ -450,6 +450,7 @@ function check(name: string, cond: boolean, detail?: string) {
   const html = String(readFileSync('index.html', 'utf8'))
   const appHtml = String(readFileSync('app/index.html', 'utf8'))
   const css = String(readFileSync('src/index.css', 'utf8'))
+  const themeCss = String(readFileSync('src/styles/theme.css', 'utf8'))
   const top = String(readFileSync('src/ui/TopBar.tsx', 'utf8'))
   check(
     'adj1306 页面声明 `color-scheme`（禁用安卓 Chrome 自动深色把图标压暗）+ 模式跟随（应用壳 `/app/` 也要有）',
@@ -470,6 +471,14 @@ function check(name: string, cond: boolean, detail?: string) {
     'adj1309 顶栏量宽只认最外层 `[data-tool-key]`（内层同名按钮会把 34px 覆盖成图标 16px，主题按钮被裁）',
     /el\.parentElement\?\.closest\('\[data-tool-key\]'\)/.test(top) &&
       /if \(el\.parentElement\?\.closest\('\[data-tool-key\]'\)\) return/.test(top),
+    '',
+  )
+  check(
+    'adj1310 图标颜色走 `--jp-icon-ink` 变量（不用 currentColor：Chrome 切换主题时 mask 图标可能不重绘）+ 深浅两套墨色',
+    /\.tool-icon \{[\s\S]*?background-color: var\(--jp-icon-ink, currentColor\)/.test(css) &&
+      !/\.tool-icon \{[\s\S]*?background-color: currentColor/.test(css) &&
+      /--jp-icon-ink: #eef2ff;/.test(themeCss) &&
+      /\[data-mode='light'\][\s\S]{0,200}?--jp-icon-ink: #0d1222;/.test(themeCss),
     '',
   )
 }

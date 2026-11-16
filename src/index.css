@@ -35,10 +35,9 @@ body {
  * **显式声明 color-scheme**，让浏览器知道"深浅色由本应用自己画"。
  *
  * 根因：安卓 Chrome 的自动深色（Auto Dark Theme）在没有 `color-scheme` 声明的页面上
- * 会做一次强制反色/压暗；它把**非文字**的浅色前景（`.tool-icon` 的
- * `background-color: currentColor`）当浅底压暗，而文字会单独保对比 ⇒ 表现为
- * "文字亮、图标暗到看不见"。`index.html` 同时有 `<meta name="color-scheme" content="dark light">`
- * 作首屏提示；这里按当前模式给表单控件/滚动条正确的底色。
+ * 会做一次强制反色/压暗；它把**非文字**的浅色前景（mask 图标的背景色）当浅底压暗，
+ * 而文字会单独保对比 ⇒ 表现为"文字亮、图标暗到看不见"。`index.html` 同时有
+ * `<meta name="color-scheme" content="dark light">` 作首屏提示；这里按当前模式给表单控件/滚动条正确的底色。
  */
 :root {
   color-scheme: dark;
@@ -283,20 +282,24 @@ body {
 }
 
 /* adj408：PNG 按钮图标（`ui/ToolIcon`）——用 CSS mask 上色：
-   只取 PNG 的 **alpha 通道**当形状，颜色恒等于按钮自身的 `color`（`currentColor`）。
-   这样做的两层目的：
+   只取 PNG 的 **alpha 通道**当形状，颜色由主题令牌 `--jp-icon-ink` 给（高对比墨色）。
+   这样做的目的：
    ① **统一颜色/灰度**（用户要求）：这批图标的原始颜色并不一致（近乎纯黑 / 偏灰 / 实心填充），
       直接用 `<img>` 会把这种杂乱照搬到界面上；走 mask 后所有图标只剩一个颜色，
-      且与**同一按钮的文字标签同色**——不再出现"图标亮、文字灰"的错位；也避免了原始黑线稿
-      在深色主题上"隐形"；
-   ② 图标随按钮文字色走，于是悬停 / 激活 / 禁用等状态**天然同步**，无需为图标单独写一套状态规则。
+      也避免了原始黑线稿在深色主题上"隐形"；
+   ② 不跟按钮文字/状态色走——原因见下面 `.tool-icon` 的注释（Chrome 的 currentColor 重绘 bug）。
    配套改动：顶栏各按钮的文字色统一提到**正文主色** `--jp-text-primary`
    （每个主题里对比度最高的前景色：深色 #e8ecf8、浅色 #1c2540），
    比原来的次级灰 `--jp-text-secondary`(#93a0c8) 更显眼（用户要求"对比度更大"）。 */
 .tool-icon {
   display: inline-block;
   flex: 0 0 auto;
-  background-color: currentColor;
+  /* adj1310（用户实报：切浅色后图标发灰、与背景接近）：
+     颜色走 `--jp-icon-ink`（每套主题给一个高对比墨色），**不再用 currentColor**。
+     原因：Chrome 的 crbug 487489——`background: currentColor` 在 `color` 变化时可能不重绘，
+     mask 图标会保留切换前的颜色；用变量后 background-color 计算值随主题变化，必然重绘。
+     悬停/激活仍以文字色 + 背景高亮表达，图标保持最大对比。 */
+  background-color: var(--jp-icon-ink, currentColor);
   -webkit-mask: var(--tool-icon) center / contain no-repeat;
   mask: var(--tool-icon) center / contain no-repeat;
 }
