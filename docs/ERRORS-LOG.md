@@ -12319,6 +12319,18 @@ smoke 五条含"来源切换成对"结构断言与负对照） |
   `html`/`.app` 的 computed `color-scheme` 跟随模式；③ 以后再遇到"系统深色下浅色主题被压暗"，
   先查 meta 是不是被写回 `dark light`，不要只调图标颜色。
 
+### E-2026-594 只改 meta 的 `only light` 仍被强制深色反相——根元素 CSS 必须带 `only`（`adj1312`，用户实报）
+
+- **现象**：`adj1311` 上线后，用户 @`d230aec` 在系统深色 + 应用浅色下复验，整页仍是发灰深色、
+  顶栏图标近黑看不见；页面版本已是最新，排除旧缓存。
+- **根因**：Chrome 的 force-dark 判断的是**元素级** `color-scheme` 的 `only` 关键字；
+  `<meta content="only light">` 只覆盖文档默认，CSS 里 `:root { color-scheme: light }`
+  （不带 only）会把它降级成普通双方案声明，force-dark 仍可反相。真机实测 meta alone 不够。
+- **解决**：`src/index.css` 的 `:root`、`html[data-mode='dark']`、`.app[data-mode='light'|'dark']`
+  全部改成 `color-scheme: only light` / `only dark`。
+- **预防**：smoke 钉住四处都带 `only`，不只钉 meta；verify 断言 `html` 与 `.app` 的 computed
+  `color-scheme` 等于 `only light`/`only dark`（以前只断言等于 `light`/`dark`，把 `only` 丢了也测不出来）。
+
 
 
 

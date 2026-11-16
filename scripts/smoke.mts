@@ -459,9 +459,10 @@ function check(name: string, cond: boolean, detail?: string) {
       /<meta name="color-scheme" content="only light"\s*\/?>/.test(appHtml) &&
       /<meta name="color-scheme" content="only light"\s*\/?>/.test(pluginHtml) &&
       !/content="dark light"/.test(html + appHtml + pluginHtml) &&
-      /:root \{\s*color-scheme: light;/.test(css) &&
-      /html\[data-mode='dark'\] \{\s*color-scheme: dark;/.test(css) &&
-      /\.app\[data-mode='light'\] \{\s*color-scheme: light;/.test(css),
+      /:root \{\s*color-scheme: only light;/.test(css) &&
+      /html\[data-mode='dark'\] \{\s*color-scheme: only dark;/.test(css) &&
+      /\.app\[data-mode='light'\] \{\s*color-scheme: only light;/.test(css) &&
+      /\.app\[data-mode='dark'\] \{\s*color-scheme: only dark;/.test(css),
     '',
   )
   check(

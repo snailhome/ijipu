@@ -462,11 +462,11 @@ async function main() {
     const appScheme = await evalJs(c, `getComputedStyle(document.querySelector('.app')).colorScheme`)
     const rootScheme = await evalJs(c, `getComputedStyle(document.documentElement).colorScheme`)
     const appMode = await evalJs(c, `document.querySelector('.app')?.dataset.mode ?? ''`)
+    const onlyMode = (scheme) =>
+      scheme.split(/\s+/).includes('only') && scheme.split(/\s+/).includes(appMode)
     check(
-      'adj1306/adj1311 页面 `color-scheme: only light`（meta）且 html/.app 跟随当前模式',
-      schemeMeta === 'only light' &&
-        (appScheme === 'dark' || appScheme === 'light') &&
-        rootScheme === appMode,
+      'adj1306/adj1311/adj1312 页面 `color-scheme: only light`（meta）且 html/.app 都带 only、跟随当前模式',
+      schemeMeta === 'only light' && onlyMode(appScheme) && onlyMode(rootScheme),
       JSON.stringify({ schemeMeta, appScheme, rootScheme, appMode }),
     )
 

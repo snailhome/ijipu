@@ -41,18 +41,22 @@ body {
  *
  * 这里把根元素的默认值改成 light，深色由 `html[data-mode='dark']` 再切回 dark——
  * 应用本身用 CSS 变量画深浅色，不依赖浏览器替我们反色；表单控件/滚动条仍按当前模式取色。
+ *
+ * adj1312：**必须写 `only`**。只写 meta 的 `only light` 在真机上仍被强制深色反相
+ * （用户 2026-11-16 22:22 @d230aec 复验）；Chrome 的 force-dark 认的是元素级
+ * `color-scheme: only ...`（`:root` 上必须带 only），所以根和 `.app` 都带 only。
  */
 :root {
-  color-scheme: light;
+  color-scheme: only light;
 }
 html[data-mode='dark'] {
-  color-scheme: dark;
+  color-scheme: only dark;
 }
 .app[data-mode='light'] {
-  color-scheme: light;
+  color-scheme: only light;
 }
 .app[data-mode='dark'] {
-  color-scheme: dark;
+  color-scheme: only dark;
 }
 
 /* ============ 应用外壳 ============ */
