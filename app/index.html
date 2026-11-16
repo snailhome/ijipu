@@ -8,9 +8,11 @@
          与浏览器一样收缩内容区（Chrome 108+）。默认 PWA 只缩"视觉视口"、布局视口不变，
          于是键盘会盖住编辑区底部（用户反馈"用 PWA 时窗口不随输入法缩小，只能用浏览器"）。 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content" />
-    <!-- adj1306（用户实报：手机深色下图标与背景过近）：声明本页自己处理深浅色，
-         禁用安卓 Chrome「自动深色」把 mask 图标的浅色前景当浅底压暗。 -->
-    <meta name="color-scheme" content="dark light" />
+    <!-- adj1306 + adj1311（用户实报：手机深色下图标与背景过近 / 系统深色 + 应用浅色时整页被压暗）：
+         用 `only light` **明确拒绝**安卓 Chrome 的「自动深色 / 强制深色」改写本页。
+         本页的深浅色完全由应用自己画（dark 主题有独立配色），不需要浏览器再替我们反色；
+         `only light` 是 Chrome 官方给自动深色的 opt-out 写法（`dark light` 仍可能被强制反色）。 -->
+    <meta name="color-scheme" content="only light" />
     <meta name="description" content="爱记谱 iJipu —— 码即成，谱自现。代码式简谱制谱引擎，脚本规则高度兼容「番茄简谱」。" />
     <!-- adj373：作者署名（页面元数据） -->
     <meta name="author" content="蜗牛🐌" />

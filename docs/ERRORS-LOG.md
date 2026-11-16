@@ -12304,6 +12304,21 @@ smoke 五条含"来源切换成对"结构断言与负对照） |
   实际 `background-color` 与对比度（≥ 7:1），不是只看"图标节点还在"；③ smoke 钉住
   `.tool-icon` 用 `--jp-icon-ink`、两套墨色都存在，防止以后改回 `currentColor`。
 
+### E-2026-593 系统深色 + 应用浅色时整页被安卓 Chrome 自动深色反相，图标/谱面发黑（`adj1311`，用户实报）
+
+- **现象**：系统深色、应用选「浅色」时，页面整体变成深色（不是应用的深色配色，而是发灰的深色），
+  顶栏图标仍是浅色主题的近黑墨色 ⇒ 几乎看不见；预览区谱面也一起变暗。点菜单「浅色」显示 ✓。
+- **根因**：安卓 Chrome 的自动深色 / 强制深色（Auto Dark Theme / Force Dark）对浅色页面做反相；
+  它**不改写图片和 mask 图标**，于是文字被反成浅色、图标仍是深色。只在 `<meta name="color-scheme">`
+  写 `dark light` 不足以拒绝（用户真机实测），必须用 Chrome 官方的 opt-out 值 **`only light`**。
+- **解决**：首页 / `/app/` / `/plugin/` 三处 HTML 的 meta 都改成 `content="only light"`；
+  `src/index.css` 的根默认色改为 `color-scheme: light`，深色由 `html[data-mode='dark']` 再切回 dark
+  （应用自己用 CSS 变量画深浅色，不靠浏览器反色；表单控件/滚动条仍按当前模式取色）。
+- **预防**：① smoke 钉住三处 meta 都是 `only light`、且不得再出现 `dark light`，同时钉住
+  `:root{color-scheme:light}` 与 `html[data-mode='dark']`；② `verify-app-ui` 断言 meta 值与
+  `html`/`.app` 的 computed `color-scheme` 跟随模式；③ 以后再遇到"系统深色下浅色主题被压暗"，
+  先查 meta 是不是被写回 `dark light`，不要只调图标颜色。
+
 
 
 

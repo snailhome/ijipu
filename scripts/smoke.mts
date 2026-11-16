@@ -449,14 +449,18 @@ function check(name: string, cond: boolean, detail?: string) {
 {
   const html = String(readFileSync('index.html', 'utf8'))
   const appHtml = String(readFileSync('app/index.html', 'utf8'))
+  const pluginHtml = String(readFileSync('plugin/index.html', 'utf8'))
   const css = String(readFileSync('src/index.css', 'utf8'))
   const themeCss = String(readFileSync('src/styles/theme.css', 'utf8'))
   const top = String(readFileSync('src/ui/TopBar.tsx', 'utf8'))
   check(
-    'adj1306 页面声明 `color-scheme`（禁用安卓 Chrome 自动深色把图标压暗）+ 模式跟随（应用壳 `/app/` 也要有）',
-    /<meta name="color-scheme" content="dark light"\s*\/?>/.test(html) &&
-      /<meta name="color-scheme" content="dark light"\s*\/?>/.test(appHtml) &&
-      /:root \{\s*color-scheme: dark;/.test(css) &&
+    'adj1306/adj1311 页面用 `color-scheme: only light` 拒绝安卓 Chrome 自动深色（首页/应用壳/插件壳三处；`dark light` 不够）',
+    /<meta name="color-scheme" content="only light"\s*\/?>/.test(html) &&
+      /<meta name="color-scheme" content="only light"\s*\/?>/.test(appHtml) &&
+      /<meta name="color-scheme" content="only light"\s*\/?>/.test(pluginHtml) &&
+      !/content="dark light"/.test(html + appHtml + pluginHtml) &&
+      /:root \{\s*color-scheme: light;/.test(css) &&
+      /html\[data-mode='dark'\] \{\s*color-scheme: dark;/.test(css) &&
       /\.app\[data-mode='light'\] \{\s*color-scheme: light;/.test(css),
     '',
   )

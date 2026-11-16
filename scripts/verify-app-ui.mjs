@@ -457,13 +457,17 @@ async function main() {
       await evalJs(c, `document.querySelector('.topbar-hamburger-btn').click(), true`)
       await sleep(200)
     }
-    // adj1306：页面必须声明 color-scheme（安卓 Chrome 自动深色否则会压暗 mask 图标）
+    // adj1306/adj1311：用 `only light` 拒绝自动深色，且根元素的 color-scheme 跟随当前模式
     const schemeMeta = await evalJs(c, `document.querySelector('meta[name="color-scheme"]')?.content ?? ''`)
     const appScheme = await evalJs(c, `getComputedStyle(document.querySelector('.app')).colorScheme`)
+    const rootScheme = await evalJs(c, `getComputedStyle(document.documentElement).colorScheme`)
+    const appMode = await evalJs(c, `document.querySelector('.app')?.dataset.mode ?? ''`)
     check(
-      'adj1306 页面声明 `color-scheme`（meta=dark light，.app 跟随当前模式）',
-      schemeMeta === 'dark light' && (appScheme === 'dark' || appScheme === 'light'),
-      JSON.stringify({ schemeMeta, appScheme }),
+      'adj1306/adj1311 页面 `color-scheme: only light`（meta）且 html/.app 跟随当前模式',
+      schemeMeta === 'only light' &&
+        (appScheme === 'dark' || appScheme === 'light') &&
+        rootScheme === appMode,
+      JSON.stringify({ schemeMeta, appScheme, rootScheme, appMode }),
     )
 
     // ---- ⑩ 有未保存修改时点「新建」⇒ 先问一句；确认后才真的新建 ----

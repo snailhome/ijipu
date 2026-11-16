@@ -31,15 +31,21 @@ body {
 }
 
 /**
- * adj1306（用户实报：手机深色主题下图标与背景色太接近）：
- * **显式声明 color-scheme**，让浏览器知道"深浅色由本应用自己画"。
+ * adj1306 + adj1311（用户实报：手机深色主题下图标与背景色太接近；系统深色 + 应用浅色时整页被压暗）：
+ * **显式声明 color-scheme，并用 `only light` 拒绝浏览器改写本页**。
  *
- * 根因：安卓 Chrome 的自动深色（Auto Dark Theme）在没有 `color-scheme` 声明的页面上
- * 会做一次强制反色/压暗；它把**非文字**的浅色前景（mask 图标的背景色）当浅底压暗，
- * 而文字会单独保对比 ⇒ 表现为"文字亮、图标暗到看不见"。`index.html` 同时有
- * `<meta name="color-scheme" content="dark light">` 作首屏提示；这里按当前模式给表单控件/滚动条正确的底色。
+ * 根因：安卓 Chrome 的自动深色 / 强制深色（Auto Dark Theme / Force Dark）会在系统深色时
+ * 把浅色页面反相；它不改写图片和 mask 图标，于是出现"文字变亮、图标仍是深色 ⇒ 图标看不见"，
+ * 预览区的水印/谱面也会一起变暗。`only light` 是 Chrome 官方给自动深色的 opt-out 写法；
+ * 单写 `dark light` 仍可能被强制反色（用户真机实测）。
+ *
+ * 这里把根元素的默认值改成 light，深色由 `html[data-mode='dark']` 再切回 dark——
+ * 应用本身用 CSS 变量画深浅色，不依赖浏览器替我们反色；表单控件/滚动条仍按当前模式取色。
  */
 :root {
+  color-scheme: light;
+}
+html[data-mode='dark'] {
   color-scheme: dark;
 }
 .app[data-mode='light'] {

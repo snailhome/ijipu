@@ -6,13 +6,12 @@
     <link rel="icon" type="image/png" href="/icons/Jianpu.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <!--
-      adj1306（用户实报：手机深色下图标与背景过近）：
-      **必须声明 color-scheme** —— 安卓 Chrome 的「自动深色（Auto Dark Theme）」只对
-      "没声明自己支持深色"的页面做强制反色；它会按"非文字的前景/背景"处理，把
-      `.tool-icon` 那层 `background-color: currentColor`（浅色）当成浅底压暗 ⇒ 图标变暗、文字照常。
-      声明 `dark light` 后浏览器认为本页自己处理深浅色，自动深色不再介入。
+      adj1306 + adj1311（用户实报：手机深色下图标与背景过近 / 系统深色 + 应用浅色时整页被压暗）：
+      用 `only light` **明确拒绝**安卓 Chrome 的「自动深色 / 强制深色」改写本页。
+      本页的深浅色由应用自己画（深色主题有独立配色），不需要浏览器再替我们反色；
+      `only light` 是 Chrome 官方给自动深色的 opt-out 写法（`dark light` 仍可能被强制反色）。
     -->
-    <meta name="color-scheme" content="dark light" />
+    <meta name="color-scheme" content="only light" />
     <title>爱记谱 iJipu：码即成，谱自现 | 代码式简谱制谱引擎</title>
     <!--
       adj948（用户要求「行文正式、规范、优雅、简洁，减少 AI 味」）：全站文案统一口径 ——
