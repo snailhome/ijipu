@@ -1561,6 +1561,9 @@ export function WorkspacePanel() {
                   }}
                 />
                 {/* 消除过滤：常驻（无过滤时禁用）——位置固定，不因是否有过滤而跳动 */}
+                {/* adj1299（用户拍板）：`✕` 字符换成**图标**（复用导入页签那枚「取消」，
+                    与其它已图标化的按钮同一套观感）。`*` 仍是字符——图标集里没有对应的
+                    "匹配任意串"图形，硬画一枚不如留着这个数学符号好认。 */}
                 <button
                   type="button"
                   className="btn ws-filter-clear"
@@ -1569,7 +1572,7 @@ export function WorkspacePanel() {
                   title={workspaceCopy.filterClear}
                   aria-label={workspaceCopy.filterClear}
                 >
-                  ✕
+                  <ToolIcon name="close" size={12} />
                 </button>
               </div>
 

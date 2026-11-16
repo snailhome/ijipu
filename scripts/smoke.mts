@@ -28221,11 +28221,11 @@ function runAdj1294Tests() {
       '',
     )
     check(
-      'adj1298 CSS：设置**标签列收到 76px**（不再按"当页最长标签"到 108px）+ 极窄档（容器 ≤240）标签与控件上下排',
-      /\.right-dock \.pcfg-fields \.pcfg-row \{[\s\S]{0,160}?grid-template-columns: minmax\(0, 76px\) minmax\(0, 1fr\);/.test(
+      'adj1299 CSS：设置**标签列 96px**（adj1298 的 76px 不够：最长标签自然宽 94 = 文字 84 + 红 `*` 占位 10）+ 极窄档（容器 ≤280）标签与控件上下排',
+      /\.right-dock \.pcfg-fields \.pcfg-row \{[\s\S]{0,160}?grid-template-columns: minmax\(0, 96px\) minmax\(0, 1fr\);/.test(
         cssCode,
       ) &&
-        /@container \(max-width: 240px\) \{[\s\S]{0,240}?\.right-dock \.pcfg-fields \.pcfg-row \{[\s\S]{0,120}?grid-template-columns: minmax\(0, 1fr\);/.test(
+        /@container \(max-width: 280px\) \{[\s\S]{0,240}?\.right-dock \.pcfg-fields \.pcfg-row \{[\s\S]{0,120}?grid-template-columns: minmax\(0, 1fr\);/.test(
           cssCode,
         ),
       '',
@@ -28253,9 +28253,10 @@ function runAdj1294Tests() {
       )
     }
     check(
-      'adj1298 CSS **负向**：上面这些覆盖全在 `.right-dock` 之下——底栏仍是"试听两栏 / 子页签按内容宽 / 标签列 96px"',
+      'adj1298 CSS **负向**：上面这些覆盖全在 `.right-dock` 之下——底栏仍是"试听两栏 / 子页签按内容宽 / 标签列 96px（由 --pcfg-label-w 算）"',
       !/\.tool-dock \.playback-panel \.dock-split \{[\s\S]{0,120}?display: contents/.test(cssCode) &&
         !/\.tool-dock \.jp-tab \{[\s\S]{0,240}?flex: 1 1 0;/.test(cssCode) &&
+        !/\.tool-dock \.pcfg-fields \.pcfg-row \{[\s\S]{0,160}?minmax\(0, 96px\)/.test(cssCode) &&
         !/\.tool-dock \.pcfg-fields \.pcfg-row \{[\s\S]{0,160}?minmax\(0, 76px\)/.test(cssCode) &&
         !/\.tool-dock-body \{[\s\S]{0,700}?scrollbar-gutter: auto;/.test(cssCode),
       '',
@@ -28269,6 +28270,22 @@ function runAdj1294Tests() {
         /\.tool-dock \.ws-filter-row \.ws-filter-all,[\s\S]{0,160}?width: var\(--jp-dock-btn-h, 28px\);[\s\S]{0,80}?height: var\(--jp-dock-btn-h, 28px\);/.test(
           cssCode,
         ) && /\.ws-filter-row \.ws-filter \{[\s\S]{0,160}?flex: 1 1 auto;/.test(cssCode),
+        '',
+      )
+    }
+
+    // ⑮ 阶段 E（adj1299，用户 2026-11-16 拍板）：过滤行「消除过滤」从 `✕` 字符换成**图标**。
+    //    负向用**剥注释后的那段源码**判（E-2026-237 同款：注释里出现 `✕` 会让负向断言假红）。
+    {
+      const wsSrc1299 = String(readFileSync('src/ui/dock/WorkspacePanel.tsx', 'utf8')).replace(
+        /\{\/\*[\s\S]*?\*\/\}/g,
+        '',
+      )
+      check(
+        'adj1299 过滤行「消除过滤」按钮换成**图标**（复用 `close` = `取消.png`），不再是 `✕` 字符；`*` 仍保留字符',
+        /className="btn ws-filter-clear"[\s\S]{0,400}?<ToolIcon name="close"/.test(wsSrc1299) &&
+          !/className="btn ws-filter-clear"[\s\S]{0,400}?✕/.test(wsSrc1299) &&
+          /className=\{`btn ws-filter-all[\s\S]{0,800}?\{workspaceCopy\.filterAll\}/.test(wsSrc1299),
         '',
       )
     }

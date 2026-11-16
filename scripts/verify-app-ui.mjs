@@ -2570,7 +2570,8 @@ async function main() {
           subTabs.n === 4 && subTabs.spread <= 2 && Math.abs(subTabs.filled - subTabs.rowW) <= 4,
           JSON.stringify(subTabs),
         )
-        // ② 标签列从"当页最长标签"（可到 108px）收到 76px：320 档下控件拿到 ≥150px
+        // ② 标签列从"当页最长标签"（可到 108px）收到 96px：320 档下控件拿到 ≥150px
+        //    （adj1299 从 76px 放宽到 96px——见下面阶段 E 那一段的实测表）
         const setRow = await evalJs(
           c,
           `(() => {
@@ -2587,8 +2588,8 @@ async function main() {
            })()`,
         )
         check(
-          'adj1298 右栏 @320 设置行的**标签列收窄到 76px**（`--pcfg-label-w` 不再按最长标签吃饭），控件拿到 ≥150px',
-          !!setRow && setRow.labelW <= 78 && setRow.ctlW >= 150,
+          'adj1299 右栏 @320 设置行的**标签列放宽到 96px**（= 最长标签自然宽 94 + 2 余量），控件仍有 ≥150px',
+          !!setRow && setRow.labelW >= 94 && setRow.labelW <= 98 && setRow.ctlW >= 150,
           JSON.stringify(setRow),
         )
       }
@@ -3079,6 +3080,250 @@ async function main() {
       await c.send('Emulation.setUserAgentOverride', { userAgent: DESKTOP_UA2 })
       await evalJs(c, `localStorage.clear(), true`)
     }
+
+      // ---- ⑯ 阶段 E（adj1299）：标签列 96 / 260 档单列 / 工作区列表态夹具 ----
+      //
+      // 用户 2026-11-16 拍板四条：
+      //   ① 标签列 76 → 96px（用户原话 88，实测 88 仍折两行——见 index.css 那一节的实测表）
+      //   ② 单列门槛 240 → 280px（260 档原来控件反而比 195 档窄）
+      //   ③ 工作区「有列表」时的过滤行：**headless 里 showDirectoryPicker 拿不到真句柄**，
+      //      面板永远停在"选择工作区" ⇒ 以前只有源码级断言。这里注入一个**假 FSA 目录句柄**
+      //      （`Page.addScriptToEvaluateOnNewDocument`，页面加载前就位），真点「新工作区」
+      //      进列表态，再量过滤行的顺序 / 一行 / 正方形 / 不裁。
+      //   ④ 过滤行 ✕ 换成「取消」图标（`*` 仍是字符——图标集里没有"匹配任意串"的图形）
+      const FAKE_FS = `
+        (() => {
+          const mkFile = (name, mtime, text) => ({
+            kind: 'file',
+            name,
+            getFile: async () => ({ name, lastModified: mtime, size: text.length, text: async () => text }),
+            createWritable: async () => ({ write: async () => {}, truncate: async () => {}, close: async () => {} }),
+          })
+          const mkDir = (name, children) => ({
+            kind: 'directory',
+            name,
+            values: async function* () { for (const c of children) yield c },
+            entries: async function* () { for (const c of children) yield [c.name, c] },
+            getDirectoryHandle: async (n, o) => {
+              const hit = children.find((c) => c.name === n && c.kind === 'directory')
+              if (hit) return hit
+              if (o && o.create) { const d = mkDir(n, []); children.push(d); return d }
+              throw new DOMException('NotFound', 'NotFoundError')
+            },
+            getFileHandle: async (n, o) => {
+              const hit = children.find((c) => c.name === n && c.kind === 'file')
+              if (hit) return hit
+              if (o && o.create) { const f = mkFile(n, Date.now(), ''); children.push(f); return f }
+              throw new DOMException('NotFound', 'NotFoundError')
+            },
+            removeEntry: async () => {},
+            queryPermission: async () => 'granted',
+            requestPermission: async () => 'granted',
+            isSameEntry: async () => false,
+          })
+          const root = mkDir('测试工作区', [
+            mkDir('子目录', [mkFile('子谱.jps', 1700000003000, '1 2 3')]),
+            mkFile('小星星.jps', 1700000001000, '1 1 5 5'),
+            mkFile('茉莉花.jps', 1700000002000, '3 2 1'),
+            mkFile('说明.txt', 1700000004000, 'nope'),
+          ])
+          window.showDirectoryPicker = async () => root
+        })()
+      `
+      await c.send('Page.addScriptToEvaluateOnNewDocument', { source: FAKE_FS })
+      const goDock = async (w, float, stamp) => {
+        await evalJs(
+          c,
+          "localStorage.setItem('ijipu.dockSide','right'), localStorage.setItem('ijipu.dockFloat','" +
+            float +
+            "'), localStorage.setItem('ijipu.dockWidth','" +
+            w +
+            "'), localStorage.setItem('ijipu.dockTabsPos','bottom'), true",
+        )
+        await c.send('Page.navigate', { url: `${origin}/app/?m=${stamp}` })
+        await waitFor(c, `location.search.includes('m=${stamp}')`, '阶段 E 新文档', 80)
+        await waitFor(c, `!!document.querySelector('.topbar-right-dock')`, '阶段 E 顶栏', 80)
+        await sleep(300)
+        // 手机档首次可能已自动展开（shouldOpenWorkspaceDock）⇒ 只在没开时点
+        if ((await evalJs(c, `!!document.querySelector('.right-dock')`)) === false) {
+          await evalJs(c, `document.querySelector('.topbar-right-dock').click(), true`)
+          await waitFor(c, `!!document.querySelector('.right-dock')`, '阶段 E 右栏', 80)
+        }
+        await sleep(300)
+      }
+      const openScoreLayout = async () => {
+        await evalJs(c, `document.querySelector('.right-dock [data-key="score"]').click(), true`)
+        await waitFor(
+          c,
+          `!!document.querySelector('.right-dock .pane-score:not([hidden]) .jp-tabs')`,
+          '阶段 E 谱面面板',
+        )
+        await evalJs(
+          c,
+          `(() => { const t = document.querySelectorAll('.right-dock .pane-score:not([hidden]) .jp-tab'); if (t[0]) t[0].click(); return true })()`,
+        )
+        await sleep(500)
+      }
+      const labelLines = () =>
+        evalJs(
+          c,
+          `(() => {
+             const pane = document.querySelector('.right-dock .pane-score:not([hidden])')
+             if (!pane) return null
+             const hit = [...pane.querySelectorAll('.pcfg-row-label')].find((l) => (l.textContent || '').includes('曲部与词部间距'))
+             if (!hit) return null
+             const lh = parseFloat(getComputedStyle(hit).lineHeight) || 15
+             const r = hit.getBoundingClientRect()
+             return { lines: Math.round(r.height / lh), h: Math.round(r.height), w: Math.round(r.width), text: (hit.textContent || '').trim() }
+           })()`,
+        )
+      await goDock('narrow', '0', 'stageE1')
+      await openScoreLayout()
+      const fit96 = await labelLines()
+      check(
+        'adj1299 右栏 @320 谱面「曲部与词部间距」**一行放得下**（标签列 96 ≥ 自然宽 94：文字 84 + 红 `*` 占位 10）',
+        !!fit96 && fit96.lines === 1 && fit96.w >= 94 && fit96.w <= 98,
+        JSON.stringify(fit96),
+      )
+      // **负对照**：同一套 DOM 把标签列临时压回 76px ⇒ 这个标签必须变两行（证明上面那条不是白绿）
+      await evalJs(
+        c,
+        `(() => {
+           const el = document.createElement('style')
+           el.id = 'tmp-label-76'
+           el.textContent = '.right-dock .pcfg-fields .pcfg-row{grid-template-columns:minmax(0,76px) minmax(0,1fr) !important}'
+           document.head.appendChild(el)
+           return true
+         })()`,
+      )
+      await sleep(400)
+      const fit76 = await labelLines()
+      await evalJs(c, `(() => { const el = document.getElementById('tmp-label-76'); if (el) el.remove(); return true })()`)
+      await sleep(300)
+      check(
+        'adj1299 **负对照**：标签列压回 76px 时同一个标签变两行（96px 这条判据真的在量东西）',
+        !!fit76 && fit76.lines >= 2,
+        JSON.stringify(fit76),
+      )
+      // 工作区列表态（假句柄）：过滤行 = `*` → 搜索框 → ✕（图标），三件套同一行、两枚按钮正方形
+      await evalJs(c, `document.querySelector('.right-dock [data-key="workspace"]').click(), true`)
+      await waitFor(
+        c,
+        `!!document.querySelector('.right-dock .pane-workspace:not([hidden]) .ws-choose-side')`,
+        '阶段 E 工作区（选择态）',
+      )
+      await evalJs(
+        c,
+        `(() => { const b = document.querySelector('.right-dock .pane-workspace:not([hidden]) .ws-choose-side button.btn'); if (b) b.click(); return !!b })()`,
+      )
+      await waitFor(
+        c,
+        `!!document.querySelector('.right-dock .pane-workspace:not([hidden]) .ws-filter-row')`,
+        '阶段 E 工作区列表态（假 FSA 句柄）',
+        120,
+      )
+      await sleep(800)
+      const wsRow = await evalJs(
+        c,
+        `(() => {
+           const pane = document.querySelector('.right-dock .pane-workspace:not([hidden])')
+           const row = pane && pane.querySelector('.ws-filter-row')
+           if (!row) return null
+           const kids = [...row.children]
+           const all = row.querySelector('.ws-filter-all')
+           const input = row.querySelector('.ws-filter')
+           const clear = row.querySelector('.ws-filter-clear')
+           const icon = clear && clear.querySelector('.tool-icon')
+           const rect = (el) => { const r = el.getBoundingClientRect(); return { w: Math.round(r.width), h: Math.round(r.height), t: Math.round(r.top) } }
+           return {
+             n: kids.length,
+             cls: kids.map((k) => String(k.className)),
+             all: all ? rect(all) : null,
+             input: input ? rect(input) : null,
+             clear: clear ? rect(clear) : null,
+             clearIcon: !!icon,
+             clearMask: icon ? getComputedStyle(icon).maskImage : '',
+             clearText: clear ? (clear.textContent || '').trim() : '',
+             listRows: pane.querySelectorAll('.ws-list .ws-row').length,
+             clipped: [...pane.querySelectorAll('*')].filter((el) => {
+               const cs = getComputedStyle(el)
+               return cs.overflowX !== 'visible' && el.clientWidth > 0 && el.scrollWidth > el.clientWidth + 2
+             }).length,
+           }
+         })()`,
+      )
+      check(
+        'adj1299 工作区**列表态**（假 FSA 句柄）过滤行：`*` → 搜索框 → ✕ 三件套同一行（顶边一致）',
+        !!wsRow &&
+          wsRow.n === 3 &&
+          wsRow.cls[0].includes('ws-filter-all') &&
+          wsRow.cls[1].includes('ws-filter') &&
+          wsRow.cls[2].includes('ws-filter-clear') &&
+          Math.abs(wsRow.all.t - wsRow.input.t) <= 1 &&
+          Math.abs(wsRow.clear.t - wsRow.input.t) <= 1,
+        JSON.stringify(wsRow && { cls: wsRow.cls, all: wsRow.all, input: wsRow.input, clear: wsRow.clear }),
+      )
+      check(
+        'adj1299 工作区列表态：两枚按钮**正方形**（28×28）、搜索框吃掉剩余宽、面板**不裁内容**、列表真有假工作区的条目',
+        !!wsRow &&
+          wsRow.all.w === wsRow.all.h &&
+          wsRow.clear.w === wsRow.clear.h &&
+          wsRow.all.w === 28 &&
+          wsRow.clear.w === 28 &&
+          wsRow.input.w >= 80 &&
+          wsRow.clipped === 0 &&
+          wsRow.listRows >= 3,
+        JSON.stringify(wsRow && { all: wsRow.all, clear: wsRow.clear, input: wsRow.input, listRows: wsRow.listRows, clipped: wsRow.clipped }),
+      )
+      check(
+        'adj1299 过滤行的 ✕ 换成了「取消」图标（不再是字符；`title` / `aria-label` 仍在）',
+        !!wsRow && wsRow.clearIcon === true && wsRow.clearText === '' && wsRow.clearMask.length > 0,
+        JSON.stringify(wsRow && { clearIcon: wsRow.clearIcon, clearText: wsRow.clearText }),
+      )
+      // 260 档（手机宽档）：单列门槛 280 ⇒ 标签一行、控件一行、控件拿整宽（不再 76 + 146）
+      const DESKTOP_UA5 = await evalJs(c, 'navigator.userAgent')
+      const MOBILE_UA5 =
+        'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
+      await c.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 3, mobile: true })
+      await c.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 })
+      await c.send('Emulation.setUserAgentOverride', { userAgent: MOBILE_UA5 })
+      await evalJs(c, `localStorage.clear(), true`)
+      await goDock('wide', '1', 'stageE2')
+      await evalJs(c, `document.querySelector('.right-dock [data-key="settings"]').click(), true`)
+      await waitFor(
+        c,
+        `!!document.querySelector('.right-dock .pane-settings:not([hidden]) .jp-tabs')`,
+        '阶段 E 260 档全局设置',
+      )
+      await sleep(500)
+      const m260 = await evalJs(
+        c,
+        `(() => {
+           const pane = document.querySelector('.right-dock .pane-settings:not([hidden])')
+           const row = pane && pane.querySelector('.pcfg-fields .pcfg-row')
+           const label = row && row.querySelector('.pcfg-row-label')
+           const ctl = row && row.querySelector('.pcfg-row-ctl')
+           if (!label || !ctl) return null
+           const lr = label.getBoundingClientRect()
+           const cr = ctl.getBoundingClientRect()
+           return {
+             dockW: Math.round(document.querySelector('.right-dock').getBoundingClientRect().width),
+             cols: getComputedStyle(row).gridTemplateColumns,
+             labelBottom: Math.round(lr.bottom),
+             ctlTop: Math.round(cr.top),
+             ctlW: Math.round(cr.width),
+           }
+         })()`,
+      )
+      check(
+        'adj1299 手机 260 档（宽档）设置行改成**单列**：标签一行、控件一行且控件 ≥200px（原来 76+146 两列）',
+        !!m260 && m260.dockW === 260 && !m260.cols.includes(' ') && m260.ctlTop >= m260.labelBottom - 1 && m260.ctlW >= 200,
+        JSON.stringify(m260),
+      )
+      await c.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false })
+      await c.send('Emulation.setTouchEmulationEnabled', { enabled: false })
+      await c.send('Emulation.setUserAgentOverride', { userAgent: DESKTOP_UA5 })
+      await evalJs(c, `localStorage.clear(), true`)
 
     c.close()
   } catch (e) {
