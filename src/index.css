@@ -1762,19 +1762,8 @@ body {
      `scrollbar-gutter: stable` 永远预留滚动条宽度，clientWidth 不再跳 ⇒ 回路立刻关闭。 */
   scrollbar-gutter: stable;
 }
-/* adj522：告警面板那条 pane 要当**弹性列容器**，`.problem-panel` / `.problems-list` 才拿得到受限高度。
- * adj510 曾以为"给 `.problems-list` 加 `overflow-y: auto` 它就会自己滚"，但 pane 是普通 block、
- * `.problem-panel` 高度 auto ⇒ 列表的 `flex: 1 1 auto` 拿不到可用高度，`overflow` 永不触发；
- * 内容超出后既不滚也无人裁（被 `.tool-dock{overflow:hidden}` 裁掉），用户报"展开信息超过视界、
- * 但没有滚动条"（更严重的是展开的「正确写法」根本看不到）。
- * `.pane-settings` 早就是这个写法（adj464），这里补齐告警这一条。 */
-.tool-dock-pane.pane-problems {
-  display: flex;
-  flex-direction: column;
-  /* adj523：同样**显式填满 dock**——列表的受限高度靠这条链（基类已改为"按内容取高"）。 */
-  flex: 1 1 auto;
-  min-height: 0;
-}
+/* adj1290：`.pane-problems` 规则已删除——告警不再是 dock 页签（独立成 `ui/ProblemsDrawer.tsx`），
+ * 那条"pane 当弹性列容器"的链随之失效。`.pane-settings`（adj464）仍是同一写法，见下方。 */
 .tool-dock-pane {
   /* adj523：面板**按内容取高**（`flex: 0 0 auto`），不再被拉伸到 dock 高度。
    *
@@ -1787,9 +1776,9 @@ body {
    * "拖高度"而反复触发测量；② 内容比 dock 高时是 `flex-shrink: 0`（不压缩）⇒ 由
    * `.tool-dock-body` 滚动兜底，而不是把内容裁掉。
    *
-   * 例外（各自覆盖回 `flex: 1 1 auto`）：**设置面板**（三栏要受限高度才能各自滚）与
-   * **告警面板**（列表要受限高度才能滚）——它们需要"填满 dock"，且都不依赖这个读数
-   * （设置的量的是行高；告警量的是"头部 + 列表 scrollHeight"）。 */
+   * 例外（覆盖回 `flex: 1 1 auto`）：**设置面板**（三栏要受限高度才能各自滚）——
+   * 它需要"填满 dock"，且不依赖这个读数（量的行高）。
+   * adj1290：告警面板已移出 dock（独立成抽屉），不再是这里的例外。 */
   flex: 0 0 auto;
   min-height: 0;
   padding: 8px 12px 10px;
@@ -2474,10 +2463,30 @@ body {
   background-color: color-mix(in srgb, var(--jp-accent) 55%, transparent);
 }
 
-/* ============ 告警面板（adj394 问题提示条 → adj462 移入 dock）============ */
-.problem-panel { display: flex; flex-direction: column; min-height: 0; }
-.problem-panel.is-error { box-shadow: inset 3px 0 0 var(--jp-danger); }
-.problem-panel.is-warn { box-shadow: inset 3px 0 0 var(--jp-warning); }
+/* ============ 告警抽屉（adj394 问题提示条 → adj462 移入 dock → adj1290 独立成抽屉）============
+ * adj1290（用户拍板）：告警从底栏页签里独立出来，变成**贯穿整幅窗口底部**的抽屉，
+ * 紧贴在状态栏上方、默认收起（点状态栏那行开关）。
+ *
+ * 为什么不再参与 dock 的高度模型：它不属于"操作台"，且它的内容是**横长**的
+ * （「第3行 第5列 · 消息」），塞进右栏那种窄栏里最难适配。
+ *
+ * 高度：`max-height` = 面板头 + 5 行（CSS 常量收口，**不做 JS 测高**）——
+ * 内容少时按实际高度收缩，多时由 `.problems-list` 自己滚。
+ * 5 行是 adj555 用户口径的延续（原 `problemsHeight.ts` 的 `PROBLEMS_MAX_VISIBLE_ROWS`）。
+ * -------------------------------------------------------------------------------------- */
+.problems-drawer {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  /* 面板头 28 + 5 行 × 22 + 上下内边距 18 ≈ 156px；取 160 留一点余量 */
+  max-height: 160px;
+  padding: 0 12px;
+  background: var(--jp-bg-panel);
+  border-top: 1px solid var(--jp-border);
+}
+.problems-drawer.is-error { box-shadow: inset 3px 0 0 var(--jp-danger); }
+.problems-drawer.is-warn { box-shadow: inset 3px 0 0 var(--jp-warning); }
 
 .problems-head {
   display: flex;
@@ -2535,13 +2544,13 @@ body {
   font-weight: 700;
 }
 
-.problem-panel.is-error .problems-icon,
-.problem-panel.is-error .problems-title {
+.problems-drawer.is-error .problems-icon,
+.problems-drawer.is-error .problems-title {
   color: var(--jp-danger);
 }
 
-.problem-panel.is-warn .problems-icon,
-.problem-panel.is-warn .problems-title {
+.problems-drawer.is-warn .problems-icon,
+.problems-drawer.is-warn .problems-title {
   color: var(--jp-warning);
 }
 
@@ -2559,8 +2568,9 @@ body {
   list-style: none;
   margin: 0;
   padding: 0;
-  /* adj510：告警面板本身**最多 2 行可见**（由 ToolDock 的 `capProblemsContentHeight` 钳住 dock 高度），
-     超出部分由**列表自身滚动**显示。
+  /* adj1290：抽屉的 `max-height`（头 + 5 行）由 `.problems-drawer` 收口，超出部分由**列表自身滚动**显示
+     （原 `capProblemsContentHeight` 的 JS 算式已随 `problemsHeight.ts` 下线）。
+     下面这段 `flex` 口径的说明仍成立：
      adj522：`flex` 由 `1 1 auto` 改为 **`0 1 auto`** —— 列表按**内容**取高（basis auto、不 grow），
      空间不够时**可收缩**（`min-height: 0`），收缩后 `overflow-y: auto` 才会真的出滚动条；
      若用 `1 1 auto`，列表会被拉满到可用高度，"内容 < 可用"时 `scrollHeight` 会等于可用高度，
@@ -5019,7 +5029,6 @@ textarea.score-pkg-input { min-height: 64px; resize: vertical; }
 .tool-dock .pcfg-foot > button.btn,
 .tool-dock .pane-workspace .btn:not(.ws-choose-item):not(.ws-recent-item),
 .tool-dock .pane-import .btn,
-.tool-dock .pane-problems .btn,
 .tool-dock .pane-tryout .btn,
 .tool-dock .pane-export .btn,
 .tool-dock .pane-settings .btn,

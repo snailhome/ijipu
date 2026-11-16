@@ -25,10 +25,9 @@
  * `max-height` —— 这样"各栏独立滚动"是**算出来的确定值**，不依赖 flex 链的隐式收窄
  * （此前依赖 flex 链，在部分情况下栏不会收窄 → 内容溢出被 overflow:hidden 裁掉、无法操作）。
  */
-import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ComponentType } from 'react'
 import { useUiStore, type DockPanelKey } from '../store/uiStore'
-import { useDocStore } from '../store/docStore'
 // adj724b：嵌入版里隐藏「工作区」页签（文件操作交给 Obsidian）
 import { isHostEmbedded } from '../store/hostBridge'
 import { dockCopy } from '../brand/copy'
@@ -38,10 +37,7 @@ import { beginDrag } from './dragGesture'
 // adj609：ESC 最小化底栏后把焦点交回编辑区（选择器留在编辑层，见该模块说明）
 import { focusEditorTextarea } from '../editor/editorFocus'
 // adj617（用户要求）：快捷键提示的唯一出处（页签 / 收起 / 档位按钮的 title 都引它）
-import { KBD, withKbd } from '../brand/shortcuts'// adj528：告警面板的高度常量与算式（单一来源 + 纯函数，smoke 有断言）
-import * as PROBS from './dock/problemsHeight'
-// adj528：告警条数（用于"条数 × 单行实测"算出内容自然高）——纯函数，留在主包
-import { summarizeProblems } from './problems'
+import { KBD, withKbd } from '../brand/shortcuts'
 
 /**
  * adj497（用户要求"各页签做成懒加载、首次打开才加载，以加快启动"）：**五个面板全部走 `React.lazy`**。
@@ -61,8 +57,8 @@ const SettingsPanel = lazy(() => import('../dialogs/PageConfigDialog').then((m) 
 const ScoreSettingsPanel = lazy(() => import('../dialogs/PageConfigDialog').then((m) => ({ default: () => <m.PageConfigDialog inline section="score" /> })))
 // adj492：「关于」从弹窗迁入 dock（与原「试听/导出/设置」同一套路）
 const AboutPanel = lazy(() => import('../dialogs/AboutDialog').then((m) => ({ default: () => <m.AboutDialog inline /> })))
-// adj497：告警 / 导出改为懒加载（原为静态 import）
-const ProblemPanel = lazy(() => import('./dock/ProblemPanel').then((m) => ({ default: m.ProblemPanel })))
+// adj497：导出改为懒加载（原为静态 import）
+// adj1290：告警面板已移出页签集合（独立成 `ui/ProblemsDrawer.tsx`），不再是这里的懒加载项
 const ExportPanel = lazy(() => import('./dock/ExportPanel').then((m) => ({ default: m.ExportPanel })))
 // adj540：工作区（移动端的"文件管理器"：选文件夹当工作区 + 子目录 + 打开/新建/重命名/移动/删除）
 const WorkspacePanel = lazy(() => import('./dock/WorkspacePanel').then((m) => ({ default: m.WorkspacePanel })))
@@ -79,7 +75,6 @@ const PANELS: readonly { key: DockPanelKey; render: ComponentType }[] = [
   { key: 'workspace', render: WorkspacePanel },
   { key: 'import', render: ImportPanel },
   { key: 'find', render: FindPanel },
-  { key: 'problems', render: ProblemPanel },
   { key: 'tryout', render: TryoutPanel },
   { key: 'export', render: ExportPanel },
   { key: 'settings', render: SettingsPanel },
@@ -105,13 +100,12 @@ const RESIZE_H = 5
 const TABS_H = 38
 const CHROME_H = RESIZE_H + TABS_H
 /**
- * 告警面板的各项高度常量与算式**统一来自 `ui/dock/problemsHeight.ts`**（adj528）——
- * 那里是"单一来源 + 纯函数"，并被 `scripts/smoke.mts` 直接断言；
- * 本文件只做"读 DOM 数值 → 调用"的薄接线。
+ * adj1290：告警的高度常量（`ROW_H` / `PROBLEMS_HEAD_H` / `PROBLEMS_MAX_VISIBLE_ROWS`）已随
+ * `ui/dock/problemsHeight.ts` 一并下线（抽屉不再做 JS 测高）。但 `PANE_PAD_H` **仍被下面
+ * `workspaceDefaultH()`（工作区 / 导入 / 设置的建议高度）用到**，所以就地保留：
+ * 它就是 `.tool-dock-pane` 的上下内边距（CSS 里 `padding: 8px 12px 10px` ⇒ 8 + 10 = 18）。
  */
-const PANE_PAD_H = PROBS.PANE_PAD_H
-const ROW_H = PROBS.ROW_H
-const PROBLEMS_HEAD_H = PROBS.PROBLEMS_HEAD_H
+const PANE_PAD_H = 18
 /**
  * adj554（v0.28.2，用户要求）：工作区窄屏建议高度 = 列表**5 项** + 面板头 + 结构间隙；
  *  宽屏仍走 `maxH()`（adj540 "宽屏一次看全"口径不变）。
@@ -190,14 +184,11 @@ const workspaceDefaultH = (rowH: number, headH: number, chromeH: number): number
 
 /**
  * 各面板**兜底**默认高度（实测 AUTO_FIT 前的占位；AUTO_FIT 项在 `measured` 到位后会被覆盖）。
- * · 告警/试听/导出/关于：实测"能显示全内容的最小高度"（AUTO_FIT）；
+ * · 试听/导出/关于：实测"能显示全内容的最小高度"（AUTO_FIT）；
  * · **工作区 / 导入 / 设置：同一个高度**（adj587，见下）。
  *
- * adj510：告警的兜底改为「**最多 `PROBLEMS_MAX_VISIBLE_ROWS` 条**可见」的高度
- * （= 外壳 + `PANE_PAD_H` + `ROW_H × PROBLEMS_MAX_VISIBLE_ROWS` + problems-head），
- * ——用户要求"打开告警页签时底栏 dock 最高只显示两个告警的高度"（adj524：4 行 ⇒ adj555：5 行）。
- * 多于 `PROBLEMS_MAX_VISIBLE_ROWS` 条时面板内部滚动查看（`problems-list` 的 `overflow-y: auto`）。
  * adj521：外壳高度改为**传入**（实测 `chromeH`）。
+ * adj1290：告警已不在页签集合里（独立成抽屉）⇒ 这里不再有它的兜底分支。
  */
 const defaultH = (
   key: DockPanelKey,
@@ -208,10 +199,6 @@ const defaultH = (
   workspaceRowH: number,
   workspaceHeadH: number,
 ): number => {
-  // adj510：告警**兜底** = `PROBLEMS_MAX_VISIBLE_ROWS` 行告警 + 面板头（problems-head ≈ 28px）；
-  // AUTO_FIT 实测接管后会按"内容自然高" 调整，但始终 cap 在同一行数（`measured` 已在 `forPanel`
-  // 里钳制过；详见 `capProblemsContentHeight`）。
-  if (key === 'problems') return chromeH + PANE_PAD_H + PROBLEMS_HEAD_H + ROW_H * PROBLEMS_MAX_VISIBLE_ROWS
   /**
    * adj587（用户要求）：**工作区 / 导入 / 设置三个页签的建议高度完全一致**——用户原话"将导入、
    * 设置页的底栏高度设置为与工作区页的高度相同"。
@@ -276,8 +263,6 @@ const TABS: { key: DockPanelKey; label: string; icon: ToolIconName; kbd?: string
   { key: 'import', label: dockCopy.tabImport, icon: 'import', kbd: KBD.import },
   // adj641（用户要求）：查找替换紧跟导入（同属"改内容"的动作）；图标是本次新画的放大镜（`public/icons/查找.png`）
   { key: 'find', label: dockCopy.tabFind, icon: 'find', kbd: KBD.find },
-  // adj565：告警图标由 `⚠` 字符换成设计图 `public/icons/告警.png`
-  { key: 'problems', label: dockCopy.tabProblems, icon: 'problems', kbd: KBD.problems },
   { key: 'tryout', label: dockCopy.tabTryout, icon: 'play', kbd: KBD.tryout },
   { key: 'export', label: dockCopy.tabExport, icon: 'export', kbd: KBD.export },
   // adj603：原「设置」页签改名为「全局」（本机偏好），紧跟其后新增「谱面」（谱面设置）
@@ -297,33 +282,19 @@ const TABS: { key: DockPanelKey; label: string; icon: ToolIconName; kbd?: string
  * 而当时 `.tool-dock-pane` 是 `flex: 1 1 auto`（被拉伸到 dock 高度）⇒ **内容比可用高度小时候，
  * 读数就等于"当前 dock 有多高"**。于是从"最大"切"建议"时量到的是 417px（拉伸后的可用高度）、
  * 从"最小"切过来量到的才是真实内容高（用户报：从最大切不正好、从最小切正好）。
- * 现由 CSS 保证 pane **按内容取高**（`.tool-dock-pane { flex: 0 0 auto }`，设置/告警两条例外
- * 各自覆盖回 `1 1 auto` 且不依赖这个读数），`scrollHeight` 才真正恒等于内容自然高。
- * 告警**也**用它（adj510：与试听/导出/关于同一套机制 ——
- * "能装下内容的最小高度"），但**内容本身高度被 cap**（见 `PROBLEMS_MAX_VISIBLE_ROWS`）：
- * 告警自然内容 > `PROBLEMS_MAX_VISIBLE_ROWS` 行时，列表内部可滚动，dock 自身只装这么多行的可见高度。
+ * 现由 CSS 保证 pane **按内容取高**（`.tool-dock-pane { flex: 0 0 auto }`，设置那条例外
+ * 覆盖回 `1 1 auto` 且不依赖这个读数），`scrollHeight` 才真正恒等于内容自然高。
  * 设置/导入/工作区不走 AUTO_FIT（三者按 adj587 的同一个建议高度定高，内容各自内部滚动）。
  * adj494：加入 `about` —— 用户要求"打开关于时应以能够显示全内容为宜"。
- * adj510：告警（`problems`）加入 AUTO_FIT，与试听/导出/关于统一按"内容自然高"定 dock 高度。
  * adj641（用户要求）：**查找替换（`find`）也走 AUTO_FIT** —— 它是一个两行输入 + 一行按钮的小面板，
  *   按内容自然高最合适（拖高之后输入框跟着变宽、内容仍在上沿，不会像工作区那样需要"列表 5 项"的口径）。
  * （内容再长也受 `maxH()` 上限约束，超长时仍可滚动。）
+ * adj1290：`problems` 移出——告警抽屉不属于这套高度模型。
  */
-const AUTO_FIT: readonly DockPanelKey[] = ['problems', 'tryout', 'export', 'about', 'find']
+const AUTO_FIT: readonly DockPanelKey[] = ['tryout', 'export', 'about', 'find']
 
-/**
- * 告警面板在**建议档**下最多显示几行（超出部分由列表自身滚动查看）。
- *
- * adj510：定为 **2 行** —— 当时底栏高度只能靠拖拽调整，"默认就给很高"会挤占编辑区，
- * 所以取一个保守值，让用户需要时自己拖高。
- * adj524（用户要求）：**2 → 4 行** —— 底栏有了高度档位按钮（adj519/adj520）之后，
- * "默认给多一点"不再是负担：嫌高按一下就能切到最小（只留页签栏），想要更高按一下切到最大。
- * adj555（v0.28.2，用户要求）：**4 → 5 行** —— 与工作区窄屏"列表 5 项"保持一致；
- * 建议档可以承担"一次看全 5 条告警"的职责，减少"还得先拖大才看得见"的次数。
- * （0/1/2 条告警仍按内容自然高收缩，不受本上限影响；只有超过本行数才滚动。）
- * adj528：常量搬到 `ui/dock/problemsHeight.ts`（与算式同处一地，smoke 直接断言）。
- */
-const PROBLEMS_MAX_VISIBLE_ROWS = PROBS.PROBLEMS_MAX_VISIBLE_ROWS
+// adj1290：告警「建议档最多 5 行」随 `ui/dock/problemsHeight.ts` 一并下线——
+// 抽屉高度由 CSS 收到「面板头 + 5 行」，不再参与 dock 的档位计算。
 
 export function ToolDock() {
   const dockOpen = useUiStore((s) => s.dockOpen)
@@ -618,22 +589,10 @@ export function ToolDock() {
     setSizePhase(0)
   }, [dockPanel])
 
-  // adj510：告警**始终**走 AUTO_FIT（与试听/导出/关于同源）——实测 pane.scrollHeight，
-  // 并在 `capProblemsContentHeight` 里把"内容自然高"钳到「头 + `PROBLEMS_MAX_VISIBLE_ROWS` 行告警」的高度上限。
-  // 因此：0 条 = 一行占位；1 条 = 头 + 1 行；≥ 2 条 = 头 + 2 行（面板内可滚动）。
-  // adj520：不再需要订阅"告警条数"——下限统一为 `MIN_DOCK_H` 后，"少于 2 条告警要按内容自然高收缩"
-  // 由 AUTO_FIT 的自然结果直接给出（73px / 64px 都 ≥ 43px 的下限，不会被钳），无需特判。
+  // adj1290：告警已移出页签集合（独立成抽屉）⇒ AUTO_FIT 不再包含它；
+  // 原先"告警始终走 AUTO_FIT、内容高度钳到 5 行"那套说明随之失效。
   /** 当前面板是否要按"能显示全内容的最小高度"定高（AUTO_FIT 机制） */
   const fitAllNow = AUTO_FIT.includes(dockPanel)
-  /**
-   * adj528：**告警条数**（渲染出的行数）。
-   * "告警面板的内容自然高"现在由它（数据）× 单行实测算出，而不再读 `pane.scrollHeight`
-   * —— 那条 pane 为了列表能滚必须填满 dock，读总量会被"可用高度"充气，
-   * 于是"从最大切建议"会得到一个虚高的建议高度（用户连报两次，见 `ui/dock/problemsHeight.ts`）。
-   */
-  const errors = useDocStore((s) => s.parseResult.errors)
-  const problemCount = useMemo(() => summarizeProblems(errors).total, [errors])
-
   /**
    * adj518（用户报"底栏 dock 应始终允许通过高度调整线调整 dock 的高度；目前除了设置页签
    * 是可以调整高度的外，其它几个页签都不能调整"）：
@@ -657,32 +616,13 @@ export function ToolDock() {
     if (!pane) return
     /**
      * adj522/adj528：取"内容自然高"（与当前 dock 多高**无关**）。
-     *
-     * 非告警面板：pane 已按内容取高（`.tool-dock-pane { flex: 0 0 auto }`，adj523）
+     * pane 已按内容取高（`.tool-dock-pane { flex: 0 0 auto }`，adj523）
      * ⇒ `pane.scrollHeight` 恒等于内容自然高。
      *
-     * 告警面板**不能这么量**：它那条 pane 必须"填满 dock"（列表要受限高度才能滚），
-     * 于是 dock 高时 `pane.scrollHeight` 会退化成"可用高度"（充气）。**adj528 起彻底不读总量**，
-     * 改为「**条数（数据）× 单行实测**」——见 `ui/dock/problemsHeight.ts`：
-     * 行数来自 store（不来自布局），单行高实测 `.problem-line`（**不含**展开的「正确写法」，
-     * 那是它的兄弟节点），面板头/占位块也都是内容尺寸的弹性项。
-     * 这样"从最大切建议"与"从最小切建议"必然算出同一个高度（用户连报两次的正是这一点）。
+     * adj1290：告警已移出页签集合 ⇒ 这里不再有它的「条数 × 单行」特判
+     * （那套算式随 `ui/dock/problemsHeight.ts` 一并下线，抽屉高度改由 CSS 收口）。
      */
-    const measureNatural = (): number => {
-      if (dockPanel !== 'problems') return pane.scrollHeight
-      const head = pane.querySelector<HTMLElement>('.problems-head')
-      const list = pane.querySelector<HTMLElement>('.problems-list')
-      const empty = pane.querySelector<HTMLElement>('.dock-empty')
-      const line = list?.querySelector<HTMLElement>('.problem-line')
-      return PROBS.problemsContentHeight({
-        problemCount,
-        headH: head?.getBoundingClientRect().height ?? 0,
-        rowH: line?.getBoundingClientRect().height ?? 0,
-        emptyH: empty?.getBoundingClientRect().height ?? 0,
-        // 面板"收起"（`open === false`）时只剩面板头、不渲染列表
-        collapsed: !!head && !list,
-      })
-    }
+    const measureNatural = (): number => pane.scrollHeight
     const measure = () => {
       const nat = measureNatural()
       if (nat <= 0) return
@@ -699,18 +639,12 @@ export function ToolDock() {
       ro.disconnect()
       window.removeEventListener('resize', measure)
     }
-  }, [dockOpen, dockPanel, everActive.length, fitAllNow, problemCount])
+  }, [dockOpen, dockPanel, everActive.length, fitAllNow])
 
-  /**
-   * adj528：cap 算式搬到 `ui/dock/problemsHeight.ts`（与"内容自然高"同一处、smoke 可断言）。
-   * 说明：`problemsContentHeight()` 已经按 `PROBLEMS_MAX_VISIBLE_ROWS` 收口，
-   * 所以 cap 对它是**幂等**的；留着它是为了兜住"实测值异常偏大"的输入。
-   */
   const forPanel = (key: DockPanelKey): number => {
     // 实测值已含内容区上下内边距，所以这里只加外壳（adj521：外壳用实测值）
     if (AUTO_FIT.includes(key) && measured[key]) {
-      const measuredContent = key === 'problems' ? PROBS.capProblemsContentHeight(measured[key]!) : measured[key]!
-      return chromeH + measuredContent
+      return chromeH + measured[key]
     }
     // adj554：工作区的"5 项"算式需要实测的 `.ws-row` / `.ws-head` 高度，从模块外传入
     // adj587：导入 / 设置也走同一条（三者在 `defaultH` 里已经统一）

@@ -50,8 +50,9 @@ export type ModalKind = 'samples' | 'shortcuts' | 'manual' | 'syntax' | 'cli' | 
  *   本机偏好，页签文本「全局」）、'score' = 谱面（布局/字体，随谱保存，页签文本「谱面」）。
  * adj641（用户要求）：新增 'find'（查找替换）——编辑区 `Ctrl+F` 的落点，把查找与替换整合在一个页签里。
  */
+// adj1290（用户拍板）：**'problems' 已移出页签集合**——告警独立成贯穿底部的抽屉
+// （`ui/ProblemsDrawer.tsx`），不再与「工作区 / 试听 / 导出…」这些操作台并列。
 export type DockPanelKey =
-  | 'problems'
   | 'tryout'
   | 'export'
   | 'settings'
@@ -326,9 +327,11 @@ function initialDock(): { open: boolean; panel: DockPanelKey } {
     const canPickDir = typeof w.showDirectoryPicker === 'function'
     if (shouldOpenWorkspaceDock(profile, canPickDir)) return { open: true, panel: 'workspace' }
   } catch {
-    /* 环境探测失败 ⇒ 退回"收起 + 问题"（最保守的观感） */
+    /* 环境探测失败 ⇒ 退回"收起 + 试听"（最保守的观感） */
   }
-  return { open: false, panel: 'problems' }
+  // adj1290：兜底面板由 'problems' 改为 'tryout'——告警已移出页签集合，
+  // 若仍指向 'problems' 会得到一个不存在的面板（首次展开时会落到空白）。
+  return { open: false, panel: 'tryout' }
 }
 
 /** adj322：宽/窄屏分界（≤1024px = 窄屏）。matchMedia 支持时用 mq，否则读 innerWidth。
@@ -465,18 +468,29 @@ interface UiState {
   /** dock 内部 tab 切换（保持展开）；dock 已关时同时展开 */
   setDockPanel: (panel: DockPanelKey) => void
   /**
-   * adj610：**展开底栏**（已展开时是幂等的无操作）。`preferProblems` = "当前有告警"，
-   * 由调用方传入（告警条数在 docStore，这里不做跨 store 读取）：
-   * 有告警就切到告警页签（adj591 口径："告警是需要处理的东西，展开时优先让人看见"），
-   * 否则保留上次用的页签。
+   * adj610：**展开底栏**（已展开时是幂等的无操作）。
    *
    * 为什么放进 store：**这条规则只能有一处实现**——用它的入口已有三个
    * （编辑区左下角「展开底栏」按钮 / `Ctrl+D` / `Ctrl+H`），各写一份必然会漂移
    * （E-2026-076 同类教训：同一个"展开给哪个页签"的判据两处维护）。
+   *
+   * adj1290（用户拍板）：**参数 `preferProblems` 已去掉**。告警独立成抽屉后，
+   * 「有告警就切到告警页签」这个动作不存在了（`adj591` 的口径随之下线）——
+   * 抽屉有自己的一级开关（状态栏那行 / `Ctrl+`` ），不该由"展开底栏"顺带触发。
    */
-  expandDock: (preferProblems: boolean) => void
+  expandDock: () => void
   /** dock 标题栏 × 关闭：只关，不切面板（下次任意入口 toggle 会重新开） */
   closeDock: () => void
+  /**
+   * adj1290（用户拍板）：**告警抽屉**的开关状态（L3 会话级，不落盘）。
+   *
+   * 告警从页签组独立成贯穿窗口底部的抽屉后，它不再属于 `dockOpen` / `dockPanel`
+   * 那一套——那套是"操作台"，抽屉是"信息反馈"，两者可以同时出现、互不挤压。
+   * 默认收起：状态栏那行「5告警」始终在，点它才展开。
+   */
+  problemsDrawerOpen: boolean
+  setProblemsDrawer: (open: boolean) => void
+  toggleProblemsDrawer: () => void
   /**
    * adj610（用户要求）：`Ctrl+H` = "按一下底栏高度档位按钮"。
    *
@@ -1111,9 +1125,13 @@ export const useUiStore = create<UiState>()((set) => ({
       return { dockPanel: panel }
     }),
   setDockPanel: (panel) => set({ dockOpen: true, dockPanel: panel }),
-  // adj610：展开底栏的唯一实现（有告警先看告警；见接口处的说明）
-  expandDock: (preferProblems) => set((s) => ({ dockOpen: true, dockPanel: preferProblems ? 'problems' : s.dockPanel })),
+  // adj610/adj1290：展开底栏的唯一实现（告警抽屉已独立，不再顺带切告警）
+  expandDock: () => set({ dockOpen: true }),
   closeDock: () => set({ dockOpen: false }),
+  // adj1290：告警抽屉（L3，不落盘；默认收起）
+  problemsDrawerOpen: false,
+  setProblemsDrawer: (problemsDrawerOpen) => set({ problemsDrawerOpen }),
+  toggleProblemsDrawer: () => set((s) => ({ problemsDrawerOpen: !s.problemsDrawerOpen })),
   // adj610：Ctrl+H 的"按一下档位按钮"请求（nonce 自增，由 ToolDock 消费）
   dockSizeStep: 0,
   requestDockSizeStep: () => set((s) => ({ dockSizeStep: s.dockSizeStep + 1 })),

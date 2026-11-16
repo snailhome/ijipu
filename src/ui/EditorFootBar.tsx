@@ -39,10 +39,9 @@ export function EditorFootBar() {
   const binding = useDocStore((s) => s.binding)
   const nativePath = useDocStore((s) => s.nativePath)
   const fileHandle = useDocStore((s) => s.fileHandle)
-  // adj462：dock（告警面板开关 + 导出指示）
-  const toggleDock = useUiStore((s) => s.toggleDock)
-  const dockOpen = useUiStore((s) => s.dockOpen)
-  const dockPanel = useUiStore((s) => s.dockPanel)
+  // adj462：dock（导出指示）；adj1290：告警改为**独立抽屉**（不再走 dock 页签）
+  const toggleProblemsDrawer = useUiStore((s) => s.toggleProblemsDrawer)
+  const problemsDrawerOpen = useUiStore((s) => s.problemsDrawerOpen)
   const exportJob = useUiStore((s) => s.exportJob)
   const setDockPanel = useUiStore((s) => s.setDockPanel)
 
@@ -70,7 +69,8 @@ export function EditorFootBar() {
     problems.total === 0
       ? problemCopy.clean
       : `${problems.worst === 'error' ? problemCopy.hasErrors : problemCopy.hasWarnings}：${problemCopy.title(problems.total, problems.errorCount, problems.warnCount)}`
-  const problemsShown = dockOpen && dockPanel === 'problems'
+  // adj1290：告警抽屉开着时，状态栏这条高亮（它本身就是抽屉的开关）
+  const problemsShown = problemsDrawerOpen
   // adj622：状态栏文件名按"工作区绑定 / 桌面外部打开 / 浏览器本地句柄"三种来源渲染
   const docLoc = useMemo(
     () => formatDocLocation({ binding, nativePath, fileHandle, fileName }),
@@ -92,12 +92,13 @@ export function EditorFootBar() {
         [{cursor.line},{cursor.col + 1}/{totalLines}]
       </span>
 
-      {/* adj394/adj462：语法状态指示——本身也是「告警面板」的开关（点击展开/收起 dock） */}
+      {/* adj394/adj462：语法状态指示——本身也是「告警抽屉」的开关（点击展开/收起）
+          adj1290：告警已从底栏页签独立成贯穿底部的抽屉，这条按钮就是它的唯一开关 */}
       <button
         type="button"
         className={`footer-cursor footer-problems${problemsShown ? ' is-active' : ''}`}
-        title={withKbd(`${dotTitle}（点击${problemsShown ? '收起' : '展开'}底部告警）`, KBD.problems)}
-        onClick={() => toggleDock('problems')}
+        title={withKbd(`${dotTitle}（点击${problemsShown ? '收起' : '展开'}告警抽屉）`, KBD.problems)}
+        onClick={() => toggleProblemsDrawer()}
       >
         <span className={`dot ${dotCls}`} />
         {problemsBadge}

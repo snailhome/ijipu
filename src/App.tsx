@@ -9,6 +9,8 @@ import { Suspense, lazy, useEffect, useRef, useSyncExternalStore } from 'react'
 import { TopBar } from './ui/TopBar'
 import { EditorFootBar } from './ui/EditorFootBar'
 import { ToolDock } from './ui/ToolDock'
+// adj1290：告警抽屉（贯穿整幅窗口底部，独立于操作底栏）
+import { ProblemsDrawer } from './ui/ProblemsDrawer'
 import { beginDrag } from './ui/dragGesture'
 import { Toast } from './ui/Toast'
 import { ConfirmBar } from './ui/ConfirmBar'
@@ -30,8 +32,6 @@ import { getAssetDirRevision, subscribeAssetDir } from './store/assetDirAuth'
 // adj969：判"这份谱需不需要基准目录"的唯一口径（引擎里，两端共用）
 import { localAssetRefs } from '@ijipu/engine'
 import { startWorkspaceIndexWarmup } from './store/workspaceIndexWarm'
-// adj610：Ctrl+D / Ctrl+H 的"有告警先看告警"判据与「展开底栏」按钮同一份（`ui/problems.ts`）
-import { summarizeProblems } from './ui/problems'
 // adj614：Ctrl+M 的视图循环顺序（与顶栏「视图」下拉同一份，见 `ui/viewCycle.ts`）
 import { nextViewType } from './ui/viewCycle'
 // adj614：Ctrl+T 的深浅模式循环（与顶栏「深浅模式」按钮同一份）
@@ -513,15 +513,19 @@ function App() {
         e.preventDefault()
         e.stopPropagation()
         /**
-         * adj618（用户要求）：**`Ctrl+`` = 告警开关**——与底栏「告警」页签、状态栏里那条告警文本按钮
-         * 共用同一条入口。按 Shift 的那一档（`Ctrl+~`）**同样走告警**（同一个物理键，不给它留死键）。
+         * adj618（用户要求）：**`Ctrl+`` = 告警开关**。按 Shift 的那一档（`Ctrl+~`）
+         * **同样走告警**（同一个物理键，不给它留死键）。
          *
          * 用 `e.code === 'Backquote'`（物理键）而不是只看 `e.key`：这个键在中文/其它布局下
          * 产出的字符各不相同，认物理键才不会"换个输入法就按不动"。
          *
          * （原先 `Ctrl+~` 兼作"快捷键速查"，adj619c 起速查改成 `Alt+F1`，见下一条分支。）
+         *
+         * adj1290（用户拍板）：告警已从底栏页签独立成**抽屉**，所以这里不再发
+         * `requestDockPanel('problems')`（那个请求是给 `ToolDock` 消费的），
+         * 直接开关抽屉——与状态栏那条告警按钮**完全同一条路**。
          */
-        ui.requestDockPanel('problems')
+        ui.toggleProblemsDrawer()
       } else if (e.altKey && e.key === 'F1') {
         e.preventDefault()
         e.stopPropagation()
@@ -544,7 +548,7 @@ function App() {
          * `preventDefault()` 拦下**，所以网页版里这两条也能用（Ctrl+N 在 Chrome 里拦不住）。
          */
         if (ui.dockOpen) ui.closeDock()
-        else ui.expandDock(summarizeProblems(st.parseResult.errors).total > 0)
+        else ui.expandDock()
       } else if (e.ctrlKey && e.key.toLowerCase() === 'h') {
         e.preventDefault()
         e.stopPropagation()
@@ -557,7 +561,7 @@ function App() {
          * 让这个键不会"按了没反应"。
          */
         if (ui.dockOpen) ui.requestDockSizeStep()
-        else ui.expandDock(summarizeProblems(st.parseResult.errors).total > 0)
+        else ui.expandDock()
       } else if (e.key === 'Tab' && !ui.modal && !(e.target as HTMLElement | null)?.closest?.('.editor-main')) {
         // 编辑器内 Tab 留给自动补全/默认行为（completion 时补全），其余区域切换视图
         e.preventDefault()
@@ -673,6 +677,8 @@ function App() {
       {/* adj462/adj552：底部 dock（告警/试听/导出/设置 共用一个 dock，同一时间只显示一块）。
           **窄屏及非左右拆分的视图保持原样**：底栏仍在窗口底部、整幅宽度。 */}
       {!isSplitHView && <ToolDock />}
+      {/* adj1290（用户拍板）：告警抽屉——贯穿整幅窗口底部、紧贴状态栏上方，默认收起 */}
+      <ProblemsDrawer />
       <EditorFootBar />
       <Toast />
       {/* adj724b：需要用户二选一的确认条（嵌入版"文件已被外部修改"） */}

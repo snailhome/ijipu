@@ -574,11 +574,7 @@ export const dockCopy = {
   closeTitle: '关闭底栏',
   /** adj541：底栏展开/收起（编辑区左下角悬浮按钮 + 页签栏里的收起按钮） */
   expandTitle: '展开底栏',
-  /**
-   * adj591（用户要求"脚本有告警时，打开底栏先切到告警窗口，否则不切换"）：
-   * 有告警时「展开底栏」按钮的 tooltip——点开会**先切到告警页签**，先说清楚再去。
-   */
-  expandWithProblems: (n: number): string => `展开底栏（先看告警：${n} 条）`,
+  // adj1290：`expandWithProblems` 已删除——告警独立成抽屉后，"展开底栏先看告警"这句话不再成立
   collapseTitle: '收起底栏',
   /** 顶部抓手（拖拽调整 dock 高度） */
   resizeTitle: '拖动调整底栏高度',

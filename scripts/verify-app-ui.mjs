@@ -1727,6 +1727,83 @@ async function main() {
     // **实测无效**（量到 `matchMedia('(display-mode: standalone)').matches === false`），
     // 所以用本脚本既有的套路 —— `Page.addScriptToEvaluateOnNewDocument` 在**页面脚本之前**改掉
     // `matchMedia`（伪 `showOpenFilePicker` 用的也是这一招），再用 `remove` 撤回做负对照。
+
+    // ============ adj1290：告警抽屉（贯穿窗口底部 / 默认收起 / 状态栏那行开关）============
+    //
+    // 为什么必须有这一段：抽屉是**新的交互**——从底栏 9 个页签里搬出来、独立一级开关、ESC 收起；
+    // 而且"贯穿整幅宽度"正是本次要解决的痛点（原来底栏在左右拆分时只占编辑列）。
+    // 源码断言能钉住"结构长什么样"，钉不住"点得动、量得准"（`adj959` 的教训）。
+    await c.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false })
+    await evalJs(c, `localStorage.clear(), true`)
+    await c.send('Page.navigate', { url: `${origin}/app/` })
+    await waitFor(c, `!!document.querySelector('.footer-problems')`, '首屏：状态栏告警按钮')
+
+    const drawerAbsent = await evalJs(c, `!!document.querySelector('.problems-drawer')`)
+    check(
+      'adj1290 默认**收起**：首屏没有 `.problems-drawer`（告警不再常驻占高度）',
+      drawerAbsent === false,
+      JSON.stringify(drawerAbsent),
+    )
+
+    await evalJs(c, `document.querySelector('.footer-problems').click(), true`)
+    await waitFor(c, `!!document.querySelector('.problems-drawer')`, '点状态栏那行 → 抽屉出现')
+    const drawerBox = await evalJs(
+      c,
+      `(() => {
+        const d = document.querySelector('.problems-drawer')
+        const r = d.getBoundingClientRect()
+        const f = document.querySelector('.footer').getBoundingClientRect()
+        return {
+          left: Math.round(r.left),
+          right: Math.round(r.right),
+          vw: window.innerWidth,
+          bottom: Math.round(r.bottom),
+          footerTop: Math.round(f.top),
+          empty: !!d.querySelector('.dock-empty'),
+        }
+      })()`,
+    )
+    check(
+      'adj1290 抽屉**贯穿整幅宽度**（左缘贴 0、右缘贴窗口右边——不是编辑列宽）',
+      drawerBox.left <= 1 && Math.abs(drawerBox.right - drawerBox.vw) <= 1,
+      JSON.stringify(drawerBox),
+    )
+    check(
+      'adj1290 抽屉紧贴状态栏上方（底边 = 状态栏顶边，不压状态栏）',
+      Math.abs(drawerBox.bottom - drawerBox.footerTop) <= 1,
+      JSON.stringify(drawerBox),
+    )
+    check('adj1290 0 条告警时抽屉能打开并显示空态（不崩、不空白）', drawerBox.empty === true, JSON.stringify(drawerBox))
+
+    await evalJs(c, `document.querySelector('.footer-problems').click(), true`)
+    await waitFor(c, `!document.querySelector('.problems-drawer')`, '再点状态栏那行 → 抽屉收起')
+    const closedAgain = await evalJs(c, `!!document.querySelector('.problems-drawer')`)
+    check('adj1290 再点同一入口 ⇒ 收起（开关语义，不是"只能开"）', closedAgain === false, JSON.stringify(closedAgain))
+
+    // 有告警时：真打字制造一个语法错误（`Input.insertText` 走 React 的 onChange）
+    await evalJs(c, `document.querySelector('.editor-main textarea')?.focus(), true`)
+    await c.send('Input.insertText', { text: '{' })
+    await waitFor(
+      c,
+      `!!document.querySelector('.footer-problems .dot.err, .footer-problems .dot.warn')`,
+      '打字后状态栏出现告警色点',
+      60,
+    )
+    await evalJs(c, `document.querySelector('.footer-problems').click(), true`)
+    await waitFor(c, `!!document.querySelector('.problems-drawer .problems-list')`, '有告警时抽屉里有列表')
+    const drawerH = await evalJs(c, `Math.round(document.querySelector('.problems-drawer').getBoundingClientRect().height)`)
+    check(
+      'adj1290 有告警时抽屉高度被封顶（≤160px = 面板头 + 5 行，超出由列表自己滚）',
+      typeof drawerH === 'number' && drawerH > 0 && drawerH <= 161,
+      JSON.stringify(drawerH),
+    )
+
+    // ESC 收起（走捕获阶段那条监听：比底栏的 ESC 先跑并 preventDefault）
+    await evalJs(c, `window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })), true`)
+    await waitFor(c, `!document.querySelector('.problems-drawer')`, 'ESC → 抽屉收起')
+    const closedByEsc = await evalJs(c, `!!document.querySelector('.problems-drawer')`)
+    check('adj1290 ESC 收起抽屉（捕获阶段监听到、没被底栏的 ESC 抢走）', closedByEsc === false, JSON.stringify(closedByEsc))
+
     c.close()
   } catch (e) {
     check(`脚本自身出错：${e instanceof Error ? e.message : String(e)}`, false)

@@ -20,7 +20,6 @@ import { insertLineHeader, isLineHeaderKey, lineColOf } from './shortcuts'
 import { isBarlineModifierContext, isGraceModifierContext, filterModifierHints } from './completions'
 import { ScriptToolbar } from './ScriptToolbar'
 import { ToolIcon } from '../ui/ToolIcon'
-import { summarizeProblems } from '../ui/problems'
 import { dockCopy } from '../brand/copy'
 // adj617（用户要求）：浮动栏「展开底栏」按钮的提示后面带快捷键（键名一处定义）
 import { KBD, withKbd } from '../brand/shortcuts'
@@ -82,20 +81,10 @@ export function EditorPane() {
   const showScriptPad = useUiStore((s) => s.showScriptPad)
   // adj541：底栏展开悬浮按钮要读的状态（关着才显示；点开时保留上次的页签）
   const dockOpen = useUiStore((s) => s.dockOpen)
-  // adj610：展开动作收进 store（`expandDock(preferProblems)`）——「展开底栏」按钮 / Ctrl+D / Ctrl+H
-  // 三个入口共用同一条规则，避免"点按钮"与"按快捷键"打开的页签不一致
+  // adj610：展开动作收进 store——「展开底栏」按钮 / Ctrl+D / Ctrl+H 三个入口共用同一条规则
+  // adj1290（用户拍板）：告警已独立成抽屉，`expandDock()` 不再带"有告警先切告警"的参数
   const expandDockPanel = useUiStore((s) => s.expandDock)
-  /**
-   * adj591（用户要求）：**脚本有告警时，「展开底栏」先切到告警页签；没有告警就不切换**
-   * （维持上次用的那个页签）。
-   *
-   * 为什么：告警是"需要处理"的东西，展开底栏时优先让人看见；而没有告警时把用户从
-   * "上次正在用的页签"（比如设置/试听）强行拽走只会碍事。所以判定放在**这个通用入口**上，
-   * 顶栏/菜单里那些**点名**要开某个页签的按钮（试听/导出/设置…）保持原样——用户点谁就开谁。
-   * 口径与左下角状态栏一致：`summarizeProblems()` 把错误与警告都算作"告警"（total > 0）。
-   */
-  const problems = useMemo(() => summarizeProblems(parseResult.errors), [parseResult.errors])
-  const expandDock = () => expandDockPanel(problems.total > 0)
+  const expandDock = () => expandDockPanel()
   // 编辑器字体/字号属 L1「用户个性」（本机偏好，**不随谱保存**；分层见 docs/SETTINGS-AUDIT.md）——
   // adj-font：此前这里读 `pageConfig.editorFontSize ?? editorFontSize`（谱面里有值就优先），
   // 而谱面里的这两个键是早期版本误写进去的；现已从 PageConfig 移除，只认本机偏好。
@@ -978,10 +967,10 @@ export function EditorPane() {
             type="button"
             className="dock-fab"
             onClick={expandDock}
-            // adj591：有告警时把"点开先看告警"写进 tooltip，别让用户以为"我上次的页签丢了"
             // adj617（用户要求）：提示文本后面带上快捷键（Ctrl+D 展开/收起底栏）
-            title={withKbd(problems.total > 0 ? dockCopy.expandWithProblems(problems.total) : dockCopy.expandTitle, KBD.dock)}
-            aria-label={withKbd(problems.total > 0 ? dockCopy.expandWithProblems(problems.total) : dockCopy.expandTitle, KBD.dock)}
+            // adj1290：告警抽屉已独立，这里不再有"先看告警"的分支
+            title={withKbd(dockCopy.expandTitle, KBD.dock)}
+            aria-label={withKbd(dockCopy.expandTitle, KBD.dock)}
           >
             <ToolIcon name="dockExpand" />
           </button>

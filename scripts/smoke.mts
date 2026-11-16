@@ -276,15 +276,8 @@ import type { BankRecord, LegacyBankEntry, LegacyBankIo } from '../src/playback/
 import { ICON_DIR, ICON_FILES, ICON_FILE_NAMES } from '../src/ui/toolIcons.ts'
 // adj526：数值"按住上下拖"的纯换算（上拖增大 / 粗调 / 钳制 / 无范围时相对增量）
 import { scrubTarget, SCRUB_PX_PER_STEP, SCRUB_COARSE_FACTOR, SCRUB_COARSE_TOL } from '../src/ui/numberScrub.ts'
-// adj528：告警面板高度算式（单一来源纯函数）——"条数 × 单行实测"，与 dock 当前高度无关
-import {
-  problemsContentHeight,
-  capProblemsContentHeight,
-  PANE_PAD_H as PROB_PANE_PAD_H,
-  ROW_H as PROB_ROW_H,
-  PROBLEMS_HEAD_H as PROB_HEAD_H,
-  PROBLEMS_MAX_VISIBLE_ROWS as PROB_MAX_ROWS,
-} from '../src/ui/dock/problemsHeight.ts'
+// adj1290：`ui/dock/problemsHeight.ts` 已删除（告警独立成抽屉，高度改由 CSS 收口），
+// 这里不再有它的 import；相关断言一并改为"抽屉 + CSS 常量"口径（见下方 [adj1290] 段）。
 // adj529：预览比例"双击比率值按宽度适配"的反算算式（纯函数）
 import {
   PREVIEW_BASE_W,
@@ -13113,51 +13106,65 @@ function runAdj526NumberScrubTests() {
       /setPreviewZoom[\s\S]{0,200}?PREVIEW_ZOOM_LIMITS\[1\][\s\S]{0,80}?PREVIEW_ZOOM_LIMITS\[0\]/.test(storeSrc),
     '')
 
-  // ---- adj528：告警面板"内容自然高"的纯算式（用户连报两次：从最大切建议高度不对） ----
-  const RAW = { problemCount: 0, headH: PROB_HEAD_H, rowH: PROB_ROW_H, emptyH: 24, collapsed: false }
-  check('adj528 0 条告警 = 内边距 + 占位行（不随 dock 高度变化，也不预留面板头/5 行）',
-    problemsContentHeight(RAW) === PROB_PANE_PAD_H + 24,
-    `${problemsContentHeight(RAW)}`)
-  check('adj528 n 条告警 = 内边距 + 面板头 + n × 单行高（n ≤ 上限）',
-    problemsContentHeight({ ...RAW, problemCount: 1 }) === PROB_PANE_PAD_H + PROB_HEAD_H + PROB_ROW_H &&
-      problemsContentHeight({ ...RAW, problemCount: 3 }) === PROB_PANE_PAD_H + PROB_HEAD_H + PROB_ROW_H * 3,
-    `${problemsContentHeight({ ...RAW, problemCount: 3 })}`)
-  check('adj528 超过上限（5 行）按上限计（其余由列表自身滚动）',
-    problemsContentHeight({ ...RAW, problemCount: 9 }) === PROB_PANE_PAD_H + PROB_HEAD_H + PROB_ROW_H * PROB_MAX_ROWS &&
-      PROB_MAX_ROWS === 5,
-    `${problemsContentHeight({ ...RAW, problemCount: 9 })}`)
-  // adj555（用户口径）：告警建议高度"≤ N 按实际、> N 按 N"——少时不高出实际内容、多时按上限封顶。
-  // 三档边界钉死：n=4（按 4）、n=5（按 5）、n=6（按 5）。后续若误把算式改成"强制 5 行"会立即失败。
-  check('adj555 告警行数 ≤ 5 按实际、> 5 按 5 封顶（n=4/5/6 三档边界）',
-    problemsContentHeight({ ...RAW, problemCount: 4 }) === PROB_PANE_PAD_H + PROB_HEAD_H + PROB_ROW_H * 4 &&
-      problemsContentHeight({ ...RAW, problemCount: 5 }) === PROB_PANE_PAD_H + PROB_HEAD_H + PROB_ROW_H * 5 &&
-      problemsContentHeight({ ...RAW, problemCount: 6 }) === PROB_PANE_PAD_H + PROB_HEAD_H + PROB_ROW_H * 5,
-    `n=4 → ${problemsContentHeight({ ...RAW, problemCount: 4 })}; n=5 → ${problemsContentHeight({ ...RAW, problemCount: 5 })}; n=6 → ${problemsContentHeight({ ...RAW, problemCount: 6 })}`)
-  check('adj528 面板"收起"时只算面板头（列表没渲染）',
-    problemsContentHeight({ ...RAW, problemCount: 3, collapsed: true }) === PROB_PANE_PAD_H + PROB_HEAD_H,
+  // ---- adj1290：告警从底栏页签独立成「贯穿底部的抽屉」 ----
+  // 原来这里是 adj528/adj555 的一整套"内容自然高"算式断言（`ui/dock/problemsHeight.ts`）。
+  // 抽屉不再参与 dock 的高度模型（高度由 CSS `max-height` 收口），那套算式连同模块一起删了，
+  // 所以这里改为守住「新的形态」本身：入口、默认收起、ESC 让路、高度收口、旧文件已删。
+  const uiSrc1290 = String(readFileSync('src/store/uiStore.ts', 'utf8'))
+  const dockSrc1290 = String(readFileSync('src/ui/ToolDock.tsx', 'utf8'))
+  const footSrc1290 = String(readFileSync('src/ui/EditorFootBar.tsx', 'utf8'))
+  const appSrc1290 = String(readFileSync('src/App.tsx', 'utf8'))
+  const drawerSrc1290 = String(readFileSync('src/ui/ProblemsDrawer.tsx', 'utf8'))
+
+  check('adj1290 告警不在页签集合里（DockPanelKey / TABS 两处都没有 problems）',
+    !/^\s*\| 'problems'/m.test(uiSrc1290) &&
+      !/key: 'problems'/.test(dockSrc1290) &&
+      !/dockCopy\.tabProblems/.test(dockSrc1290),
     '')
-  check('adj528 单行高/占位高缺测时回落到常量（不会算出 0 或负数）',
-    problemsContentHeight({ ...RAW, problemCount: 2, rowH: 0 }) === PROB_PANE_PAD_H + PROB_HEAD_H + PROB_ROW_H * 2 &&
-      problemsContentHeight({ ...RAW, problemCount: 2, headH: 0 }) === PROB_PANE_PAD_H + PROB_HEAD_H &&
-      problemsContentHeight({ ...RAW, problemCount: 0, emptyH: 0 }) === PROB_PANE_PAD_H + PROB_ROW_H,
+
+  check('adj1290 抽屉默认收起 + L3 不落盘（`problemsDrawerOpen: false`，没有 localStorage 键）',
+    /problemsDrawerOpen: false/.test(uiSrc1290) &&
+      /toggleProblemsDrawer: \(\) => set\(\(s\) => \(\{ problemsDrawerOpen: !s\.problemsDrawerOpen \}\)\)/.test(uiSrc1290) &&
+      !/problemsDrawer[A-Za-z]*_KEY/.test(uiSrc1290),
     '')
-  check('adj528 cap 对算式结果幂等（不放大、能把异常偏大的输入收口到 5 行）',
-    capProblemsContentHeight(problemsContentHeight({ ...RAW, problemCount: 9 })) ===
-      problemsContentHeight({ ...RAW, problemCount: 9 }) &&
-      capProblemsContentHeight(9999) === PROB_PANE_PAD_H + PROB_HEAD_H + PROB_ROW_H * PROB_MAX_ROWS,
+
+  check('adj1290 两个入口都走 `toggleProblemsDrawer`（状态栏 / Ctrl+`），不再走 dock 页签',
+    /onClick=\{\(\) => toggleProblemsDrawer\(\)\}/.test(footSrc1290) &&
+      /ui\.toggleProblemsDrawer\(\)/.test(appSrc1290) &&
+      // 负向断言前**先剥注释**：App.tsx 的说明里为了讲清"为什么不走 requestDockPanel"
+      // 会原样写出那个调用（E-2026-237 同款坑）
+      !/requestDockPanel\('problems'\)/.test(appSrc1290.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')) &&
+      !/toggleDock\('problems'\)/.test(footSrc1290.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')),
     '')
-  // adj555：cap 也必须遵守"≤N 不放大"——2 条告警的实测值是 2 行，cap 后不能变成 5 行
-  check('adj555 cap 不会把"少"的告警放大到上限（2 条仍按 2 行算）',
-    capProblemsContentHeight(problemsContentHeight({ ...RAW, problemCount: 2 })) ===
-      PROB_PANE_PAD_H + PROB_HEAD_H + PROB_ROW_H * 2,
+
+  check('adj1290 `expandDock()` 已无参数（adj591「有告警先切告警页签」口径下线）',
+    /expandDock: \(\) => set\(\{ dockOpen: true \}\)/.test(uiSrc1290) &&
+      !/expandDock\(summarizeProblems/.test(appSrc1290) &&
+      !/expandWithProblems/.test(footSrc1290),
     '')
-  // 结构护栏：ToolDock 里告警的高度常量必须引用同一来源（不重新写死数字）
-  const dockModuleSrc = String(readFileSync('src/ui/ToolDock.tsx', 'utf8'))
-  check('adj528 ToolDock 的高度常量与告警算式同源（引用 dock/problemsHeight）',
-    /const PANE_PAD_H = PROBS\.PANE_PAD_H/.test(dockModuleSrc) &&
-      /const ROW_H = PROBS\.ROW_H/.test(dockModuleSrc) &&
-      /const PROBLEMS_MAX_VISIBLE_ROWS = PROBS\.PROBLEMS_MAX_VISIBLE_ROWS/.test(dockModuleSrc) &&
-      /PROBS\.capProblemsContentHeight/.test(dockModuleSrc),
+
+  check('adj1290 状态栏告警按钮的高亮直接读抽屉状态（不再读 dockOpen/dockPanel 组合）',
+    /const problemsShown = problemsDrawerOpen/.test(footSrc1290),
+    '')
+
+  check('adj1290 ESC 收起抽屉：**捕获阶段**监听 + preventDefault（给 ToolDock 的冒泡监听让路）',
+    /window\.addEventListener\('keydown', onKey, true\)/.test(drawerSrc1290) &&
+      /if \(useUiStore\.getState\(\)\.modal\) return/.test(drawerSrc1290) &&
+      /e\.preventDefault\(\)/.test(drawerSrc1290),
+    '')
+
+  check('adj1290 抽屉高度由 CSS 收口（`.problems-drawer` 有 max-height + 不参与 dock 高度模型）',
+    /\.problems-drawer \{[\s\S]{0,320}?max-height: 160px;/.test(cssAll) &&
+      /\.problems-drawer \{[\s\S]{0,120}?flex: 0 0 auto;/.test(cssAll) &&
+      // 负向断言**先剥注释**（注释里为了讲清"哪套算式下线了"会提到这些名字，E-2026-237 同款坑）
+      !/problemsContentHeight|capProblemsContentHeight/.test(
+        dockSrc1290.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, ''),
+      ) &&
+      !/\.pane-problems/.test(dockSrc1290.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')),
+    '')
+
+  check('adj1290 旧面板与高度算式已删除（ProblemPanel.tsx / problemsHeight.ts 不存在）',
+    !existsSync('src/ui/dock/ProblemPanel.tsx') && !existsSync('src/ui/dock/problemsHeight.ts'),
     '')
 }
 
@@ -15114,7 +15121,7 @@ async function runAdj540WorkspaceTests() {
       /tabWorkspace: '工作区'/.test(copySrc) &&
       !/modal === 'workspace'/.test(appSrc),
     '')
-  check('adj540 面板走"受限高度链"（pane 当弹性列容器 ⇒ 列表自己滚、右侧操作区常驻，与 .pane-problems 同套路）',
+  check('adj540 面板走"受限高度链"（pane 当弹性列容器 ⇒ 列表自己滚、右侧操作区常驻，与 .pane-settings 同套路）',
     /\.tool-dock-pane\.pane-workspace \{[\s\S]{0,220}?min-height: 0/.test(cssAll) &&
       /\.ws-panel \{[\s\S]{0,200}?flex: 1 1 auto;[\s\S]{0,80}?min-height: 0/.test(cssAll),
     '')
@@ -15864,7 +15871,8 @@ async function runAdj540WorkspaceTests() {
     /if \(key === 'workspace' \|\| key === 'settings' \|\| key === 'score' \|\| key === 'import'\)/.test(dockSrc) &&
       // adj641：AUTO_FIT 现在还会含 'find'（查找替换按内容自然高定高）⇒
       // 改成「这几项必须在、那三项必须不在」的语义判断，不再比对整条字面量（否则每加一个面板就误伤）。
-      (['problems', 'tryout', 'export', 'about', 'find'] as const).every((k) =>
+      // adj1290：告警已移出页签集合，AUTO_FIT 里不再有 'problems'。
+      (['tryout', 'export', 'about', 'find'] as const).every((k) =>
         new RegExp(`AUTO_FIT: readonly DockPanelKey\\[\\] = \\[[^\\]]*'${k}'`).test(dockSrc),
       ) &&
       !/AUTO_FIT: readonly DockPanelKey\[\] = \[[^\]]*'(import|settings|score|meta)'/.test(dockSrc) &&
@@ -16639,18 +16647,16 @@ function runAdj609610Tests() {
 
   // ---- adj610：展开底栏的规则**单处实现**（三个入口共用）----
   check(
-    'adj610 `uiStore.expandDock(preferProblems)` = 展开底栏的唯一实现（有告警 → 告警页签，否则保留上次页签）',
-    /expandDock: \(preferProblems: boolean\) => void/.test(uiSrc) &&
-      /expandDock: \(preferProblems\) => set\(\(s\) => \(\{ dockOpen: true, dockPanel: preferProblems \? 'problems' : s\.dockPanel \}\)\)/.test(
-        uiSrc,
-      ),
+    'adj610/adj1290 `uiStore.expandDock()` = 展开底栏的唯一实现（告警抽屉独立后不再带参数）',
+    /expandDock: \(\) => void/.test(uiSrc) &&
+      /expandDock: \(\) => set\(\{ dockOpen: true \}\)/.test(uiSrc),
     '',
   )
   check(
-    'adj610 三个入口都走 `expandDock`：编辑区「展开底栏」按钮 / Ctrl+D / Ctrl+H（旧的内联三元已删除）',
-    /const expandDock = \(\) => expandDockPanel\(problems\.total > 0\)/.test(edSrc) &&
-      !/setDockPanel\(problems\.total > 0 \? 'problems' : dockPanel\)/.test(edSrc) &&
-      (appSrc.match(/ui\.expandDock\(summarizeProblems\(st\.parseResult\.errors\)\.total > 0\)/g) ?? []).length >= 2,
+    'adj610/adj1290 三个入口都走无参 `expandDock()`：编辑区按钮 / Ctrl+D / Ctrl+H（"有告警先切告警"已下线）',
+    /const expandDock = \(\) => expandDockPanel\(\)/.test(edSrc) &&
+      !/preferProblems|expandWithProblems/.test(edSrc) &&
+      (appSrc.match(/ui\.expandDock\(\)/g) ?? []).length >= 2,
     '',
   )
 
@@ -17151,10 +17157,8 @@ function runAdj617Tests() {
     '',
   )
   check(
-    'adj617 浮动栏「展开底栏」按钮的提示带 Ctrl+D（有告警时那句也带）',
-    /title=\{withKbd\(problems\.total > 0 \? dockCopy\.expandWithProblems\(problems\.total\) : dockCopy\.expandTitle, KBD\.dock\)\}/.test(
-      edSrc,
-    ),
+    'adj617 浮动栏「展开底栏」按钮的提示带 Ctrl+D（adj1290：告警抽屉已独立，不再有"先看告警"分支）',
+    /title=\{withKbd\(dockCopy\.expandTitle, KBD\.dock\)\}/.test(edSrc),
     '',
   )
   check(
@@ -17183,10 +17187,10 @@ function runAdj618Tests() {
   const kbdSrc = String(readFileSync('src/brand/shortcuts.ts', 'utf8'))
 
   check(
-    'adj618 `Ctrl+`` ⇒ 告警开关（底栏入口请求，与底栏「告警」页签、状态栏那条告警按钮同一条路）',
-    /e\.ctrlKey && \(e\.code === 'Backquote' \|\| e\.key === '`' \|\| e\.key === '~'\)[\s\S]{0,900}?ui\.requestDockPanel\('problems'\)/.test(
+    'adj618/adj1290 `Ctrl+`` ⇒ 告警开关（直接开关抽屉，与状态栏那条告警按钮同一条路）',
+    /e\.ctrlKey && \(e\.code === 'Backquote' \|\| e\.key === '`' \|\| e\.key === '~'\)[\s\S]{0,900}?ui\.toggleProblemsDrawer\(\)/.test(
       appSrc,
-    ) && /const toggleDock = useUiStore\(\(s\) => s\.toggleDock\)/.test(footSrc),
+    ) && /const toggleProblemsDrawer = useUiStore\(\(s\) => s\.toggleProblemsDrawer\)/.test(footSrc),
     '',
   )
   check(
@@ -17204,14 +17208,14 @@ function runAdj618Tests() {
     'adj618/619c 键名进 `KBD`（`problems: \'Ctrl+`\'` / `shortcuts: \'Alt+F1\'`），速查表引它',
     /problems: 'Ctrl\+`'/.test(kbdSrc) &&
       /shortcuts: 'Alt\+F1'/.test(kbdSrc) &&
-      /\[KBD\.problems, '告警面板开关'\]/.test(scSrc) &&
+      /\[KBD\.problems, '告警抽屉开关'\]/.test(scSrc) &&
       /\[KBD\.shortcuts, '本快捷键速查'\]/.test(scSrc),
     '',
   )
   check(
-    'adj618 提示落位：底栏「告警」页签带 `kbd`、状态栏告警按钮的 title 用 `withKbd(..., KBD.problems)`',
-    /key: 'problems', label: dockCopy\.tabProblems, icon: 'problems', kbd: KBD\.problems/.test(dockSrc) &&
-      /title=\{withKbd\(`\$\{dotTitle\}（点击\$\{problemsShown \? '收起' : '展开'\}底部告警）`, KBD\.problems\)\}/.test(footSrc),
+    'adj618/adj1290 提示落位：告警已不在页签里，状态栏告警按钮的 title 用 `withKbd(..., KBD.problems)`',
+    !/key: 'problems'/.test(dockSrc) &&
+      /title=\{withKbd\(`\$\{dotTitle\}（点击\$\{problemsShown \? '收起' : '展开'\}告警抽屉）`, KBD\.problems\)\}/.test(footSrc),
     '',
   )
 }
@@ -17231,9 +17235,10 @@ function runAdj619Tests() {
   const dockSrc = String(readFileSync('src/ui/ToolDock.tsx', 'utf8'))
 
   check(
-    'adj619 五条底栏入口快捷键都走 `requestDockPanel`（试听/导出/工作区/导入/告警），不再直接 toggleDock',
-    ['tryout', 'export', 'workspace', 'import', 'problems'].every((p) => new RegExp(`ui\\.requestDockPanel\\('${p}'\\)`).test(appSrc)) &&
-      !/ui\.toggleDock\('(tryout|export|workspace|import|problems)'\)/.test(appSrc),
+    'adj619/adj1290 四条底栏入口快捷键都走 `requestDockPanel`（试听/导出/工作区/导入），告警改走抽屉',
+    ['tryout', 'export', 'workspace', 'import'].every((p) => new RegExp(`ui\\.requestDockPanel\\('${p}'\\)`).test(appSrc)) &&
+      !/ui\.toggleDock\('(tryout|export|workspace|import|problems)'\)/.test(appSrc) &&
+      /ui\.toggleProblemsDrawer\(\)/.test(appSrc),
     '',
   )
   check(
@@ -17597,8 +17602,8 @@ function runAdj622Tests() {
         !/\$\{problems\.total\}\$\{parts\[0\]\}/.test(code) &&
         // 2) 反向：状态栏代码里不再有「X 个错误 / Y 个告警 / Z 个问题」（剥注释后）
         !/\u4e2a\u9519\u8bef|\u4e2a\u544a\u8b66|\u4e2a\u95ee\u9898/.test(code) &&
-        // 3) ProblemPanel 头部仍走完整 problemCopy.title（不受影响）
-        String(readFileSync('src/ui/dock/ProblemPanel.tsx', 'utf8')).includes('problemCopy.title')
+        // 3) 告警抽屉头部仍走完整 problemCopy.title（adj1290：面板改为抽屉，路径随之改）
+        String(readFileSync('src/ui/ProblemsDrawer.tsx', 'utf8')).includes('problemCopy.title')
       )
     })(),
     '',
@@ -18089,21 +18094,16 @@ async function runAdj541DockToggleTests() {
       /dockCopy\.expandTitle/.test(editorSrc) &&
       /expandTitle: '展开底栏'/.test(copySrc2),
     '')
-  check('adj591（用户要求）**有告警时「展开底栏」先切到告警页签，没有告警就不切换**（顶栏/菜单里点名开某个页签的入口不受影响）',
-    // 判定：total > 0 ⇒ 'problems'，否则维持上次的 `dockPanel`
-    // adj610：判定本体挪进 `uiStore.expandDock(preferProblems)`（Ctrl+D / Ctrl+H 也要用同一条规则，
-    // 三处各写一份必然漂移）；编辑区只负责"当前有没有告警"这一个布尔量。
-    /const problems = useMemo\(\(\) => summarizeProblems\(parseResult\.errors\), \[parseResult\.errors\]\)/.test(editorSrc) &&
-      /const expandDock = \(\) => expandDockPanel\(problems\.total > 0\)/.test(editorSrc) &&
+  check('adj591/adj1290 **告警抽屉已独立**：「展开底栏」不再因为"有告警"而切页签（adj591 的口径下线）',
+    // adj610：展开动作的唯一实现在 `uiStore.expandDock()`；adj1290 起它**不带参数**——
+    // 告警有了自己的一级开关（状态栏那行 / `Ctrl+``），不该由"展开底栏"顺带触发。
+    /const expandDock = \(\) => expandDockPanel\(\)/.test(editorSrc) &&
       /const expandDockPanel = useUiStore\(\(s\) => s\.expandDock\)/.test(editorSrc) &&
-      /expandDock: \(preferProblems\) => set\(\(s\) => \(\{ dockOpen: true, dockPanel: preferProblems \? 'problems' : s\.dockPanel \}\)\)/.test(
-        String(readFileSync('src/store/uiStore.ts', 'utf8')),
-      ) &&
-      /import \{ summarizeProblems \} from '\.\.\/ui\/problems'/.test(editorSrc) &&
-      // 有告警时 tooltip 说清楚"点开会先看告警"（别让用户以为上次的页签丢了）
-      /problems\.total > 0 \? dockCopy\.expandWithProblems\(problems\.total\) : dockCopy\.expandTitle/.test(editorSrc) &&
-      /expandWithProblems: \(n: number\): string => `展开底栏（先看告警：\$\{n\} 条）`/.test(copySrc2) &&
-      // 顶栏/菜单那几条**点名**的入口仍是直开（试听/导出/设置/关于），不受上面的判定影响
+      /expandDock: \(\) => set\(\{ dockOpen: true \}\)/.test(String(readFileSync('src/store/uiStore.ts', 'utf8'))) &&
+      // 负向：编辑区不再为"展开底栏"算告警条数、也不再有"先看告警"的文案
+      !/summarizeProblems/.test(editorSrc) &&
+      !/expandWithProblems/.test(editorSrc) &&
+      // 顶栏/菜单那几条**点名**的入口仍是直开（试听/导出/设置/关于）
       (() => {
         const top = String(readFileSync('src/ui/TopBar.tsx', 'utf8'))
         return (
@@ -18669,9 +18669,9 @@ console.log('[112] dock tab icons & theme-mode buttons (adj486/adj484)')
       existsSync(join(root, 'public', ICON_DIR, '告警.png')) &&
       existsSync(join(root, 'public', ICON_DIR, '关于.png')),
     '')
-  check('adj565 底栏两个页签改用设计图标（`icon: \'problems\'` / `icon: \'about\'`）',
-    // adj618：「告警」页签多了 `kbd: KBD.problems`（提示带快捷键）
-    /\{ key: 'problems', label: dockCopy\.tabProblems, icon: 'problems', kbd: KBD\.problems \}/.test(dockSrc) &&
+  check('adj565/adj1290 告警页签已移除（独立成抽屉），关于页签仍用设计图标',
+    // adj1290：告警不在页签集合里了，它的图标与文案改由抽屉自己用
+    !/\{ key: 'problems'/.test(dockSrc) &&
       /\{ key: 'about', label: dockCopy\.tabAbout, icon: 'about' \}/.test(dockSrc),
     '')
   // 结构性护栏：`glyph` 字段与 `t.icon ? … : t.glyph` 分支已删除，`icon` 在类型上**必填**
@@ -19025,43 +19025,38 @@ console.log('[116] settings 6 rows, About in dock, divider touch hit-area (adj49
     /\.about-panel \{/.test(css) && /\.about-brand \{/.test(css) && /\.about-body \{/.test(css) && aboutSrc.includes('className="about-panel"'),
     '')
   // adj494：关于面板打开时按"能显示全内容的最小高度"（走 AUTO_FIT 实测，与试听/导出同一机制）
-  // adj510：告警也纳入 AUTO_FIT（"能装下内容的最小高度"，但 cap 在最多 2 条可见）
   // adj641：查找替换（`find`）同样纳入；断言改为"必须**包含**这几个 key"，后续再加面板不必改这条。
-  check('adj494/adj510/adj641 AUTO_FIT 覆盖 告警 / 试听 / 导出 / 关于 / 查找替换',
-    (['problems', 'tryout', 'export', 'about', 'find'] as const).every((k) =>
+  // adj1290：告警移出页签集合，AUTO_FIT 里不再有 'problems'（抽屉不走 dock 高度模型）。
+  check('adj494/adj641 AUTO_FIT 覆盖 试听 / 导出 / 关于 / 查找替换',
+    (['tryout', 'export', 'about', 'find'] as const).every((k) =>
       new RegExp(`AUTO_FIT: readonly DockPanelKey\\[\\] = \\[[^\\]]*'${k}'`).test(dockSrc),
-    ),
+    ) &&
+      !/AUTO_FIT: readonly DockPanelKey\[\] = \[[^\]]*'problems'/.test(dockSrc),
     '')
-  // adj555（v0.28.2）：告警"建议档"最多显示 5 行（adj510: 2 行 → adj524: 4 行 → adj555: 5 行）。
-  // 放宽的依据是底栏有了高度档位按钮——"默认多给一点"不再挤占编辑区（嫌高按一下到最小、
-  // 想更高按一下到最大），所以让建议档承担"一次看全 5 条告警"。**0/1/2/3/4 条仍按内容自然高收缩**，
-  // 只在 > 5 条时按上限封顶（其余由列表自身滚动）。adj528：常量与算式搬到 `ui/dock/problemsHeight.ts`
-  // （单一来源 + 纯函数），断言随之改到该文件。
-  check('adj555/adj528 告警建议档最多显示 5 行（PROBLEMS_MAX_VISIBLE_ROWS = 5，单一来源）',
-    PROB_MAX_ROWS === 5 &&
-      /export const PROBLEMS_MAX_VISIBLE_ROWS = 5/.test(readFileSync('src/ui/dock/problemsHeight.ts', 'utf8')),
-    `maxRows=${PROB_MAX_ROWS}`)
+  // adj555 → adj1290：告警"最多显示 5 行"的口径没变，但**载体变了**——
+  // 原来是 `problemsHeight.ts` 里的 `PROBLEMS_MAX_VISIBLE_ROWS`（参与 dock 高度档位计算），
+  // 现在是抽屉的 CSS `max-height`（面板头 + 5 行），不再参与 dock 高度模型。
+  check('adj555/adj1290 告警抽屉最多显示 5 行（高度由 CSS `max-height` 收口）',
+    /\.problems-drawer \{[\s\S]{0,320}?max-height: 160px;/.test(css) &&
+      !existsSync('src/ui/dock/problemsHeight.ts'),
+    '')
 
-  // adj522：告警面板"展开后内容超过视界却没有滚动条"——高度链必须成立，列表才会真的滚。
-  // 三件套缺一不可：① 告警那条 pane 是弹性列（给列表受限高度）；
-  //                ② 列表 `flex: 0 1 auto`（按内容取高、可收缩）+ `overflow-y: auto`（收缩后出滚动条）；
-  //                ③ 头部不参与收缩（滚到底也要能点"收起"）。
-  // 另守一句：`.tool-dock-body` 的滚动**不被关掉**（恢复 `auto` 作兜底，链断了也不会把内容裁掉）。
-  check('adj522 告警列表高度链成立（pane 弹性列 + 列表可收缩可滚 + 头部不收缩）',
-    /\.tool-dock-pane\.pane-problems \{[\s\S]{0,120}?display: flex;[\s\S]{0,80}?flex-direction: column;/.test(css) &&
+  // adj522 → adj1290：告警"内容超视界要能滚"的链仍然要成立，但容器从 dock 的 pane 换成了抽屉。
+  // 三件套：① 抽屉是弹性列 + 有 `max-height`（给列表受限高度）；
+  //         ② 列表 `flex: 0 1 auto`（按内容取高、可收缩）+ `overflow-y: auto`；
+  //         ③ 头部不参与收缩（滚到底也要能点"收起"）。
+  check('adj522/adj1290 告警抽屉的高度链成立（弹性列 + 列表可收缩可滚 + 头部不收缩）',
+    /\.problems-drawer \{[\s\S]{0,320}?display: flex;[\s\S]{0,80}?flex-direction: column;/.test(css) &&
       /\.problems-list \{[\s\S]{0,900}?flex: 0 1 auto;[\s\S]{0,120}?min-height: 0;[\s\S]{0,120}?overflow-y: auto;/.test(css) &&
       /\.problems-head \{[\s\S]{0,300}?flex: 0 0 auto;/.test(css),
     '')
   check('adj522 取消"关掉 dock 内容区滚动"的覆盖（链断了仍可滚，不裁内容）',
-    !/\.tool-dock-body:has\(\.problem-panel\)/.test(css),
+    !/\.tool-dock-body:has\(\.problem-panel\)/.test(css) && !/\.tool-dock-body:has\(\.problems-drawer\)/.test(css),
     '')
-  // adj528：告警的"内容自然高"**不得再读任何 scrollHeight 总量**——那条 pane 为了列表能滚必须
-  // 填满 dock，读总量会被"可用高度"充气，从而"从最大切建议"算出虚高的建议高度（用户连报两次）。
-  // 现在改为「条数（数据）× 单行实测」，见 `ui/dock/problemsHeight.ts`（纯函数，下方有断言）。
-  check('adj528 告警内容自然高改由"条数 × 单行实测"量取（不再读 scrollHeight，避免充气）',
-    /dockPanel !== 'problems'\) return pane\.scrollHeight/.test(dockSrc) &&
-      /PROBS\.problemsContentHeight\(\{/.test(dockSrc) &&
-      !/list\.scrollHeight/.test(dockSrc),
+  // adj528 → adj1290：那套"条数 × 单行实测"的测高彻底不需要了——抽屉高度由 CSS 收口，
+  // 全程不读 DOM 尺寸。这条断言改为守住"ToolDock 里已经没有告警测高逻辑"。
+  check('adj1290 ToolDock 里不再有告警的测高逻辑（无 problems 特判、无 PROBS 引用）',
+    !/PROBS\./.test(dockSrc) && !/=== 'problems'/.test(dockSrc) && !/'problems'/.test(dockSrc),
     '')
 
   // adj532：告警行首三角箭头——用户连报 4 次"太小"。根因是**字符**不是字号：
@@ -19069,7 +19064,8 @@ console.log('[116] settings 6 rows, About in dock, divider touch hit-area (adj49
   // （18px 时只有 7×6px，36px 也才 12×12），所以 adj515/516/517 三轮调字号几乎看不出变化；
   // 换成常规实心 `▶`（U+25B6）后同样 18px 字号墨迹 17×18px（约 2.5 倍）。
   // 口径不变：**单字符 + rotate(90deg)**（收起右指 / 展开下指，视角一致）。
-  const problemSrc = String(readFileSync('src/ui/dock/ProblemPanel.tsx', 'utf8'))
+  // adj1290：面板改为抽屉（渲染代码里仍是同一个 glyph / 同一套 class）
+  const problemSrc = String(readFileSync('src/ui/ProblemsDrawer.tsx', 'utf8'))
   check('adj532 告警三角用常规实心 `▶`（U+25B6），不再用 SMALL 变体 `▸`（U+25B8）',
     /problem-expand-glyph"[^>]*>▶</.test(problemSrc) && !/>▸</.test(problemSrc),
     '')
@@ -19086,13 +19082,13 @@ console.log('[116] settings 6 rows, About in dock, divider touch hit-area (adj49
   // adj523：AUTO_FIT 的"内容自然高"取自 `pane.scrollHeight`，而 `scrollHeight === max(内容高, clientHeight)`。
   // 若 pane 被拉伸到 dock 高度（`flex: 1 1 auto`），"内容比可用高度小"时读数就等于**当前 dock 高度**，
   // 测量被污染 ⇒ 同一个"建议高度"会随"从哪一档切过来"而变（用户报：从最大切不正好、从最小切正好）。
-  // 契约：基类按内容取高；设置/告警两条需要填满 dock 的 pane 各自显式覆盖回 `1 1 auto`。
+  // 契约：基类按内容取高；设置/谱面两条需要填满 dock 的 pane 各自显式覆盖回 `1 1 auto`。
+  // （adj1290：告警已移出 dock，不再是这里的例外。）
   check('adj523 AUTO_FIT 面板的 pane 按内容取高（测量不被当前 dock 高度污染）',
     /\.tool-dock-pane \{[\s\S]{0,1200}?flex: 0 0 auto;/.test(css),
     '')
-  check('adj523/adj603 设置 / 谱面 / 告警三条 pane 显式填满 dock（分别要靠受限高度滚动）',
-    /\.tool-dock-pane\.pane-settings,\s*\.tool-dock-pane\.pane-score \{[\s\S]{0,500}?flex: 1 1 auto;/.test(css) &&
-      /\.tool-dock-pane\.pane-problems \{[\s\S]{0,300}?flex: 1 1 auto;/.test(css),
+  check('adj523/adj603 设置 / 谱面两条 pane 显式填满 dock（靠受限高度滚动）',
+    /\.tool-dock-pane\.pane-settings,\s*\.tool-dock-pane\.pane-score \{[\s\S]{0,500}?flex: 1 1 auto;/.test(css),
     '')
 
   // adj493：分隔条的手指命中区
@@ -19179,10 +19175,11 @@ console.log('[118] lazy dock panels, tabs at bottom, unified resize lines (adj49
   const theme = String(readFileSync('src/styles/theme.css', 'utf8')).replace(/\/\*[\s\S]*?\*\//g, '')
 
   // adj497：五个面板全部 lazy（此前告警/导出是静态 import ⇒ 拖着一串重依赖进主包）
-  check('adj497 五个面板全部走 React.lazy',
-    ['../dialogs/PlaybackDialog', '../dialogs/PageConfigDialog', '../dialogs/AboutDialog', './dock/ProblemPanel', './dock/ExportPanel'].every((p) =>
-      dockSrc.includes(`lazy(() => import('${p}')`),
-    ),
+  // adj497/adj1290：dock 面板全部走 React.lazy（adj1290：告警移出页签，它那一项 lazy 一并删除）
+  check('adj497 dock 面板全部走 React.lazy（告警已移出，不再有它的 lazy 项）',
+    ['../dialogs/PlaybackDialog', '../dialogs/PageConfigDialog', '../dialogs/AboutDialog', './dock/ExportPanel', './dock/WorkspacePanel', './dock/FindPanel'].every(
+      (p) => dockSrc.includes(`lazy(() => import('${p}')`),
+    ) && !/dock\/ProblemPanel/.test(dockSrc),
     '')
   check('adj497 不再静态 import 任何 dock 面板（ToolDock 顶部无 import { ProblemPanel/ExportPanel }）',
     !/^import \{ (ProblemPanel|ExportPanel) \} from/m.test(dockSrc),

@@ -53,7 +53,8 @@ const SHORTCUTS: [string, string][] = [
   // adj641（用户要求）：查找替换（底栏页签；接管浏览器原生 Ctrl+F，连按只重新聚焦查找框）
   [KBD.find, '查找替换（底栏页签；Enter 下一个 / Shift+Enter 上一个）'],
   // adj618（用户要求）：告警开关（按 Shift 的 `Ctrl+~` 同款同效，不留死键）
-  [KBD.problems, '告警面板开关'],
+  // adj1290：告警已从底栏页签独立成抽屉（贯穿底部、默认收起）
+  [KBD.problems, '告警抽屉开关'],
   // adj619c（用户要求）：速查改成 `Alt+F1`
   [KBD.shortcuts, '本快捷键速查'],
 ]
