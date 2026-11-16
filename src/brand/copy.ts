@@ -613,20 +613,21 @@ export const dockRightCopy = {
   wrapLabel: '右侧工具面板',
   /**
    * 顶部工具条三个按钮（宽度档 / 页签位置 / 插入⇄浮动）。
-   * 宽度档与模式**没有现成的设计图标**（`上/下/左/右` 都是方向箭头，语义对不上），
-   * 按"宁可写字也不乱用图标"的口径做成**单字按钮**；页签位置另有方向箭头图标，仍走 `ToolIcon`。
+   *
+   * adj1298（用户第四轮拍板）：三个按钮**一律用图标**（原来"窄/宽""底/右""插/浮"的单字，
+   * 单字看不出含义）。图标映射写在 `ui/RightDock.tsx` 的 `BAR_ICONS`：
+   * 宽度档 = 新画的「窄栏 / 宽栏」，页签位置 = 既有「底栏展开 / 右侧边栏」，
+   * 模式 = 既有「左右」（插入：内容被分成两栏）/ 新画的「浮动」（两张面板叠着）。
+   * 这里只留**提示文本**要用的名字——图标不带文字，状态就靠 `title` 念出来。
    */
   widthName: { narrow: '窄', wide: '宽' } as const,
   /** 宽度档提示：当前档的实际像素 + 点一下到哪一档（像素随视口变，故做成函数） */
   widthTitle: (cur: string, px: number, next: string): string => `右栏宽度：${cur}（${px}px，点击 → ${next}）`,
   /** 页签组位置（底部横排 / 右侧竖排） */
   tabsPosName: { bottom: '底部', right: '右侧' } as const,
-  /** 页签位置按钮上的单字（同宽度/模式按钮，显示**当前**状态） */
-  tabsPosShort: { bottom: '底', right: '右' } as const,
   tabsPosTitle: (cur: string, next: string): string => `页签位置：${cur}（点击 → ${next}）`,
   /** 模式：插入（挤窄内容）/ 浮动（盖住内容、点栏外关闭） */
   modeName: { insert: '插入', float: '浮动' } as const,
-  modeShort: { insert: '插', float: '浮' } as const,
   modeTitle: (cur: string, next: string): string => `右栏模式：${cur}（点击 → ${next}）`,
   /** 竖排页签条的溢出箭头（上/下）与横排（左/右）——横排复用 `dockCopy` 那两条 */
   tabsUpTitle: '向上翻看页签',

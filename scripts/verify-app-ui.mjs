@@ -1905,9 +1905,14 @@ async function main() {
         main0 !== null && main0.w === 1440,
         JSON.stringify(main0),
       )
+      /**
+       * adj1298（用户第四轮）：浮动栏**周边留 10px**、四角圆角——看起来是"独立悬浮的一块"。
+       * 这条断言的旧口径是"顶边贴 TopBar 下沿、底边贴状态栏上沿"（`adj1295`）。改成新口径
+       * **不是放宽**：三条边都按像素钉死（顶 = 内容区顶 + 10、底 = 内容区底 − 10、右 = 视口右 − 10）。
+       */
       check(
-        'adj1295 右栏是**整幅高度**（顶边贴 TopBar 下沿、底边贴状态栏/抽屉上沿）',
-        rd0 !== null && rd0.t > 0 && Math.abs(rd0.b - (main0 ? main0.b : rd0.b)) <= 1,
+        'adj1298 浮动右栏**整幅高度但四周留 10px**（顶/右/底各 10px，不再贴边）',
+        rd0 !== null && main0 !== null && rd0.t === main0.t + 10 && rd0.b === main0.b - 10 && rd0.r === 1440 - 10,
         JSON.stringify({ 右栏: rd0, 内容区: main0 }),
       )
 
@@ -2254,11 +2259,11 @@ async function main() {
          })()`,
       )
       check(
-        'adj1295 左右拆分 + 右侧浮动栏：右栏**整幅高度**（上贴 TopBar、下贴状态栏）、浮动不挤窄内容、底栏已让位',
+        'adj1298 左右拆分 + 右侧浮动栏：右栏仍是整幅高度（上/下各留 10px）、浮动不挤窄内容、底栏已让位',
         toFloat === 'bottom,insert,float' &&
           rdSplit !== null &&
           rdSplit.pos === 'absolute' &&
-          Math.abs(rdSplit.bottom - rdSplit.footerTop) <= 1 &&
+          rdSplit.bottom === rdSplit.footerTop - 10 &&
           rdSplit.mainW === rdSplit.vw &&
           rdSplit.bottomDockGone === true,
         JSON.stringify({ 选项: toFloat, 右栏: rdSplit }),
@@ -2445,6 +2450,480 @@ async function main() {
         )
       }
 
+      // ---- ⑮ 阶段 D：右栏收尾（adj1298）----
+      //
+      // 用户 2026-11-16 第四轮点了 6 条，加上方案 §六·阶段 C 末尾「看出来了但没修」的 3 条：
+      //   ① 顶部三个按钮换图标（原来"窄/宽""底/右""插/浮"单字，看不出含义）
+      //   ② 顶部按钮**右对齐**　③ 195px 档设置标签列收窄　④「导出乐谱包」zip 说明不再折半截
+      //   ⑤ 页签在右侧时**条宽 = 页签在底部时的高**（28px）　⑥ 浮动栏**周边留白 + 圆角**
+      //   ⑦ 工作区**操作区钉在栏底、列表高度自适应**　⑧ 试听**播放/停止挪到整块内容下方**
+      //   ⑨ 全局/谱面**子页签满宽**　⑩ 浅色主题下真量一遍右栏（阶段 D 那条"没能验的"）
+      // 每条都量"算出来的样式/几何"，不靠源码正则。
+      await setDockBar('narrow', 'bottom')
+      const barOf = () =>
+        evalJs(
+          c,
+          `(() => {
+             const bar = document.querySelector('.right-dock-bar')
+             if (!bar) return null
+             const btns = [...bar.querySelectorAll('button')]
+             const br = bar.getBoundingClientRect()
+             const pick = (b) => {
+               const ic = b.querySelector('.tool-icon')
+               return { icon: !!ic, text: (b.textContent || '').trim(), mask: ic ? getComputedStyle(ic).maskImage : '' }
+             }
+             return {
+               n: btns.length,
+               items: btns.map(pick),
+               rightGap: Math.round(br.right - btns[btns.length - 1].getBoundingClientRect().right),
+               leftGap: Math.round(btns[0].getBoundingClientRect().left - br.left),
+             }
+           })()`,
+        )
+      const bar0 = await barOf()
+      check(
+        'adj1298 右上三个按钮**全是图标、没有文字**（宽/底/浮 的单字下线）',
+        !!bar0 &&
+          bar0.n === 3 &&
+          bar0.items.every((it) => it.icon === true && it.text === '') &&
+          new Set(bar0.items.map((it) => it.mask)).size === 3,
+        JSON.stringify(bar0),
+      )
+      check(
+        'adj1298 右上三个按钮**右对齐**（右缘贴栏内边距 ≤8px、左端至少空 40px）',
+        !!bar0 && bar0.rightGap <= 8 && bar0.leftGap >= 40,
+        JSON.stringify(bar0 ? { 右间隙: bar0.rightGap, 左间隙: bar0.leftGap } : null),
+      )
+      // 图标随状态换（三枚都是二态、显示当前态——这是原来单字按钮承载的信息，换图标后不许丢）
+      const maskNow = async () => String((await barOf())?.items[0].mask ?? '')
+      const maskWidth0 = await maskNow()
+      await realClickOn('.right-dock-bar button[data-right-dock-width]')
+      await sleep(300)
+      const maskWidth1 = await maskNow()
+      await realClickOn('.right-dock-bar button[data-right-dock-width]')
+      await sleep(300)
+      check(
+        'adj1298 宽度档图标随状态换（窄栏 ⇄ 宽栏），换回来与原来一致',
+        maskWidth0.length > 0 && maskWidth1.length > 0 && maskWidth0 !== maskWidth1 && (await maskNow()) === maskWidth0,
+        JSON.stringify({ 窄: maskWidth0, 宽: maskWidth1 }),
+      )
+      {
+        // ⑤ 页签在右侧时的**条宽**要等于页签在底部时的**高**（28px）
+        const bottomTabH = await evalJs(
+          c,
+          `Math.round(document.querySelector('.right-dock .right-dock-tabstrip .right-dock-tab').getBoundingClientRect().height)`,
+        )
+        await realClickOn('.right-dock-bar button[data-right-dock-tabs]')
+        await sleep(350)
+        const vertStrip = await evalJs(
+          c,
+          `(() => {
+             const s = document.querySelector('.right-dock-tabs.is-vert')
+             if (!s) return null
+             const r = s.getBoundingClientRect()
+             const tab = s.querySelector('.right-dock-tab')
+             const icon = tab && tab.querySelector('.tool-icon')
+             return {
+               stripW: Math.round(r.width),
+               tabs: s.querySelectorAll('.right-dock-tab').length,
+               iconOverflow: icon ? Math.round(icon.getBoundingClientRect().right - tab.getBoundingClientRect().right) : null,
+               tabW: Math.round(tab.getBoundingClientRect().width),
+             }
+           })()`,
+        )
+        check(
+          'adj1298 页签放右侧时**条宽 = 放底部时的高**（28px），8 个页签在、图标没被竖条裁到',
+          bottomTabH === 28 &&
+            vertStrip !== null &&
+            vertStrip.stripW === bottomTabH &&
+            vertStrip.tabs === 8 &&
+            vertStrip.iconOverflow !== null &&
+            vertStrip.iconOverflow <= 1,
+          JSON.stringify({ 底部页签高: bottomTabH, 竖排: vertStrip }),
+        )
+        await realClickOn('.right-dock-bar button[data-right-dock-tabs]')
+        await sleep(300)
+      }
+
+      {
+        // ⑨ 全局/谱面的子页签**满宽**：四枚等分页签行，不再缩在左边留空白
+        await evalJs(c, `document.querySelector('.right-dock [data-key="settings"]').click(), true`)
+        await waitFor(c, `!!document.querySelector('.right-dock .pane-settings:not([hidden]) .jp-tabs')`, '阶段 D：全局设置')
+        const subTabs = await evalJs(
+          c,
+          `(() => {
+             const row = document.querySelector('.right-dock .pane-settings .jp-tabs')
+             const tabs = [...row.querySelectorAll('.jp-tab')]
+             const rr = row.getBoundingClientRect()
+             const ws = tabs.map((t) => Math.round(t.getBoundingClientRect().width))
+             return {
+               rowW: Math.round(rr.width),
+               n: tabs.length,
+               widths: ws,
+               spread: Math.max(...ws) - Math.min(...ws),
+               filled: Math.round(ws.reduce((a, b) => a + b, 0) + 4 * (tabs.length - 1)),
+             }
+           })()`,
+        )
+        check(
+          'adj1298 全局/谱面的子页签**满宽**（四枚等分、合计铺满页签行，不再缩在左侧留空白）',
+          subTabs.n === 4 && subTabs.spread <= 2 && Math.abs(subTabs.filled - subTabs.rowW) <= 4,
+          JSON.stringify(subTabs),
+        )
+        // ② 标签列从"当页最长标签"（可到 108px）收到 76px：320 档下控件拿到 ≥150px
+        const setRow = await evalJs(
+          c,
+          `(() => {
+             const pane = document.querySelector('.right-dock .pane-settings')
+             const row = pane && pane.querySelector('.pcfg-fields .pcfg-row')
+             if (!row) return null
+             const label = row.querySelector('.pcfg-row-label')
+             const ctl = row.querySelector('.pcfg-row-ctl')
+             return {
+               cols: getComputedStyle(row).gridTemplateColumns,
+               labelW: Math.round(label.getBoundingClientRect().width),
+               ctlW: Math.round(ctl.getBoundingClientRect().width),
+             }
+           })()`,
+        )
+        check(
+          'adj1298 右栏 @320 设置行的**标签列收窄到 76px**（`--pcfg-label-w` 不再按最长标签吃饭），控件拿到 ≥150px',
+          !!setRow && setRow.labelW <= 78 && setRow.ctlW >= 150,
+          JSON.stringify(setRow),
+        )
+      }
+
+      {
+        // ⑦ 工作区：操作区**钉在栏底**、列表吃剩余高度（窗口变矮 200 ⇒ 列表跟着矮 200）
+        await evalJs(c, `document.querySelector('.right-dock [data-key="workspace"]').click(), true`)
+        await waitFor(c, `!!document.querySelector('.right-dock .pane-workspace:not([hidden]) .ws-side')`, '阶段 D：工作区')
+        const wsPin = () =>
+          evalJs(
+            c,
+            `(() => {
+               const pane = document.querySelector('.right-dock .pane-workspace')
+               const side = pane.querySelector('.ws-side')
+               const left = pane.querySelector('.ws-left')
+               const list = pane.querySelector('.ws-list')
+               if (!side || !left || !list) return null
+               const pr = pane.getBoundingClientRect(), sr = side.getBoundingClientRect()
+               const lr = left.getBoundingClientRect(), li = list.getBoundingClientRect()
+               return {
+                 bottomGap: Math.round(pr.bottom - sr.bottom),
+                 sideTop: Math.round(sr.top),
+                 leftBottom: Math.round(lr.bottom),
+                 listH: Math.round(li.height),
+                 listOverflow: getComputedStyle(list).overflowY,
+                 paneH: Math.round(pr.height),
+               }
+             })()`,
+          )
+        const wsTall = await wsPin()
+        await c.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 700, deviceScaleFactor: 1, mobile: false })
+        await sleep(450)
+        const wsShort = await wsPin()
+        check(
+          'adj1298 工作区：操作区**钉在右栏底部**（离栏底只有 pane 的 10px 内边距）、列表在它上方且**高度自适应**（窗口矮 200 ⇒ 列表矮 ~200）',
+          !!wsTall &&
+            !!wsShort &&
+            wsTall.bottomGap >= 8 &&
+            wsTall.bottomGap <= 12 &&
+            wsShort.bottomGap >= 8 &&
+            wsShort.bottomGap <= 12 &&
+            wsShort.sideTop >= wsShort.leftBottom - 1 &&
+            wsTall.listH - wsShort.listH >= 150 &&
+            wsTall.listOverflow === 'auto',
+          JSON.stringify({ 高900: wsTall, 高700: wsShort }),
+        )
+        await c.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false })
+        await sleep(350)
+      }
+
+      {
+        // ⑧ 试听：播放/停止在**整块内容的最下面**（原来夹在信息区与其后的标记段/提示之间）
+        await evalJs(c, `document.querySelector('.right-dock [data-key="tryout"]').click(), true`)
+        await sleep(600)
+        const pbOrder = await evalJs(
+          c,
+          `(() => {
+             const pane = document.querySelector('.right-dock .pane-tryout')
+             const panel = pane && pane.querySelector('.playback-panel')
+             const acts = panel && panel.querySelector('.playback-actions')
+             if (!pane || !panel || !acts) return null
+             const ar = acts.getBoundingClientRect()
+             const split = panel.querySelector('.dock-split')
+             const others = [...panel.querySelectorAll('.dock-split-main, .practice-bar, .playback-hints')].map((e) => ({
+               cls: String(e.className).slice(0, 40),
+               bottom: Math.round(e.getBoundingClientRect().bottom),
+             }))
+             return {
+               splitDisplay: split ? getComputedStyle(split).display : null,
+               actsTop: Math.round(ar.top),
+               actsBottom: Math.round(ar.bottom),
+               btns: acts.querySelectorAll('button').length,
+               others,
+               bottomGap: Math.round(pane.getBoundingClientRect().bottom - ar.bottom),
+             }
+           })()`,
+        )
+        check(
+          'adj1298 试听：**播放/停止在整块内容的最下面**（信息区/标记段/提示都在它上方、按钮离栏底只有内边距）',
+          !!pbOrder &&
+            pbOrder.splitDisplay === 'contents' &&
+            pbOrder.btns >= 2 &&
+            pbOrder.others.every((o) => o.bottom <= pbOrder.actsTop + 1) &&
+            pbOrder.bottomGap >= 8 &&
+            pbOrder.bottomGap <= 22,
+          JSON.stringify(pbOrder),
+        )
+      }
+
+      {
+        // ④「导出乐谱包」：按钮一整行、zip 说明一整行（不再挤在按钮右边折半截）
+        await evalJs(c, `document.querySelector('.right-dock [data-key="export"]').click(), true`)
+        await sleep(450)
+        const pkg = await evalJs(
+          c,
+          `(() => {
+             const pane = document.querySelector('.right-dock .pane-export')
+             const row = pane && pane.querySelector('.export-package')
+             if (!row) return null
+             const btn = row.querySelector('button')
+             const note = row.querySelector('.export-package-note')
+             if (!btn || !note) return null
+             const br = btn.getBoundingClientRect(), nr = note.getBoundingClientRect(), rr = row.getBoundingClientRect()
+             return {
+               dir: getComputedStyle(row).flexDirection,
+               noteBelow: Math.round(nr.top) >= Math.round(br.bottom) - 1,
+               noteW: Math.round(nr.width),
+               rowW: Math.round(rr.width),
+               noteOverflow: Math.round(nr.scrollWidth - nr.clientWidth),
+             }
+           })()`,
+        )
+        check(
+          'adj1298 「导出乐谱包」在右栏里=**按钮一行 + zip 说明一行**（说明占整宽、没有被横向裁掉）',
+          !!pkg &&
+            pkg.dir === 'column' &&
+            pkg.noteBelow === true &&
+            pkg.noteW >= pkg.rowW * 0.8 &&
+            pkg.noteOverflow <= 2,
+          JSON.stringify(pkg),
+        )
+      }
+
+      {
+        // ⑬ 谱面页签底部「恢复默认 / 保存设置」：**图标 + 文字都在**，图标垂直居中
+        await evalJs(c, `document.querySelector('.right-dock [data-key="score"]').click(), true`)
+        await sleep(700)
+        const foot = await evalJs(
+          c,
+          `(() => {
+             const pane = document.querySelector('.right-dock .pane-score')
+             const btns = [...(pane ? pane.querySelectorAll('.pcfg-foot > button') : [])]
+             if (!btns.length) return null
+             return btns.map((b) => {
+               const r = b.getBoundingClientRect()
+               const ic = b.querySelector('.tool-icon')
+               const ir = ic ? ic.getBoundingClientRect() : null
+               return {
+                 text: (b.textContent || '').trim(),
+                 icon: !!ic,
+                 iconCy: ir ? Math.round((ir.top + ir.bottom) / 2) : null,
+                 btnCy: Math.round((r.top + r.bottom) / 2),
+                 h: Math.round(r.height),
+               }
+             })
+           })()`,
+        )
+        check(
+          'adj1298 谱面页签底部「恢复默认 / 保存设置」**各带一个图标、文字还在**，图标垂直居中（不贴基线）',
+          Array.isArray(foot) &&
+            foot.length === 2 &&
+            foot.every((b) => b.icon === true && b.text.length > 0 && Math.abs(b.iconCy - b.btnCy) <= 2),
+          JSON.stringify(foot),
+        )
+      }
+
+      {
+        // ⑫ 导入页签：四个按钮 = 图标 + 悬浮提示，且**排在一行**（adj1298 用户第六轮）
+        await evalJs(c, `document.querySelector('.right-dock [data-key="import"]').click(), true`)
+        await sleep(600)
+        const impActs = await evalJs(
+          c,
+          `(() => {
+             const pane = document.querySelector('.right-dock .pane-import')
+             const row = pane && pane.querySelector('.import-acts')
+             if (!row) return null
+             const btns = [...row.querySelectorAll('button')]
+             const rects = btns.map((b) => {
+               const r = b.getBoundingClientRect()
+               return { w: Math.round(r.width), h: Math.round(r.height), t: Math.round(r.top), l: Math.round(r.left) }
+             })
+             return {
+               n: btns.length,
+               icons: btns.filter((b) => b.querySelector('.tool-icon')).length,
+               texts: btns.map((b) => (b.textContent || '').trim()),
+               titles: btns.map((b) => (b.getAttribute('title') || '').length > 0),
+               labels: btns.map((b) => (b.getAttribute('aria-label') || '').length > 0),
+               wrap: getComputedStyle(row).flexWrap,
+               rects,
+             }
+           })()`,
+        )
+        check(
+          'adj1298 导入页签：四个按钮**只有图标、没有文字**（都有 title/aria-label），且**排在一行**（同一顶边、宽=高）',
+          !!impActs &&
+            impActs.n === 4 &&
+            impActs.icons === 4 &&
+            impActs.texts.every((t) => t === '') &&
+            impActs.titles.every(Boolean) &&
+            impActs.labels.every(Boolean) &&
+            impActs.wrap === 'nowrap' &&
+            new Set(impActs.rects.map((r) => r.t)).size === 1 &&
+            impActs.rects.every((r) => r.w === r.h && r.w > 0),
+          JSON.stringify(impActs),
+        )
+      }
+
+      {
+        // ⑥ 浮动栏：周边 10px 留白 + 四边圆角 + 圆角真的裁到子元素
+        //    先读当前模式再点（这一段之前游走过换壳/换模式，别假设现在一定是插入档）
+        if ((await evalJs(c, `String(document.querySelector('.right-dock').dataset.dockFloat)`)) !== '1') {
+          await realClickOn('.right-dock-bar button[data-right-dock-mode]')
+          await sleep(400)
+        }
+        const floatBox = await evalJs(
+          c,
+          `(() => {
+             const d = document.querySelector('.right-dock')
+             const m = document.querySelector('.app-main')
+             if (!d || !m) return null
+             const cs = getComputedStyle(d), r = d.getBoundingClientRect(), mr = m.getBoundingClientRect()
+             return {
+               pos: cs.position,
+               radius: cs.borderTopLeftRadius,
+               overflow: cs.overflowX,
+               top: Math.round(r.top - mr.top),
+               right: Math.round(innerWidth - r.right),
+               bottom: Math.round(mr.bottom - r.bottom),
+               borderW: cs.borderTopWidth,
+             }
+           })()`,
+        )
+        check(
+          'adj1298 浮动栏**四周留 10px、四角圆角 10px、圆角裁到子元素**（看起来是一块独立悬浮的面板）',
+          !!floatBox &&
+            floatBox.pos === 'absolute' &&
+            floatBox.radius === '10px' &&
+            floatBox.overflow === 'hidden' &&
+            floatBox.top === 10 &&
+            floatBox.right === 10 &&
+            floatBox.bottom === 10 &&
+            floatBox.borderW === '1px',
+          JSON.stringify(floatBox),
+        )
+      }
+
+      {
+        // ⑩ 浅色主题下的右栏（阶段 D 那条"我没能验的"之一）：切浅色重载，真量右栏底色与文字色
+        await evalJs(c, `localStorage.setItem('ijipu.themeMode', 'light'), true`)
+        await c.send('Page.reload')
+        await sleep(900)
+        await waitFor(c, `!!document.querySelector('.editor-main textarea')`, '阶段 D：浅色主题首屏')
+        await realClickOn('.topbar-right-dock')
+        await sleep(450)
+        const lightDock = await evalJs(
+          c,
+          `(() => {
+             const d = document.querySelector('.right-dock')
+             if (!d) return null
+             const bar = d.querySelector('.right-dock-bar')
+             const btn = bar && bar.querySelector('.right-dock-btn')
+             const cs = getComputedStyle(d)
+             const bcs = btn ? getComputedStyle(btn) : null
+             const rgb = (s) => {
+               const m = /rgba?\\(([^)]+)\\)/.exec(s || '')
+               return m ? m[1].split(',').slice(0, 3).map((v) => Number(v.trim())) : null
+             }
+             const lum = (c3) => (c3 ? (0.2126 * c3[0] + 0.7152 * c3[1] + 0.0722 * c3[2]) / 255 : null)
+             return {
+               mode: document.documentElement.getAttribute('data-mode'),
+               bg: cs.backgroundColor,
+               bgLum: lum(rgb(cs.backgroundColor)),
+               fgLum: bcs ? lum(rgb(bcs.color)) : null,
+               iconMask: btn && btn.querySelector('.tool-icon') ? getComputedStyle(btn.querySelector('.tool-icon')).maskImage.length : 0,
+             }
+           })()`,
+        )
+        check(
+          'adj1298 **浅色主题**下右栏跟着走：`data-mode=light`、底色是浅色（亮度 >0.75）、按钮文字是深色（<0.5）、图标仍在',
+          !!lightDock &&
+            lightDock.mode === 'light' &&
+            lightDock.bgLum !== null &&
+            lightDock.bgLum > 0.75 &&
+            lightDock.fgLum !== null &&
+            lightDock.fgLum < 0.5 &&
+            lightDock.iconMask > 0,
+          JSON.stringify(lightDock),
+        )
+      }
+
+      {
+        // **负向**：底栏里播放/停止仍在信息区**右侧**（阶段 D 的 `display: contents` 只作用在 `.right-dock` 之下）
+        await openGlobalSettings()
+        const toBottom = await evalJs(
+          c,
+          `(() => {
+             const row = [...document.querySelectorAll('.pcfg-row')].find((r) => r.textContent.includes('操作方式'))
+             const s = row && row.querySelector('select')
+             if (!s) return 'no-select'
+             Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(s, 'bottom')
+             s.dispatchEvent(new Event('change', { bubbles: true }))
+             return true
+           })()`,
+        )
+        await sleep(500)
+        await evalJs(
+          c,
+          `(() => {
+             const dock = document.querySelector('.tool-dock:not(.right-dock)')
+             const tab = dock && dock.querySelector('[data-key="tryout"]')
+             if (tab) tab.click()
+             return true
+           })()`,
+        )
+        await sleep(600)
+        const pbBottom = await evalJs(
+          c,
+          `(() => {
+             const dock = document.querySelector('.tool-dock:not(.right-dock)')
+             const panel = dock && dock.querySelector('.playback-panel')
+             if (!panel) return null
+             const split = panel.querySelector('.dock-split')
+             const acts = panel.querySelector('.playback-actions')
+             const main = panel.querySelector('.dock-split-main')
+             if (!split || !acts || !main) return null
+             return {
+               display: getComputedStyle(split).display,
+               actsLeft: Math.round(acts.getBoundingClientRect().left),
+               mainRight: Math.round(main.getBoundingClientRect().right),
+               actsTop: Math.round(acts.getBoundingClientRect().top),
+               mainTop: Math.round(main.getBoundingClientRect().top),
+             }
+           })()`,
+        )
+        check(
+          'adj1298 **负向**：底栏里播放/停止仍在信息区**右侧**（`display: contents` 不越到 `.tool-dock` 这一层）',
+          toBottom === true &&
+            !!pbBottom &&
+            pbBottom.display !== 'contents' &&
+            Math.abs(pbBottom.actsTop - pbBottom.mainTop) <= 12 &&
+            pbBottom.actsLeft >= pbBottom.mainRight - 1,
+          JSON.stringify({ 切底栏: toBottom, 底栏试听: pbBottom }),
+        )
+      }
+
       // ---- ⑩ 手机档：默认底栏 + 设置里**没有「右侧栏」** ----
       const DESKTOP_UA2 = await evalJs(c, 'navigator.userAgent')
       const MOBILE_UA2 =
@@ -2539,6 +3018,55 @@ async function main() {
         'adj1297 手机右栏最窄档（195px）**工作区仍是上下排、且不裁**（操作列占整宽、没有溢出被剪的元素）',
         mWs !== null && mWs.dir === 'column' && mWs.sideW >= mWs.paneW * 0.6 && mWs.clipped === 0,
         JSON.stringify(mWs),
+      )
+      /**
+       * adj1298：195px 档设置面板（阶段 C 遗留的"标签列固定 96px、控件只剩 ~70px"）。
+       * 极窄档（容器 ≤240px）改成**标签一行、控件一行**，控件拿整宽；顺带扫一遍不裁。
+       * ⚠ 先把宽度档点回**窄档**（上一段刚量过 260 宽档）——容器查询看的是 dock 宽，
+       *   停在 260 就不会命中 ≤240 那档（第一版漏了这句，判据自己把 260 当 195 量）。
+       */
+      await realClickOn('.right-dock-bar button[data-right-dock-width]')
+      await sleep(350)
+      if ((await evalJs(c, `String(document.querySelector('.right-dock').dataset.dockWidth)`)) !== 'narrow') {
+        await realClickOn('.right-dock-bar button[data-right-dock-width]')
+        await sleep(350)
+      }
+      await evalJs(c, `document.querySelector('.right-dock [data-key="settings"]').click(), true`)
+      await sleep(700)
+      const mSet = await evalJs(
+        c,
+        `(() => {
+           const pane = document.querySelector('.right-dock .pane-settings')
+           if (!pane) return null
+           const row = pane.querySelector('.pcfg-fields .pcfg-row')
+           const label = row && row.querySelector('.pcfg-row-label')
+           const ctl = row && row.querySelector('.pcfg-row-ctl')
+           if (!label || !ctl) return null
+           const lr = label.getBoundingClientRect(), cr = ctl.getBoundingClientRect()
+           const clipped = [...pane.querySelectorAll('*')].filter((el) => {
+             const cs = getComputedStyle(el)
+             return cs.overflowX !== 'visible' && el.clientWidth > 0 && el.scrollWidth > el.clientWidth + 2
+           }).length
+           return {
+             cols: getComputedStyle(row).gridTemplateColumns,
+             labelBottom: Math.round(lr.bottom),
+             ctlTop: Math.round(cr.top),
+             ctlW: Math.round(cr.width),
+             paneW: Math.round(pane.getBoundingClientRect().width),
+             dockW: Math.round(document.querySelector('.right-dock').getBoundingClientRect().width),
+             clipped,
+           }
+         })()`,
+      )
+      check(
+        'adj1298 手机最窄档（195px）设置面板：**标签一行、控件一行**（控件拿整宽，不再左右挤）+ 不裁内容',
+        mSet !== null &&
+          mSet.dockW === 195 &&
+          !mSet.cols.includes(' ') &&
+          mSet.ctlTop >= mSet.labelBottom - 1 &&
+          mSet.ctlW >= mSet.paneW * 0.55 &&
+          mSet.clipped === 0,
+        JSON.stringify(mSet),
       )
       // 收尾：恢复桌面视口与 UA（这段是本脚本最后一段，但保持"跑完不留脏环境"的习惯）
       await c.send('Emulation.setDeviceMetricsOverride', {

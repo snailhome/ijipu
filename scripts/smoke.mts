@@ -15147,7 +15147,10 @@ async function runAdj540WorkspaceTests() {
       !/@container \(max-width: 430px\) \{[\s\S]{0,200}?\.tool-dock-tab-icon \{ display: none/.test(cssAll),
     '')
   check('adj540 右侧**只留一个下拉按钮**（点它弹出操作菜单，菜单走 portal 以免被 dock 的 overflow 裁掉）',
-    /ref=\{menuBtnRef\}[\s\S]{0,260}?aria-haspopup="menu"[\s\S]{0,200}?workspaceCopy\.menuBtn/.test(panelSrc) &&
+    // adj1298：按钮里多了一个 `<ToolIcon name="menu" size={12} />`（用户要求加"三横"图标），
+    //   `aria-haspopup` 到 `workspaceCopy.menuBtn` 的距离从 ~200 字符涨到 ~240 ⇒ 上限放到 320。
+    //   判据本身没变：仍是"同一个按钮、带菜单语义、文字是操作"。
+    /ref=\{menuBtnRef\}[\s\S]{0,260}?aria-haspopup="menu"[\s\S]{0,320}?workspaceCopy\.menuBtn/.test(panelSrc) &&
       /createPortal\(/.test(panelSrc) &&
       /className="ws-menu-pop"/.test(panelSrc) &&
       /\.ws-menu-pop \{[\s\S]{0,200}?position: fixed/.test(cssAll) &&
@@ -17657,27 +17660,45 @@ function runAdj622Tests() {
 
   // ----- ③ 工作区右栏顺序 -----
   // `.ws-side` 是 `flex-direction: column`，DOM 顺序 = 视觉顺序。
-  // 截取"非 moving"那一支的右栏（操作按钮 → 过滤框 → * 按钮 → x 按钮 → 提示），
-  // 断言五块的相对位置：操作按钮 < 过滤框 < `*` 按钮 < x 按钮 < ws-side-label。
-  // 注意：源码里 "moving" 分支也含一个 ws-side-label（"actMove·N"），要取"非 moving"分支那一份，
-  // 即**第二次**出现的位置（或者：在 ws-side-group 那块之后的 ws-side-label）。
+  // adj1298（用户第五轮）：顺序改为「提示信息 → 搜索行 → 操作按钮」——
+  //   提示 `<` `*` `<` 过滤框 `<` ✕ `<` 操作▾（`*` 在过滤框前、`✕` 在后，三件套同一行）。
+  // 注意：源码里 "moving" 分支也含一个 ws-side-label（"actMove·N"）⇒ 取**第二份**（非 moving 那一支）。
   check(
-    'adj622 工作区右栏顺序：操作按钮 → 过滤框 → `*` 按钮 → x 按钮 → "匹配 n 个" 提示',
+    'adj1298 工作区右栏顺序：提示信息 → `*` → 过滤框 → ✕ → 操作▾（操作按钮在最下）',
     (() => {
-      const iGroup = wsPanelSrc.indexOf('ws-side-group')
-      // 锚到 ws-side-group 之后的那一份 ws-side-label
-      const iLabel = wsPanelSrc.indexOf('ws-side-label', iGroup)
-      const iInput = wsPanelSrc.indexOf('ws-filter"', iGroup)
-      const iAll = wsPanelSrc.indexOf('ws-filter-all', iGroup)
-      const iClear = wsPanelSrc.indexOf('ws-filter-clear', iGroup)
+      const iSide = wsPanelSrc.indexOf('className="ws-side"')
+      const iLabel1 = wsPanelSrc.indexOf('ws-side-label', iSide)
+      const iLabel = wsPanelSrc.indexOf('ws-side-label', iLabel1 + 1) // 非 moving 那一份
+      const iRow = wsPanelSrc.indexOf('className="ws-filter-row"', iSide)
+      const iAll = wsPanelSrc.indexOf('ws-filter-all', iSide)
+      const iInput = wsPanelSrc.indexOf('ws-filter"', iSide)
+      const iClear = wsPanelSrc.indexOf('ws-filter-clear', iSide)
+      const iGroup = wsPanelSrc.indexOf('ws-side-group', iSide)
       const ok =
-        iGroup > 0 &&
-        iInput > iGroup &&
-        iAll > iInput &&
-        iClear > iAll &&
-        iLabel > iClear
+        iSide > 0 &&
+        iLabel > iLabel1 &&
+        iLabel < iRow &&
+        iRow < iAll &&
+        iAll < iInput &&
+        iInput < iClear &&
+        iClear < iGroup
       if (!ok) {
-        console.log('    debug: iGroup=', iGroup, 'iInput=', iInput, 'iAll=', iAll, 'iClear=', iClear, 'iLabel=', iLabel)
+        console.log(
+          '    debug: iSide=',
+          iSide,
+          'iLabel=',
+          iLabel,
+          'iRow=',
+          iRow,
+          'iAll=',
+          iAll,
+          'iInput=',
+          iInput,
+          'iClear=',
+          iClear,
+          'iGroup=',
+          iGroup,
+        )
       }
       return ok
     })(),
@@ -18268,18 +18289,18 @@ async function runAdj541DockToggleTests() {
         /workspaceCopy\.blockedHint/.test(wsPanelSrc),
       '')
   }
-  check('adj545/adj549（用户要求）面板**上面包屑整行 + 下分左右两栏**：左=列表；右=固定宽度（操作▾ / 过滤 / `*` / ✕ / 匹配提示）',
+  check('adj545/adj549（用户要求）面板**上面包屑整行 + 下分左右两栏**：左=列表；右=过滤三件套 / 操作▾ / 匹配提示',
     // 上：ws-head（切换工作区按钮 + 面包屑）在 ws-body **之前**，独占一行
     /<div className="ws-panel">[\s\S]{0,600}?<div className="ws-head">[\s\S]{0,1400}?className="ws-workspace-btn"[\s\S]{0,2000}?className="ws-crumb"[\s\S]{0,4000}?<div className="ws-body">[\s\S]{0,400}?<div className="ws-left">[\s\S]{0,800}?className=\{`ws-list[\s\S]{0,7000}?<div className="ws-side">/.test(
       wsPanelSrc,
     ) &&
-      // adj622（用户要求）：下右栏顺序调整为「操作▾ → 过滤框 → `*`/✕ 一行 → 匹配提示」
-      // （操作按钮在最上面，状态信息在最后面 ——"匹配 n 个"提示也走 ws-side-label，
-      //  锚到 ws-side-group 之后的那份 ws-side-label，避免被 moving 分支的那条「actMove·N」干扰）。
-      // 注：操作按钮的实际 className 是 `"btn ws-side-btn ws-side-group"`（不是裸 ws-side-group）。
-      /className="btn ws-side-btn ws-side-group"[\s\S]{0,900}?className="ws-input ws-filter"[\s\S]{0,900}?className="ws-filter-row"[\s\S]{0,900}?ws-filter-all[\s\S]{0,900}?ws-filter-clear[\s\S]{0,900}?ws-side-label/.test(
+      // adj1298（用户第五轮）：右栏里三块**都在**（顺序 = 提示信息 → 搜索行 → 操作按钮）。
+      // 顺序本身由工作区那一节的"③ 工作区右栏顺序"用 indexOf 精确断言，这里只守结构不丢东西。
+      /className="ws-side"[\s\S]{0,14000}?ws-side-label/.test(wsPanelSrc) &&
+      /className="ws-filter-row"[\s\S]{0,600}?ws-filter-all[\s\S]{0,900}?className="ws-input ws-filter"[\s\S]{0,1600}?ws-filter-clear/.test(
         wsPanelSrc,
       ) &&
+      /ws-filter-clear[\s\S]{0,4000}?ws-side-btn ws-side-group/.test(wsPanelSrc) &&
       // 消除过滤常驻（无过滤时禁用）——位置固定，不因是否有过滤而跳动
       /className="btn ws-filter-clear"[\s\S]{0,200}?disabled=\{!searching\}/.test(wsPanelSrc) &&
       /\.ws-left \{[\s\S]{0,220}?flex: 1 1 auto/.test(cssSrc) &&
@@ -28131,6 +28152,227 @@ function runAdj1294Tests() {
       /\.right-dock \.pcfg-fields \.pcfg-row-ctl > select,[\s\S]{0,160}?max-width: 100%;/.test(cssCode),
       '',
     )
+
+    // ---------- adj1298（阶段 D 收尾）：图标 / 留白圆角 / 条宽 / 钉底 / 排最后 / 满宽 / 收窄 ----------
+    // 用户 2026-11-16 第四轮 6 条 + 方案 §六·阶段 C 末尾「看出来了但没修」的 3 条。
+    // 这里只钉"规则长什么样"；"点下去真的这样排"由 `verify:app-ui` 量（E-2026-580 的口径）。
+    check(
+      'adj1298 新增三枚右栏专用图标（窄栏 / 宽栏 / 浮动）并登记进 `ICON_FILES`',
+      ICON_FILES.dockWidthNarrow === '窄栏' && ICON_FILES.dockWidthWide === '宽栏' && ICON_FILES.float === '浮动',
+      JSON.stringify({ 窄: ICON_FILES.dockWidthNarrow, 宽: ICON_FILES.dockWidthWide, 浮动: ICON_FILES.float }),
+    )
+    {
+      const rdSrc = String(readFileSync('src/ui/RightDock.tsx', 'utf8'))
+      check(
+        'adj1298 右栏顶部三个按钮**换成图标**（`BAR_ICONS` 状态映射 + 三处 `<ToolIcon>`；单字文案下线）',
+        /const BAR_ICONS = \{[\s\S]{0,400}?width: \{ narrow: 'dockWidthNarrow', wide: 'dockWidthWide' \}/.test(rdSrc) &&
+          /tabs: \{ bottom: 'dockExpand', right: 'rightDock' \}/.test(rdSrc) &&
+          /mode: \{ insert: 'splitH', float: 'float' \}/.test(rdSrc) &&
+          (rdSrc.match(/<ToolIcon name=\{BAR_ICONS\./g) ?? []).length === 3 &&
+          !rdSrc.includes('dockRightCopy.tabsPosShort') &&
+          !rdSrc.includes('dockRightCopy.modeShort'),
+        JSON.stringify({ 图标按钮数: (rdSrc.match(/<ToolIcon name=\{BAR_ICONS\./g) ?? []).length }),
+      )
+      const copySrc = String(readFileSync('src/brand/copy.ts', 'utf8'))
+      check(
+        'adj1298 那两个单字映射（`tabsPosShort` / `modeShort`）从 copy.ts 删除（状态改由图标 + title 承载）',
+        !copySrc.includes('tabsPosShort') && !copySrc.includes('modeShort'),
+        '',
+      )
+    }
+    check(
+      'adj1298 CSS：顶部工具条按钮**右对齐**（`justify-content: flex-end`）',
+      /\.right-dock-bar \{[\s\S]{0,240}?justify-content: flex-end;/.test(cssCode),
+      '',
+    )
+    check(
+      'adj1298 CSS：浮动栏**四周留 10px + 四角圆角 10px + 圆角裁到子元素（overflow hidden）+ 四边框**',
+      /\.right-dock\.is-float \{[\s\S]{0,400}?inset: 10px 10px 10px auto;[\s\S]{0,500}?border-radius: 10px;[\s\S]{0,160}?overflow: hidden;/.test(
+        cssCode,
+      ),
+      '',
+    )
+    check(
+      'adj1298 CSS：页签在右侧时**条宽 = 页签在底部时的高**（`--jp-right-dock-tabs-w: 28px` 对齐 `.tool-dock-tab` 的 `height: 28px`）',
+      /--jp-right-dock-tabs-w: 28px;/.test(cssCode) &&
+        /\.tool-dock-tab \{[\s\S]{0,900}?height: 28px;/.test(cssCode) &&
+        /width: var\(--jp-right-dock-tabs-w, 28px\);/.test(cssCode),
+      '',
+    )
+    check(
+      'adj1298 CSS：全局/谱面**子页签满宽**（`.jp-tab` 在右栏里 `flex: 1 1 0`；`min-width: min-content` 才折行、不截字）',
+      /\.right-dock \.jp-tab \{[\s\S]{0,240}?flex: 1 1 0;[\s\S]{0,120}?min-width: min-content;/.test(cssCode),
+      '',
+    )
+    check(
+      'adj1298 CSS：工作区 pane **填满右栏**（不再按内容取高）+ `.ws-body` 吃剩余高度 ⇒ 操作区钉底、列表自适应',
+      /\.right-dock \.tool-dock-pane\.pane-workspace \{[\s\S]{0,120}?flex: 1 1 auto;/.test(cssCode) &&
+        /\.right-dock \.ws-body \{[\s\S]{0,200}?flex: 1 1 auto;/.test(cssCode) &&
+        /\.right-dock \.ws-side \{[\s\S]{0,160}?flex: 0 0 auto;/.test(cssCode),
+      '',
+    )
+    check(
+      'adj1298 CSS：试听**播放/停止排在整块内容最后**（`.dock-split` 在右栏里 `display: contents` + 四块 order 1→4）',
+      /\.right-dock \.playback-panel \.dock-split \{[\s\S]{0,120}?display: contents;/.test(cssCode) &&
+        /\.right-dock \.playback-panel \.dock-split-main \{[\s\S]{0,80}?order: 1;/.test(cssCode) &&
+        /\.right-dock \.playback-panel \.practice-bar \{[\s\S]{0,80}?order: 2;/.test(cssCode) &&
+        /\.right-dock \.playback-panel \.playback-hints \{[\s\S]{0,80}?order: 3;/.test(cssCode) &&
+        /\.right-dock \.playback-panel \.playback-actions \{[\s\S]{0,80}?order: 4;/.test(cssCode),
+      '',
+    )
+    check(
+      'adj1298 CSS：设置**标签列收到 76px**（不再按"当页最长标签"到 108px）+ 极窄档（容器 ≤240）标签与控件上下排',
+      /\.right-dock \.pcfg-fields \.pcfg-row \{[\s\S]{0,160}?grid-template-columns: minmax\(0, 76px\) minmax\(0, 1fr\);/.test(
+        cssCode,
+      ) &&
+        /@container \(max-width: 240px\) \{[\s\S]{0,240}?\.right-dock \.pcfg-fields \.pcfg-row \{[\s\S]{0,120}?grid-template-columns: minmax\(0, 1fr\);/.test(
+          cssCode,
+        ),
+      '',
+    )
+    check(
+      'adj1298 CSS：右栏内容区**不再预留滚动条空槽**（`scrollbar-gutter: auto`，用户报的"滚动条右边还有一条空白"）',
+      /\.right-dock-body \{[\s\S]{0,700}?scrollbar-gutter: auto;/.test(cssCode),
+      '',
+    )
+    check(
+      'adj1298 CSS：设置/谱面 pane 右侧内边距收到 6px（滚动条更贴近竖排页签条，顺带多让 6px 给控件）',
+      /\.right-dock \.tool-dock-pane\.pane-settings,[\s\S]{0,120}?\.right-dock \.tool-dock-pane\.pane-score \{[\s\S]{0,80}?padding-right: 6px;/.test(
+        cssCode,
+      ),
+      '',
+    )
+    {
+      const expSrc = String(readFileSync('src/ui/dock/ExportPanel.tsx', 'utf8'))
+      check(
+        'adj1298 「导出乐谱包」整行成 `export-package`：右栏里按钮一行、zip 说明一行（不再在词语中间折半截）',
+        expSrc.includes('className="dock-field export-package"') &&
+          expSrc.includes('className="dock-muted export-package-note"') &&
+          /\.right-dock \.export-package \{[\s\S]{0,200}?flex-direction: column;/.test(cssCode),
+        '',
+      )
+    }
+    check(
+      'adj1298 CSS **负向**：上面这些覆盖全在 `.right-dock` 之下——底栏仍是"试听两栏 / 子页签按内容宽 / 标签列 96px"',
+      !/\.tool-dock \.playback-panel \.dock-split \{[\s\S]{0,120}?display: contents/.test(cssCode) &&
+        !/\.tool-dock \.jp-tab \{[\s\S]{0,240}?flex: 1 1 0;/.test(cssCode) &&
+        !/\.tool-dock \.pcfg-fields \.pcfg-row \{[\s\S]{0,160}?minmax\(0, 76px\)/.test(cssCode) &&
+        !/\.tool-dock-body \{[\s\S]{0,700}?scrollbar-gutter: auto;/.test(cssCode),
+      '',
+    )
+
+    // ⑪ 工作区过滤行（`adj1298` 用户第四轮追加）：两枚按钮正方形、搜索框吃掉剩余宽；
+    //    "提示 → 搜索行 → 操作按钮"的**顺序**断言在工作区那一节（`③ 工作区右栏顺序`）。
+    {
+      check(
+        'adj1298 工作区过滤行：两枚按钮**正方形**（宽/高都取 `--jp-dock-btn-h`）、搜索框吃掉剩余宽',
+        /\.tool-dock \.ws-filter-row \.ws-filter-all,[\s\S]{0,160}?width: var\(--jp-dock-btn-h, 28px\);[\s\S]{0,80}?height: var\(--jp-dock-btn-h, 28px\);/.test(
+          cssCode,
+        ) && /\.ws-filter-row \.ws-filter \{[\s\S]{0,160}?flex: 1 1 auto;/.test(cssCode),
+        '',
+      )
+    }
+
+    // ⑫ 导入页签：四个按钮 = 图标 + 悬浮提示，且**排成一行**（adj1298 用户第六轮）
+    check(
+      'adj1298 新增三枚导入页签图标（粘贴 / 取消 / 乐谱包）并登记进 `ICON_FILES`',
+      ICON_FILES.paste === '粘贴' && ICON_FILES.close === '取消' && ICON_FILES.scorePackage === '乐谱包',
+      JSON.stringify({ 粘贴: ICON_FILES.paste, 取消: ICON_FILES.close, 乐谱包: ICON_FILES.scorePackage }),
+    )
+    {
+      const impSrc = String(readFileSync('src/dialogs/PasteImportDialog.tsx', 'utf8'))
+      check(
+        'adj1298 导入页签四个按钮**只剩图标**（4 个 `<ToolIcon>`、无文字标签），名字走 `title` + `aria-label`',
+        (impSrc.match(/<ToolIcon name="/g) ?? []).length === 4 &&
+          !impSrc.includes('{pasteImportCopy.fromClipboard}</button>') &&
+          !impSrc.includes('{pasteImportCopy.cancelBtn}</button>') &&
+          !impSrc.includes('{pasteImportCopy.importBtn}</button>') &&
+          !impSrc.includes('{packageBusy ? \'正在导入…\' : scorePackageImportCopy.button}') &&
+          impSrc.includes('title={pasteImportCopy.fromClipboard}') &&
+          impSrc.includes('title={pasteImportCopy.cancelBtn}') &&
+          impSrc.includes('title={pasteImportCopy.importBtn}') &&
+          impSrc.includes('title={packageBusy ? scorePackageImportCopy.creating : scorePackageImportCopy.button}') &&
+          impSrc.includes('aria-label={pasteImportCopy.fromClipboard}') &&
+          impSrc.includes('aria-label={packageBusy ? scorePackageImportCopy.creating : scorePackageImportCopy.button}'),
+        JSON.stringify({ 图标按钮数: (impSrc.match(/<ToolIcon name="/g) ?? []).length }),
+      )
+    }
+    check(
+      'adj1298 导入页签四个按钮**排在一行内**（`.import-acts` 不折行、靠右、正方形）',
+      /\.import-acts \{[\s\S]{0,200}?flex-wrap: nowrap;/.test(cssCode) &&
+        /\.import-acts \{[\s\S]{0,200}?justify-content: flex-end;/.test(cssCode) &&
+        /\.import-acts \.btn \{[\s\S]{0,200}?width: var\(--jp-dock-btn-h, 28px\);[\s\S]{0,80}?height: var\(--jp-dock-btn-h, 28px\);/.test(
+          cssCode,
+        ) &&
+        /\.import-acts \.btn \{[\s\S]{0,200}?padding: 0;/.test(cssCode),
+      '',
+    )
+
+    // ⑬ 谱面页签底部「恢复默认 / 保存设置」加图标（adj1298 用户第七轮；图标 + 文字都留）
+    check(
+      'adj1298 新增两枚设置按钮图标（恢复默认 / 保存）并登记进 `ICON_FILES`',
+      ICON_FILES.reset === '恢复默认' && ICON_FILES.save === '保存',
+      JSON.stringify({ 恢复默认: ICON_FILES.reset, 保存: ICON_FILES.save }),
+    )
+    {
+      const pcdSrc = String(readFileSync('src/dialogs/PageConfigDialog.tsx', 'utf8'))
+      check(
+        'adj1298 谱面页签底部两枚按钮**图标 + 文字都在**（用户要的是"添加图标"，不是换成纯图标）',
+        /<ToolIcon name="reset" size=\{14\} \/>\s*恢复默认/.test(pcdSrc) &&
+          /<ToolIcon name="save" size=\{14\} \/>\s*保存设置/.test(pcdSrc),
+        '',
+      )
+      check(
+        'adj1298 CSS：`.pcfg-foot > button.btn` 改成 inline-flex + 5px 间隙（图标与 12px 文字同一水平线，不贴基线）',
+        /\.tool-dock \.pcfg-foot > button\.btn \{[\s\S]{0,200}?display: inline-flex;[\s\S]{0,160}?gap: 5px;/.test(cssCode),
+        '',
+      )
+    }
+
+    // ⑭ 工作区「操作▾」按钮加图标（adj1298 用户第九轮：直接用「菜单」那枚**三横**，不新画）
+    check(
+      'adj1298 工作区「操作▾」按钮**前面带图标**（复用 `menu` 的三横），文字与 ▾ 都还在',
+      /<ToolIcon name="menu" size=\{12\} \/>\s*\{workspaceCopy\.menuBtn\}/.test(
+        String(readFileSync('src/ui/dock/WorkspacePanel.tsx', 'utf8')),
+      ) && /ws-caret[\s\S]{0,200}?ToolIcon name=\{menuOpen/.test(String(readFileSync('src/ui/dock/WorkspacePanel.tsx', 'utf8'))),
+      '',
+    )
+
+    // CSS 令牌**不许"引用了但从没定义"**（E-2026-583：`--jp-border-strong` 两处引用零定义，
+    // 表现为"写了 `border: 1px` 却没有边框"——CSS 变量替换值无效时整条声明回落初始值）。
+    // 判据只看 `var(--x)` **没有 fallback** 的引用；带 fallback 的是刻意兜底（如 `var(--jp-gutter-w, 8px)`）。
+    {
+      const cssFiles = ['src/index.css', 'src/styles/theme.css']
+      const stripped = cssFiles
+        .map((f) => String(readFileSync(f, 'utf8')).replace(/\/\*[\s\S]*?\*\//g, ''))
+        .join('\n')
+      const defs = new Set([...stripped.matchAll(/(--[A-Za-z0-9_-]+)\s*:/g)].map((m) => m[1]))
+      /** 由 JS / 内联样式写入的令牌（右栏宽度、图标 URL、设置字段的实测宽） */
+      const fromJs = new Set(['--jp-right-dock-w', '--tool-icon', '--pcfg-label-w', '--pcfg-field-w', '--pcfg-span'])
+      /**
+       * 历史遗留（本轮**不动外观**，只挡住新增的）：引用处没有 fallback，但回落到初始值无害
+       * （`.practice-bar` / `.practice-collapse` / `.confirm-bar-btn` 的底色）。
+       * 真要在意就该换成 `--jp-bg-app` / `--jp-bg-panel-hover` / `--jp-text-primary`（另开 adj）。
+       */
+      const legacy = new Set(['--jp-bg-hover', '--jp-surface', '--jp-surface-2', '--jp-text'])
+      const scan = (text: string): string[] =>
+        [...text.matchAll(/var\(\s*(--[A-Za-z0-9_-]+)\s*\)/g)]
+          .map((m) => m[1])
+          .filter((v) => !defs.has(v) && !fromJs.has(v) && !legacy.has(v))
+      const undef = scan(stripped)
+      check(
+        'adj1298 CSS 令牌都有定义（`var(--x)` 无 fallback 却查不到 `--x:` 即红灯；E-2026-583）',
+        undef.length === 0,
+        [...new Set(undef)].join(','),
+      )
+      // 负对照：同一条判据喂一段"带未知令牌"的假 CSS，必须认得出来（不是恒绿）
+      const probe = scan('.x { border: 1px solid var(--jp-nope); }')
+      check(
+        'adj1298 **负对照**：同一条判据能认出未定义令牌（`--jp-nope`）',
+        probe.length === 1 && probe[0] === '--jp-nope',
+        probe.join(','),
+      )
+    }
   }
 }
 

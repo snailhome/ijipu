@@ -24,6 +24,14 @@
   --jp-bg-panel-active: #223063;
   --jp-border: var(--jp-deep-space-blue-border);
   --jp-text-primary: #e8ecf8;
+  /**
+   * adj1298：**更醒目的边框**（浮动右栏的四边、页签翻页箭头）。
+   * 这个令牌在 `adj1295` 就被引用了两处，但**从来没定义过**（`E-2026-583`）——
+   * CSS 变量的替换值无效时整条声明回落到初始值，表现是"写了 `border: 1px` 却没有边框"。
+   * 这里用 `color-mix` 从既有令牌派生：`--jp-border` 偏淡，混进 38% 的文字色就比它更实，
+   * 并且**六套主题 × 深浅自动跟随**（不用逐主题抄一遍，也不会漏掉某一套）。
+   */
+  --jp-border-strong: color-mix(in srgb, var(--jp-border) 62%, var(--jp-text-primary));
   --jp-text-secondary: #93a0c8;
   --jp-text-muted: #5a6a99;
   --jp-accent: var(--jp-neon-cyan);

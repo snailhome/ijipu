@@ -7029,8 +7029,11 @@ span.ws-check {
  * `height: 100%` 拉满 `.app-body`（= 整幅高度，TopBar 之下、状态栏之上）。
  */
 .right-dock {
-  /* 竖排页签条宽度（约 44~56px 之间取一个能容下 16px 图标 + 竖排两字的值） */
-  --jp-right-dock-tabs-w: 52px;
+  /* 竖排页签条宽度（adj1298：52 → **28px**，用户要求"与页签组放在底部时的高度相匹配"——
+   * 底部横排页签的固定高就是 28px（`.tool-dock-tab`），竖起来之后让**条宽 = 那个高度**，
+   * 视觉上两档一样粗。28px 里装得下 16px 图标（容器内边距收到 2px）与 12px 的竖排文字）：
+   * 28 − 边框 1 − 容器内边距 4 = 23 ⇒ 图标 16 / 文字列 ~14 都放得下 */
+  --jp-right-dock-tabs-w: 28px;
   flex: 0 0 auto;
   width: var(--jp-right-dock-w, 320px);
   height: 100%;
@@ -7042,13 +7045,25 @@ span.ws-check {
   font-size: 12px;
 }
 
-/* 浮动模式：绝对定位贴右、通高，**不改变内容宽度**；盖住内容，所以要有阴影与更高的层级 */
+/**
+ * 浮动模式：绝对定位贴右、通高，**不改变内容宽度**；盖住内容，所以要有阴影与更高的层级。
+ *
+ * adj1298（用户第四轮要求）：**周边留一点空、四角做圆角**，看起来是"一个独立的悬浮面板"，
+ * 而不是"贴着右边缘长出来的一条"：
+ * · `inset: 10px 10px 10px auto` ⇒ 上/右/下各留 10px（左缘由它自己的宽度决定）；
+ * · `border-radius: 10px` + `overflow: hidden`（圆角要真的裁到子元素，否则页签/内容会冒出角）；
+ * · 边框改成**四边**（原来只有左边——配圆角很怪）；
+ * · `--jp-right-dock-w` **不含**这 10px 留白 ⇒ Toast 的让位量（20px + 宽）仍落在右栏左缘之外，
+ *   既不会压到栏上，也不会因为留白而跑到栏里去。
+ */
 .right-dock.is-float {
   position: absolute;
-  inset: 0 0 0 auto; /* top/right/bottom/left = 0/0/0/auto */
+  inset: 10px 10px 10px auto; /* top/right/bottom/left = 10px/10px/10px/auto */
   height: auto;
-  border-left: 1px solid var(--jp-border-strong);
-  box-shadow: -10px 0 24px rgb(0 0 0 / 26%);
+  border: 1px solid var(--jp-border-strong);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: -10px 10px 24px rgb(0 0 0 / 26%);
   /* 40：低于顶栏下拉（50）、拖放层（60）、工作区 portal 菜单（80）、对话框（200），
      高于正文与编辑区浮层（≤30）——工作区菜单必须能压在右栏上面点得动 */
   z-index: 40;
@@ -7067,11 +7082,14 @@ span.ws-check {
 }
 
 /* 顶部工具条：三个 28px 方形按钮（宽度档 / 页签位置 / 插入⇄浮动）。
-   窄档 320px 下三个按钮 + 两个间隙 ≈ 90px，余量足够（方案 §3.2 的宽度账）。 */
+   窄档 320px 下三个按钮 + 两个间隙 ≈ 90px，余量足够（方案 §3.2 的宽度账）。
+   adj1298（用户要求）：按钮**右对齐**（`flex-end`）——左端留空，与下面板内容拉开，
+   不再从左上角一路排过去。 */
 .right-dock-bar {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 3px;
   padding: 4px 6px;
   border-bottom: 1px solid var(--jp-border);
@@ -7129,7 +7147,17 @@ span.ws-check {
   display: flex;
   flex-direction: column;
   overflow-y: auto;
-  scrollbar-gutter: stable;
+  /**
+   * adj1298（用户报「子页签滚动条右边还留着一条空白」）：**不能继承底栏的 `scrollbar-gutter: stable`**。
+   *
+   * 那条是底栏的必需品——底栏的 AUTO_FIT 要量 `pane.scrollHeight`，滚动条一出一没会让可用宽、
+   * 折行、测量值互相追着变（`E-2026-*`: 换行↔不换行无限回路，见 `.tool-dock-body` 的注释）。
+   * 右栏**不做 AUTO_FIT**（高度沿 flex 链直接填满），所以这里用 `auto`：不滚动时**一点不留**，
+   * 真需要滚（「关于」「导出」这种按内容取高的面板）才出现滚动条。
+   * 实测（CDP，320 档设置面板）：`stable` 时 body `offsetWidth 292 / clientWidth 282`，
+   * 那 10px 空条正好夹在面板右缘与竖排页签条之间；改 `auto` 后空条消失。
+   */
+  scrollbar-gutter: auto;
 }
 
 /* 页签组：底部横排（默认）——贴栏底，与底栏同观感 */
@@ -7144,15 +7172,17 @@ span.ws-check {
   border-top: 1px solid var(--jp-border);
 }
 
-/* 页签组：右侧竖排——整条变成右缘的竖条（图标在上、文字竖排，超出上下滚） */
+/* 页签组：右侧竖排——整条变成右缘的竖条（图标在上、文字竖排，超出上下滚）
+ * adj1298：内边距 5px 3px → 4px 2px——28px 宽的竖条里要给 16px 图标留出位置
+ * （具体宽度账见 `.right-dock` 的 `--jp-right-dock-tabs-w` 注释） */
 .right-dock-main > .right-dock-tabs {
   flex-direction: column;
   align-self: stretch;
-  width: var(--jp-right-dock-tabs-w, 52px);
+  width: var(--jp-right-dock-tabs-w, 28px);
   min-height: 0;
   border-top: 0;
   border-left: 1px solid var(--jp-border);
-  padding: 5px 3px;
+  padding: 4px 2px;
 }
 
 /* 页签区（只有这一块可滚；箭头在它外面、常驻） */
@@ -7190,15 +7220,17 @@ span.ws-check {
   height: 18px;
 }
 
-/* 竖排页签：图标在上、文字竖排 */
+/* 竖排页签：图标在上、文字竖排。
+ * adj1298：竖条从 52px 收窄到 28px ⇒ 页签的横向内边距清零（纵向留 5px 让高度别太挤），
+ * 图标 16px 才装得进 28 − 边框 1 − 容器内边距 4 = 23 的可用宽。 */
 .right-dock-tabs.is-vert .right-dock-tab {
   flex-direction: column;
   justify-content: flex-start;
-  gap: 4px;
+  gap: 3px;
   width: 100%;
   height: auto;
   min-height: 28px;
-  padding: 6px 2px;
+  padding: 5px 0;
   white-space: normal;
 }
 
@@ -7263,14 +7295,24 @@ span.ws-check {
  * ========================================================================== */
 
 /* ---------------- ① 工作区：列表在上、操作区在下 ---------------- */
-/* pane 按**内容取高**：右栏体（`.right-dock-body`）是唯一滚动容器，让 pane 自己
- * 收成一整列内容高度 ⇒ 列表 + 操作区不会被"填满高度"的 flex 链压到互相盖住。 */
+/**
+ * adj1297：pane 曾按内容取高（`flex: 0 0 auto`）——那是为了让"列表 + 操作区"不被
+ * 填满高度的 flex 链压到互相盖住（阶段 C 的临时兜底）。
+ *
+ * adj1298（用户第四轮要求）：**操作区固定在右栏下方、列表高度自适应**——
+ * 所以 pane 改回**填满**（`flex: 1 1 auto`），把受限高度沿
+ * `.right-dock-body` → pane → `.ws-panel` → `.ws-body` → `.ws-left` 传下去，
+ * 由**列表自己滚**（`.ws-list` 本来就是 `overflow-y: auto`），操作区则钉在栏底。
+ * 底栏那一侧不受影响：这些覆盖全在 `.right-dock` 之下。
+ */
 .right-dock .tool-dock-pane.pane-workspace {
-  flex: 0 0 auto;
+  flex: 1 1 auto;
 }
 
 .right-dock .ws-body {
   flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 /* 操作列不再是 112px（窄屏 100px）的固定窄列——改成整宽的一列，排在列表下方 */
@@ -7333,11 +7375,19 @@ span.ws-check {
   overflow: visible;
 }
 
-/* 横排页签按内容宽（底栏那条竖轨是 `flex: 0 0 36px`，横过来会把文字夹成省略号） */
+/* 横排页签按内容宽（底栏那条竖轨是 `flex: 0 0 36px`，横过来会把文字夹成省略号）
+ * adj1298（用户要求）：子页签**满宽**——四枚等分整行（`flex: 1 1 0`），不再缩在左边留一段空白。
+ * `min-width: min-content` 是"再窄就折行"的门槛（**不是**写死的 44px）：
+ *   · 320 / 480 档：四枚的 min-content 合计（图标 16 + 间距 6 + 2~3 个字 ≈ 54~62，共 ~235）装得下 ⇒ 一行等分；
+ *   · 手机 195 / 260 档：装不下 ⇒ `flex-wrap` 折成两行（2+2 / 3+1），每枚仍按整行等分。
+ * 曾经写成 `min-width: 44px`：在 195/260 下四枚被压到 47~51px，而"音色库"要 60px
+ * ⇒ 文字被 `text-overflow: ellipsis` 截成「音…」（`verify:app-ui` 的"不裁"扫描当场抓到）。
+ * 用 min-content 后"满宽"与"不截字"同时成立——这是本条的目的，不是二选一。 */
 .right-dock .jp-tab {
-  flex: 0 0 auto;
+  flex: 1 1 0;
+  min-width: min-content;
   height: 30px;
-  padding: 0 10px;
+  padding: 0 6px;
 }
 
 /* 文字**留着**：右栏是"高而窄"，横向一排子页签放不下就折行（底栏那档 560px 以下
@@ -7348,6 +7398,19 @@ span.ws-check {
 
 .right-dock .pcfg-panel {
   grid-area: 2 / 1 / 3 / 2;
+}
+
+/**
+ * adj1298（用户报「子页签滚动条右边还留着一条空白，应该消除」）：
+ * 设置/谱面这两个 pane **自己会滚**（`.pcfg-panel` 的 `overflow-y: auto`），
+ * 滚动条画在面板右缘、再往右还有 pane 的 12px 内边距 ⇒ 看起来像"滚动条右边空了一条"。
+ * 这两块把右侧内边距收到 6px（左侧仍 12px，读起来不贴边）：滚动条更贴近竖排页签条，
+ * 顺带在 320 / 195 档多让出 6px 给控件（阶段 C 那两处"被裁"就是宽度不够）。
+ * 只作用于右栏，底栏/弹窗的 12px 不动。
+ */
+.right-dock .tool-dock-pane.pane-settings,
+.right-dock .tool-dock-pane.pane-score {
+  padding-right: 6px;
 }
 
 .right-dock .pcfg-foot {
@@ -7373,5 +7436,185 @@ span.ws-check {
  * `text-overflow: ellipsis` 截成「导出 PDF（每…」。改成**一个按钮占一整行**，文字就放得下。 */
 .right-dock .export-actions > button {
   flex: 1 1 100%;
+}
+
+/* ==========================================================================
+ * adj1298：**右栏收尾**（用户第四轮 6 条 + 阶段 C 遗留 3 条）
+ *
+ * 阶段 C 到这里仍然"看出来了但没修"的三处（方案 §六·阶段 C 末尾）已在上面的既有规则里改掉：
+ *   ① 右栏顶部三个按钮 → 图标（`RightDock.tsx` 的 `BAR_ICONS`，新增三枚图标见 `ui/toolIcons.ts`）；
+ *   ② 195px 档设置标签列收窄 → 本段 ⑨；
+ *   ③ 「导出乐谱包」的 zip 说明折行 → 本段 ⑩。
+ * 用户第四轮又点了 6 条，其中三条只改值（右上对齐 / 浮动留白圆角 / 竖排页签条宽，
+ * 都在上面的 `.right-dock*` 规则里就地改了），其余三条在本段：
+ *   ⑤ 试听：播放/停止挪到整块内容**最下面**（原来夹在信息区与其后的标记段/提示之间）；
+ *   ⑧ 工作区：高度链（操作区钉在栏底、列表自己滚）—— 见上方 ① 的 `.pane-workspace`；
+ *   ⑨ 设置子页签满宽 —— 见上方 `.right-dock .jp-tab`。
+ * ========================================================================== */
+
+/* ---------------- ⑤ 试听：播放/停止在**整块内容的下方** ---------------- */
+/**
+ * 用户原话：「试听里的播放/停止按钮是（应该）在整合内容的下面，目前插在中间」。
+ *
+ * 为什么它会在中间：DOM 顺序是 `[信息+设置, 播放/停止]` 一起包在 `.dock-split` 里，
+ * 后面才是「标记段」与「提示/进度」——上下排列之后，播放/停止就夹在信息区与那两块之间了。
+ *
+ * 改法：右栏里把 `.dock-split` 变成 `display: contents`（它只是个底栏用的两栏排版壳），
+ * 让它的两个孩子**直接成为** `.playback-panel` 的 flex 子项，然后用 `order` 排到最后一档。
+ * 底栏不动（`.playback-panel` 在底栏里仍是"信息左 / 按钮右"的两栏，`adj471/adj472` 的口径）。
+ */
+.right-dock .playback-panel .dock-split {
+  display: contents;
+}
+
+.right-dock .playback-panel .dock-split-main {
+  order: 1;
+}
+
+.right-dock .playback-panel .practice-bar {
+  order: 2;
+}
+
+.right-dock .playback-panel .playback-hints {
+  order: 3;
+}
+
+/* 播放/停止在最后：`order` 比上面三块都大 ⇒ 永远落在内容下方 */
+.right-dock .playback-panel .playback-actions {
+  order: 4;
+  padding-top: 2px;
+}
+
+/* 兜底：这块容器里"没被点名"的直系子项（将来新增的提示条之类）排在信息区之后、按钮之前。
+ * 注意 `.dock-split-main` / `.playback-actions` 在 DOM 里是 `.dock-split` 的孩子
+ * （`display: contents` 只改布局、不改 DOM 父子关系）⇒ 它们由上面那两条**后代**选择器管，
+ * 用 `>` 是选不到的。 */
+.right-dock .playback-panel > * {
+  order: 2;
+}
+
+/* ---------------- ⑨ 设置：窄栏里标签列收窄（195px 档的主因） ---------------- */
+/**
+ * 阶段 C 留下的原话：「195px 档设置行的标签列仍是固定 96px，控件只剩 ~70px 宽（可用、不好看）」。
+ * 实测更糟：`--pcfg-label-w` 是"当页**最长**标签"的实测宽（`adj482` 的 `measureFields`），
+ * 「两端对齐最小小节数」这种 9 个字就 108px 往上 ⇒ 手机 195px 档（面板内容只有 143px）
+ * 控件只剩 20~30px，等于没地方放。
+ *
+ * 两手：
+ *  · 常规右栏（320 / 480 / 260）：标签列**收到 76px**（短标签本来就只有 4~5 个字 = 48~60px），
+ *    长标签允许折到第二行（`white-space: normal`）——比"截成省略号"好读，也不撑破格子；
+ *  · 极窄档（容器 ≤ 240px）：标签与控件**上下排**（一行一个），控件拿整宽，
+ *    这是"再横向挤也没有意义"的必然结果（方案 §六·阶段 C 允许的"难看另排 adj"）。
+ */
+.right-dock .pcfg-fields .pcfg-row {
+  grid-template-columns: minmax(0, 76px) minmax(0, 1fr);
+}
+
+.right-dock .pcfg-fields .pcfg-row-label {
+  white-space: normal;
+  line-height: 1.25;
+}
+
+@container (max-width: 240px) {
+  .right-dock .pcfg-fields .pcfg-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+}
+
+/* ---------------- ⑩ 导出乐谱包：zip 说明不再挤在按钮右边折半截 ---------------- */
+/**
+ * 用户原文：「「导出乐谱包」按钮的 zip 说明折行」——那一行是「按钮 + `zip：meta / README / jps / 背景水印`」，
+ * 窄栏里说明被挤到按钮右边、在词语中间折成两行，看着像排版坏了。
+ * 右栏里改成**上下两行**：按钮占整宽、说明独占一行（说明本来就长，给它整宽反而只占一行）。
+ */
+.right-dock .export-package {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 3px;
+}
+
+.right-dock .export-package > button {
+  width: 100%;
+}
+
+.right-dock .export-package-note {
+  flex: 0 0 auto;
+  white-space: normal;
+}
+
+/* ---------------- ⑪ 工作区过滤行：`*` 在搜索框前、`✕` 在搜索框后，两枚按钮**正方形** ---------------- */
+/**
+ * adj1298（用户要求）：原来 `.ws-side` 里是"搜索框一整行、下面 `*` / `✕` 平分一行"；
+ * 改成**一行三件套**：`[*] [搜索框] [✕]`，两枚按钮**宽 = 高**（正方形）。
+ *
+ * 正方形取 `--jp-dock-btn-h`（底栏里是 28px，与工作区其它按钮同一档）：
+ * 写 `width`/`height` 而不是 `aspect-ratio`，是因为这里的高度本来就由这条令牌决定，
+ * 两处同源才不会出现"按钮高 28、宽 31"这种一看就别扭的差。
+ * 搜索框吃掉剩余宽度（`flex: 1 1 auto` + `min-width: 0`）；高度也跟同一令牌走，一行对齐。
+ *
+ * ⚠ 特异性：`adj584` 有一条 `.tool-dock .ws-filter-row .btn { padding: 6px 16px; height: auto }`
+ * （0,3,0）——这里用同样 0,3,0 且写在文件末尾的规则盖掉它，不能只写 `.ws-filter-all`（0,2,0）。
+ */
+.ws-filter-row .ws-filter {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  height: var(--jp-dock-btn-h, 28px);
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.tool-dock .ws-filter-row .ws-filter-all,
+.tool-dock .ws-filter-row .ws-filter-clear {
+  flex: 0 0 auto;
+  width: var(--jp-dock-btn-h, 28px);
+  height: var(--jp-dock-btn-h, 28px);
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+/* ---------------- ⑫ 导入页签：四个**图标按钮**排成一行 ---------------- */
+/**
+ * adj1298（用户第六轮）：粘贴 / 取消 / 导入 / 从乐谱包导入 这四个按钮改成**图标 + 悬浮提示**，
+ * 并且**放在一行内**（原来是"文字按钮 + 左一个右三个"两处分布，四个中文标签并排会折行）。
+ *
+ * 正方形取 `--jp-dock-btn-h`（底栏里 28px，与这一行原来的按钮同高）：
+ * `padding: 0` 必不可少——`.btn` 基础档左右各 16px，只放一个 16px 图标会变成"图标 + 两侧空白"。
+ * `flex-wrap: nowrap`：用户明确要一行；四个 28px + 3×8px 间隙 = 136px，最窄的 195 栏也放得下。
+ */
+.import-acts {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+.import-acts .btn {
+  flex: 0 0 auto;
+  width: var(--jp-dock-btn-h, 28px);
+  height: var(--jp-dock-btn-h, 28px);
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ---------------- ⑬ 全局 / 谱面：底部两枚按钮带图标 ---------------- */
+/**
+ * adj1298（用户第七轮）：谱面（以及与之同壳的全局）底部的「恢复默认 / 保存设置」加图标。
+ * 图标是 `inline-block`，直接塞进普通 `<button>` 会贴基线（看着偏下）——
+ * 所以把按钮改成 `inline-flex` 并居中、给 5px 间隙，图标与 12px 文字才在同一水平线上。
+ * 只作用于这一档按钮（`.tool-dock .pcfg-foot > button.btn`），不污染其它 `.btn`。
+ */
+.tool-dock .pcfg-foot > button.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
 }
 

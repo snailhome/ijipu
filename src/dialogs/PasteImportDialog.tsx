@@ -16,6 +16,7 @@
 import { useRef, useState } from 'react'
 import { Modal } from '../ui/Modal'
 import { HelpBadge } from '../ui/HelpBadge'
+import { ToolIcon } from '../ui/ToolIcon'
 import { useDocStore } from '../store/docStore'
 import { useUiStore } from '../store/uiStore'
 import { pasteImportCopy, scorePackageImportCopy } from '../brand/copy'
@@ -187,33 +188,61 @@ export function PasteImportDialog({ inline = false }: { inline?: boolean } = {})
             resize: (inline ? 'none' : 'vertical') as 'none' | 'vertical',
           }}
         />
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-          <button type="button" className="btn" onClick={() => void fromClipboard()}>
-            {pasteImportCopy.fromClipboard}
+        {/*
+          adj1298（用户第六轮）：四个按钮改成**图标 + 悬浮提示**，并且**放在一行内**。
+          原来它们是"文字按钮"（从剪贴板粘贴 / 取消 / 导入 / 从乐谱包导入）——
+          这一行本身不该占两行，而四个中文标签并排会把窄栏（右栏 320 / 195）挤到折行。
+          现在：四枚正方形图标按钮一根横排（靠右），名字与用途全部走 `title` + `aria-label`
+          （触屏没有 hover，但按钮语义仍在无障碍树里；文案仍集中在 `brand/copy.ts`）。
+          正方形尺寸只在 CSS 里给（`.import-acts .btn`，见 index.css 的 adj1298 段 ⑫）。
+        */}
+        <div className="import-acts">
+          <button
+            type="button"
+            className="btn"
+            title={pasteImportCopy.fromClipboard}
+            aria-label={pasteImportCopy.fromClipboard}
+            onClick={() => void fromClipboard()}
+          >
+            <ToolIcon name="paste" />
           </button>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-            <button type="button" className="btn" onClick={dismiss}>
-              {pasteImportCopy.cancelBtn}
-            </button>
-            <button type="button" className="btn primary" onClick={doImport}>
-              {pasteImportCopy.importBtn}
-            </button>
-            <button
-              type="button"
-              className="btn"
-              disabled={packageBusy}
-              onClick={() => packageInputRef.current?.click()}
-            >
-              {packageBusy ? '正在导入…' : scorePackageImportCopy.button}
-            </button>
-            <input
-              ref={packageInputRef}
-              type="file"
-              accept=".zip,application/zip"
-              hidden
-              onChange={(e) => void pickPackage(e.target.files?.[0])}
-            />
-          </div>
+          <button
+            type="button"
+            className="btn"
+            title={pasteImportCopy.cancelBtn}
+            aria-label={pasteImportCopy.cancelBtn}
+            onClick={dismiss}
+          >
+            <ToolIcon name="close" />
+          </button>
+          <button
+            type="button"
+            className="btn primary"
+            title={pasteImportCopy.importBtn}
+            aria-label={pasteImportCopy.importBtn}
+            onClick={doImport}
+          >
+            <ToolIcon name="import" />
+          </button>
+          <button
+            type="button"
+            className="btn"
+            disabled={packageBusy}
+            aria-busy={packageBusy}
+            // 忙态没有文字可显示（按钮只有图标）⇒ 提示语跟着换，读屏也念得出来
+            title={packageBusy ? scorePackageImportCopy.creating : scorePackageImportCopy.button}
+            aria-label={packageBusy ? scorePackageImportCopy.creating : scorePackageImportCopy.button}
+            onClick={() => packageInputRef.current?.click()}
+          >
+            <ToolIcon name="scorePackage" />
+          </button>
+          <input
+            ref={packageInputRef}
+            type="file"
+            accept=".zip,application/zip"
+            hidden
+            onChange={(e) => void pickPackage(e.target.files?.[0])}
+          />
         </div>
       </div>
     </Modal>

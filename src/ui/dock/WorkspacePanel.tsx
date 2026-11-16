@@ -1497,84 +1497,12 @@ export function WorkspacePanel() {
             </>
           ) : (
             <>
-              {/* adj622（用户要求）：右栏顺序调整为「操作按钮 → 过滤框 → `*` 按钮 → x 按钮 → "匹配 n 个" 提示」。
-                  把可点击的主操作（操作▾）放在最上面（视觉落点最优先），把状态信息（命中数 / 选中项）
-                  放在最下面（背景信息，不抢视线）。其余三件套顺序与原来一致。 */}
+              {/* adj1298（用户第五轮，2026-11-16）：右栏（操作区）里的控件顺序改成
+                  **提示信息 → 搜索行 → 操作按钮**（原来是"操作按钮 → 搜索行 → 提示"）。
+                  读起来是"先看现在什么状态，再去筛选，最后动手"，操作▾ 落在最下方
+                  （`moving` 那一支本来就同序：`actMove·N` 提示在上、按钮在下）。 */}
 
-              {/* adj540（用户反馈）：列表里点文件名就能打开/进入——右侧不再放独立的「打开」按钮（与行点击功能重复）。只剩一个「操作▾」下拉。 */}
-              <button
-                ref={menuBtnRef}
-                type="button"
-                className="btn ws-side-btn ws-side-group"
-                aria-haspopup="menu"
-                aria-expanded={menuOpen}
-                onClick={() => (menuOpen ? setMenuOpen(false) : openMenu())}
-                disabled={busy}
-              >
-                {workspaceCopy.menuBtn}
-                {/* adj548（用户反馈）：文本后的下三角**用 `下.png` 图标**（原来的 ▾ 字符太小看不清）；
-                    展开时翻成 `上.png`，与顶栏视图下拉同一套观感。 */}
-                <span className="ws-caret">
-                  <ToolIcon name={menuOpen ? 'up' : 'down'} size={12} />
-                </span>
-              </button>
-
-              {/* adj545（用户要求）：**过滤三件套搬到右栏**（固定宽度那一列）——
-                  过滤框 / `*` 所有 / 消除过滤。默认层级列表；一过滤就把整个工作区符合条件的
-                  `.jps` 收成平坦列表（`*` 在过滤口径里是"任意串"⇒ 等价于"不过滤但走平坦列表"）。 */}
-              <input
-                className="ws-input ws-filter"
-                value={query}
-                placeholder={workspaceCopy.filterPlaceholder}
-                title={workspaceCopy.filterHint}
-                onChange={(ev) => {
-                  setQuery(ev.target.value)
-                  setEdit(null)
-                  setConfirmDel(null)
-                }}
-                onKeyDown={(ev) => {
-                  /**
-                   * adj608：清空过滤是"这个 ESC 的用途"，标记已用 ⇒ 底栏不再顺手最小化（见 ToolDock）
-                   * adj613（用户要求）：同时**退出输入框** ——"第一次 ESC 退出输入框、第二次才最小化底栏"。
-                   */
-                  if (ev.key === 'Escape') {
-                    ev.preventDefault()
-                    setQuery('')
-                    ev.currentTarget.blur()
-                  }
-                }}
-              />
-              <div className="ws-filter-row">
-                <button
-                  type="button"
-                  className={`btn ws-filter-all${query.trim() === '*' ? ' is-active' : ''}`}
-                  title={workspaceCopy.filterAllTitle}
-                  aria-label={workspaceCopy.filterAllTitle}
-                  aria-pressed={query.trim() === '*'}
-                  onClick={() => {
-                    setQuery(query.trim() === '*' ? '' : '*')
-                    setEdit(null)
-                    setConfirmDel(null)
-                  }}
-                >
-                  {workspaceCopy.filterAll}
-                </button>
-                {/* 消除过滤：常驻（无过滤时禁用）——位置固定，不因是否有过滤而跳动 */}
-                <button
-                  type="button"
-                  className="btn ws-filter-clear"
-                  onClick={() => setQuery('')}
-                  disabled={!searching}
-                  title={workspaceCopy.filterClear}
-                  aria-label={workspaceCopy.filterClear}
-                >
-                  ✕
-                </button>
-              </div>
-
-              {/* adj622：放最底——背景信息（命中数 / 选中项），不抢上方三个可点控件的视线。
-                  `moving` 模式那条 `actMove·N` 提示也走 `.ws-side-label`，上面的分支已经在
-                  这个 slot 的正上方渲染，所以这里只动"非移动"那一支的顺序。 */}
+              {/* ① 提示信息：命中数 / 选中项名字（没勾选也没搜索时是空的，不占行高） */}
               <div className="ws-side-label" title={selectedEntries.map((e) => e.name).join('、')}>
                 {searching ? (
                   <span className="ws-side-name">
@@ -1590,6 +1518,83 @@ export function WorkspacePanel() {
                   <span className="ws-side-name">{workspaceCopy.selectedCount(selCount)}</span>
                 )}
               </div>
+
+              {/* ② 搜索行（过滤三件套）——adj545：搬到右栏；adj1298：一行排开，
+                  `*` 在搜索框**前**、`✕` 在**后**，两枚按钮**正方形**（宽 = 高）。
+                  默认层级列表；一过滤就把整个工作区符合条件的 `.jps` 收成平坦列表
+                  （`*` 在过滤口径里是"任意串"⇒ 等价于"不过滤但走平坦列表"）。 */}
+              <div className="ws-filter-row">
+                <button
+                  type="button"
+                  className={`btn ws-filter-all${query.trim() === '*' ? ' is-active' : ''}`}
+                  title={workspaceCopy.filterAllTitle}
+                  aria-label={workspaceCopy.filterAllTitle}
+                  aria-pressed={query.trim() === '*'}
+                  onClick={() => {
+                    setQuery(query.trim() === '*' ? '' : '*')
+                    setEdit(null)
+                    setConfirmDel(null)
+                  }}
+                >
+                  {workspaceCopy.filterAll}
+                </button>
+                <input
+                  className="ws-input ws-filter"
+                  value={query}
+                  placeholder={workspaceCopy.filterPlaceholder}
+                  title={workspaceCopy.filterHint}
+                  onChange={(ev) => {
+                    setQuery(ev.target.value)
+                    setEdit(null)
+                    setConfirmDel(null)
+                  }}
+                  onKeyDown={(ev) => {
+                    /**
+                     * adj608：清空过滤是"这个 ESC 的用途"，标记已用 ⇒ 底栏不再顺手最小化（见 ToolDock）
+                     * adj613（用户要求）：同时**退出输入框** ——"第一次 ESC 退出输入框、第二次才最小化底栏"。
+                     */
+                    if (ev.key === 'Escape') {
+                      ev.preventDefault()
+                      setQuery('')
+                      ev.currentTarget.blur()
+                    }
+                  }}
+                />
+                {/* 消除过滤：常驻（无过滤时禁用）——位置固定，不因是否有过滤而跳动 */}
+                <button
+                  type="button"
+                  className="btn ws-filter-clear"
+                  onClick={() => setQuery('')}
+                  disabled={!searching}
+                  title={workspaceCopy.filterClear}
+                  aria-label={workspaceCopy.filterClear}
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* ③ 操作按钮：列出所有操作的下拉（adj540：列表里点文件名就能打开/进入，
+                  所以右侧不再放独立的「打开」按钮，只剩这一个）。
+                  adj1298（用户第九轮）：按钮**前面加图标**——按用户口径直接用「菜单」那枚
+                  **三横**（`public/icons/菜单.png`，与顶栏汉堡同一个图形），不再新画；
+                  文字与右侧的 ▾ 都保留（下拉按钮带文字更好认，图标只补一个一眼可辨的形状）。 */}
+              <button
+                ref={menuBtnRef}
+                type="button"
+                className="btn ws-side-btn ws-side-group"
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
+                onClick={() => (menuOpen ? setMenuOpen(false) : openMenu())}
+                disabled={busy}
+              >
+                <ToolIcon name="menu" size={12} />
+                {workspaceCopy.menuBtn}
+                {/* adj548（用户反馈）：文本后的下三角**用 `下.png` 图标**（原来的 ▾ 字符太小看不清）；
+                    展开时翻成 `上.png`，与顶栏视图下拉同一套观感。 */}
+                <span className="ws-caret">
+                  <ToolIcon name={menuOpen ? 'up' : 'down'} size={12} />
+                </span>
+              </button>
             </>
           )}
         </div>

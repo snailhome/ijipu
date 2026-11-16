@@ -312,8 +312,10 @@ export function ExportPanel() {
           </button>
         ))}
       </div>
-      {/* adj1288：按钮显示方式与上面各格式一致：名称 + 扩展名角标 */}
-      <div className="dock-field">
+      {/* adj1288：按钮显示方式与上面各格式一致：名称 + 扩展名角标
+          adj1298：整行加 `export-package` —— 右栏里改成"按钮一整行、说明一整行"，
+          窄栏不再把 zip 说明挤在按钮右边折成半截（见 index.css 的 adj1298 段 ⑩） */}
+      <div className="dock-field export-package">
         <button
           type="button"
           className="btn"
@@ -324,7 +326,7 @@ export function ExportPanel() {
           <span className="export-btn-text">{scorePackageCopy.title}</span>
           <span className="export-btn-ext">.zip</span>
         </button>
-        <span className="dock-muted">zip：meta / README / jps / 背景水印</span>
+        <span className="dock-muted export-package-note">zip：meta / README / jps / 背景水印</span>
       </div>
       {/* adj626：说明 PDF 两条路的差别（默认那条走系统打印对话框，故必须讲清怎么选） */}
       <div className="dock-muted">{exportCopy.pdfPrintHint}</div>

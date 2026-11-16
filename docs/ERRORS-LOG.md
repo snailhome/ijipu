@@ -12109,5 +12109,67 @@ smoke 五条含"来源切换成对"结构断言与负对照） |
   ③ `smoke` 的 CSS 断言只能钉"规则在不在"，**钉不住真实排版**——这类缺陷只能走
   `npm run verify:app-ui`（真浏览器量盒）。
 
+### E-2026-581 右栏内容区右侧永远空一条 10px（照搬了底栏的 `scrollbar-gutter: stable`）（`adj1298`，用户截图报）
+
+- **场景**：右栏「全局」面板（子页签 + 字段区）。用户截图圈出"子页签里的滚动条与内容区右侧
+  之间还有一条空白，应该消除"。
+- **现象**：面板内容（以及它会出现的滚动条）右边有一条**固定**的空白带，内容窄一截；
+  换成别的面板也还在，只是有滚动条时更显眼。
+- **量出来的数**（CDP，320 档、页签竖排）：`.right-dock-body` `offsetWidth 292 / clientWidth 282`
+  ——这 10px 就是 `scrollbar-gutter: stable` **永久预留**的空槽；再往右才是竖排页签条（28px）。
+  面板右缘到页签条之间因此有 **22px**（10 空槽 + pane 的 12px 右内边距），而正文其实只到面板右缘。
+- **根因**：`.right-dock-body` 是照 `.tool-dock-body` 抄的，连 `scrollbar-gutter: stable` 一起抄了过来。
+  那条在**底栏**是必需品（AUTO_FIT 要量 `pane.scrollHeight`，滚动条一出一没会让可用宽/折行/测量值
+  互相追着变 ⇒ 换行↔不换行无限回路，见 `adj566`）；**右栏根本不做 AUTO_FIT**（高度沿 flex 链填满），
+  这个空槽只有坏处。
+- **解决（`adj1298`）**：`.right-dock-body { scrollbar-gutter: auto }`——不滚动时**一点不留**，
+  真需要滚（「关于」「导出」这类按内容取高的面板）才出现滚动条；另把设置/谱面两个 pane 的右内边距
+  从 12 收到 6（这两个 pane 自己滚，滚动条就画在面板右缘）。实测面板右缘 → 页签条从 22px 收到 6px，
+  内容宽从 268 → 274。
+- **预防**：① 从底栏/弹窗**抄布局规则**时，逐条问"这条是为哪一档的问题写的"——为"会滚 + 会测量"
+  写的那几条（`scrollbar-gutter`、`max-height`、`overflow: hidden`）到"填满 + 不测量"的右栏里
+  往往只剩副作用（同类：`adj1295` 已经踩过一次"右栏不吃底栏的 `min(55vh,460px)`"）；
+  ② 闸门：`smoke` 断言右栏 body 是 `auto`、底栏仍是 `stable`（一条负向钉住"别顺手改底栏"）；
+  `verify:app-ui` 量"面板右缘到竖排页签条 ≤8px"。
+
+### E-2026-582 「子页签满宽」用固定 `min-width` 兜底 ⇒ 窄档把标签截成省略号（`adj1298`，`verify:app-ui` 抓到）
+
+- **场景**：用户要求"全局/谱面设置里子页签的宽度可以满宽"（原来四枚按内容宽缩在左边，右边留空）。
+- **第一版做法**：`.right-dock .jp-tab { flex: 1 1 0; min-width: 44px }` + `.jp-tabs` 本来就 `flex-wrap: wrap`
+  ——以为"装不下就折行"。
+- **现象**：手机 195 / 260 档下四枚被压到 **47~51px**，而「音色库」的 min-content 要 **60px**
+  ⇒ 文字被 `text-overflow: ellipsis` 截成「音…」，四枚里三枚被截。
+  `verify:app-ui` 的"不裁"扫描当场红：`jp-tab` `scrollWidth 60 > clientWidth 47`。
+- **根因**：`flex-wrap` 判断用的是**hypothetical main size**（`flex-basis` 0 被 min 钳过），
+  写死 44 就等于告诉浏览器"44px 也放得下"，它当然不折行；而 44 又不是这四枚真需要的宽。
+- **解决**：`min-width: min-content`——门槛交给**内容自己**：320/480 档四枚合计 ~235px 装得下
+  ⇒ 一行等分（满宽成立）；195/260 档装不下 ⇒ 折成两行（2+2 / 3+1），每枚仍按整行等分，**不截字**。
+- **预防**：① "让控件等分/满宽"时，**门槛只能写 `min-content`/`max-content` 这类内容相关值**，
+  不要拍一个像素数（拍数就会在更窄的档位骗过折行判断）；② 这条只有真浏览器量得出
+  （`scrollWidth > clientWidth`），`smoke` 只能钉 `min-width` 的写法——所以"满宽"这条必须带
+  `verify:app-ui` 的窄档用例。
+
+### E-2026-583 `--jp-border-strong` 两处引用、零处定义 ⇒ "写了 border 却没有边框"（`adj1298`，`verify:app-ui` 判红揪出来）
+
+- **场景**：给浮动右栏加"四边框 + 圆角"（用户要求"看起来像一块独立悬浮的面板"）。
+  `verify:app-ui` 量 `borderTopWidth`，期望 `1px`，实测 **`0px`**——而 `border-radius`、`inset`、
+  `overflow` 全都对，说明规则**确实命中了**，只是边框没画出来。
+- **根因**：那条规则写的是 `border: 1px solid var(--jp-border-strong);`，而 **`--jp-border-strong`
+  在全仓库从未定义**（`src/index.css:1421` 的页签翻页箭头也在用它，同样一直是空转）。
+  CSS 自定义属性的替换发生在**计算值阶段**：替换进来的是空值 ⇒ `border` 这条声明成了
+  "invalid at computed-value time" ⇒ **整条声明回落到初始值**（`border-style: none` ⇒ 计算宽 0）。
+  这类失败**不会报错、也不会在源码里看出来**——`smoke` 的"规则在不在"正则照样绿。
+- **解决**：在 `src/styles/theme.css` 的 `:root` 补上定义，用 `color-mix` 从既有令牌派生
+  （`--jp-border` 62% + `--jp-text-primary` 38%），六套主题 × 深浅自动跟随，不必逐主题抄；
+  顺带把页签翻页箭头那条 `border-color` 也救活了。
+- **预防**：① 新增/引用 `--jp-*` 令牌时，**必须在 `theme.css` 里有定义**（除非是 JS 内联写的，
+  如 `--jp-right-dock-w` / `--tool-icon` / `--pcfg-label-w`）；② **机器闸门**：`smoke` 扫
+  `src/index.css` + `src/styles/theme.css`，凡是 `var(--x)` **没有 fallback** 且查不到 `--x:` 定义
+  就红灯（带负对照：喂一段 `var(--jp-nope)` 必须被认出来）。历史遗留的 4 个
+  （`--jp-surface` / `--jp-surface-2` / `--jp-text` / `--jp-bg-hover`，都回落到初始值、目前看无害）
+  先列成基线，**不动外观**，要清另开 adj；
+  ③ 这条最省事的发现方式仍是 `verify:app-ui` 的像素断言——"样式规则存在" ≠ "样式生效"。
+
+
 
 

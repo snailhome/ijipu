@@ -1213,10 +1213,13 @@ export function PageConfigDialog({
             表现为"只看得见子页签和按钮、子页签内容全不见了"（见 E-2026-293）。 */}
         {section === 'score' && (
           <div className="modal-foot pcfg-foot">
+          {/* adj1298（用户第七轮）：这两个按钮**图标 + 文字都留**（要的是"添加图标"，不是换成图标）。
+              图标尺寸 14：与 12px 字号 + 5×10 内边距的那一档视觉最配（见 index.css 的 adj1298 段 ⑬）。 */}
           <button
             className="btn"
             onClick={resetDraft}
           >
+            <ToolIcon name="reset" size={14} />
             恢复默认
           </button>
           <button
@@ -1235,6 +1238,7 @@ export function PageConfigDialog({
               closeDock()
             }}
           >
+            <ToolIcon name="save" size={14} />
             保存设置
           </button>
           </div>

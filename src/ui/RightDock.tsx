@@ -43,6 +43,7 @@ import type { DockMode, DockPanelKey } from '../store/uiStore'
 import { dockCopy, dockRightCopy } from '../brand/copy'
 import { withKbd } from '../brand/shortcuts'
 import { ToolIcon } from './ToolIcon'
+import type { ToolIconName } from './toolIcons'
 // adj1293：页签定义 / 面板映射与底栏共用同一份（两壳只在布局上不同）
 import { PANELS, dockVisibleTabs } from './dock/dockPanels'
 // adj1294：宽度换算（纯函数：PC 320/480 夹 45vw；手机 1/2、2/3 屏宽）
@@ -50,6 +51,23 @@ import { dockWidthPx } from '../store/fileHost'
 import type { DockTabsPos, DockWidth } from '../store/fileHost'
 // adj974 口径：只看"是不是真手机/触屏"，不含窗口宽度
 import { isCoarsePointerDevice } from '../brand/env'
+
+/**
+ * adj1298（用户第四轮拍板"右栏顶部三个按钮换成图标"）：顶部工具条三枚按钮的图标。
+ *
+ * 三枚都是**二态**、都**显示当前状态**（提示里写"点击 → 下一档"，与按钮里的图标一一对应）：
+ * · 宽度档：`窄栏` / `宽栏`（新画的——右缘竖条的窄与宽，与"右栏是右侧那一条"同构）；
+ * · 页签位置：`底栏展开`（既有，面板 + 底部一排小格 = 页签在底）/ `右侧边栏`（既有，右缘竖条）；
+ * · 模式：`左右`（既有，内容被分成两栏 = 插入挤窄）/ `浮动`（新画的，两张面板叠着 = 盖在内容上）。
+ *
+ * 为什么不给三枚按钮各配一个固定图标：状态就看不见了（原来单字按钮虽然难读，但**能读状态**）。
+ * 图标换上来之后这条信息靠"图标对"保留，不依赖 hover 提示。
+ */
+const BAR_ICONS = {
+  width: { narrow: 'dockWidthNarrow', wide: 'dockWidthWide' },
+  tabs: { bottom: 'dockExpand', right: 'rightDock' },
+  mode: { insert: 'splitH', float: 'float' },
+} as const satisfies Record<string, Record<string, ToolIconName>>
 
 export function RightDock() {
   const open = useUiStore((s) => s.dockOpen)
@@ -355,7 +373,9 @@ export function RightDock() {
     >
       {/* 顶部工具条：三个按钮（宽度档 / 页签位置 / 插入⇄浮动）——
           全部**显示当前状态**，提示里写"点击 → 下一档"（与底栏那个"显示下一步"的档位按钮不同：
-          这里三个都是**二态**，显示当前态更不容易误读） */}
+          这里三个都是**二态**，显示当前态更不容易误读）。
+          adj1298：按钮文字换成图标（映射见文件头的 `BAR_ICONS`），按钮右对齐（`.right-dock-bar` 的
+          `justify-content: flex-end`）——左端留空是为了与下面的面板内容区分开，不挤在一起。 */}
       <div className="right-dock-bar" role="toolbar" aria-label={dockRightCopy.wrapLabel}>
         <button
           type="button"
@@ -365,7 +385,7 @@ export function RightDock() {
           aria-label={dockRightCopy.widthTitle(dockRightCopy.widthName[width], px, dockRightCopy.widthName[nextWidth])}
           onClick={() => setDockWidth(nextWidth)}
         >
-          {dockRightCopy.widthName[width]}
+          <ToolIcon name={BAR_ICONS.width[width]} />
         </button>
         <button
           type="button"
@@ -375,7 +395,7 @@ export function RightDock() {
           aria-label={dockRightCopy.tabsPosTitle(dockRightCopy.tabsPosName[tabsPos], dockRightCopy.tabsPosName[nextTabsPos])}
           onClick={() => setDockTabsPos(nextTabsPos)}
         >
-          {dockRightCopy.tabsPosShort[tabsPos]}
+          <ToolIcon name={BAR_ICONS.tabs[tabsPos]} />
         </button>
         <button
           type="button"
@@ -385,7 +405,7 @@ export function RightDock() {
           aria-label={dockRightCopy.modeTitle(dockRightCopy.modeName[mode], dockRightCopy.modeName[nextMode])}
           onClick={() => setDockFloat(nextMode === 'float')}
         >
-          {dockRightCopy.modeShort[mode]}
+          <ToolIcon name={BAR_ICONS.mode[mode]} />
         </button>
       </div>
       {/* 内容区 + （竖排时）右侧竖条：`right-dock-main` 是横向 flex，DOM 顺序 = 视觉顺序 */}
