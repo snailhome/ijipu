@@ -63,6 +63,10 @@ npm run tauri:build  # 复用 npm run build（前端 dist），版本随 package
    - **`packages/ijipu-cli/package.json`**（adj874 起：CLI 是独立发布的 Node 包，版本号应与应用一致；
      不一致会被 `cli-assert` 的 `adj874` 闸门当场拦下 ✓）
    - 引擎改动涉及包版本时同步 `packages/ijipu-engine/package.json`、`packages/ijipu-engine/src/engine/...` 相关
+   - **`packages/ijipu-engine` 的包版本号「随 app 版本」走**（用户 2026-11-16 定）：**不因单次引擎修复单独升号**，
+     等应用发版时一并递增；发 npm 就用当前号（实例：`adj1308` 的 emoji 估宽修复按 0.48.0 原号发出去，
+     `ijipu-sl` 升依赖拿到的就是含修复的 0.48.0）。代价是 npm 上某版本的代码可能比应用内嵌的同一版本新，
+     这是有意的取舍 —— **发 npm 前必须先确认 `dist/` 是用当前源码重建过的**，否则发出去的是旧产物。
 4. **验证**：`tsc -b` + `npm run build` 通过；`npm run smoke` **必须 0 失败**（adj456 起旧的"18 条预存失败基线"已逐条清理归零——不再接受"== 基线"的说法；若确有无法立刻修的失败，必须在断言里写明原因与跟踪项，并在提交信息里点名，而不是只写个数）。
    - `npm run lint` **0 error**，且 warning 数 **== 改动前基线**（新增一条要么修掉、要么说清理由）。
    - **改动涉及应用内 UI 时**，另跑 `npm run verify:app-ui`（真浏览器点一遍；`adj959` 立的规：
