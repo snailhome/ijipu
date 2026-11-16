@@ -30,6 +30,26 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/**
+ * adj1306（用户实报：手机深色主题下图标与背景色太接近）：
+ * **显式声明 color-scheme**，让浏览器知道"深浅色由本应用自己画"。
+ *
+ * 根因：安卓 Chrome 的自动深色（Auto Dark Theme）在没有 `color-scheme` 声明的页面上
+ * 会做一次强制反色/压暗；它把**非文字**的浅色前景（`.tool-icon` 的
+ * `background-color: currentColor`）当浅底压暗，而文字会单独保对比 ⇒ 表现为
+ * "文字亮、图标暗到看不见"。`index.html` 同时有 `<meta name="color-scheme" content="dark light">`
+ * 作首屏提示；这里按当前模式给表单控件/滚动条正确的底色。
+ */
+:root {
+  color-scheme: dark;
+}
+.app[data-mode='light'] {
+  color-scheme: light;
+}
+.app[data-mode='dark'] {
+  color-scheme: dark;
+}
+
 /* ============ 应用外壳 ============ */
 .app {
   display: flex;

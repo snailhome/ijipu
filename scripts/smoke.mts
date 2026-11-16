@@ -229,6 +229,8 @@ import {
 import { createSubdir, readDirEntries, isPathWorkspace } from '../src/store/workspace.ts'
 // adj373：作者署名（品牌 tokens + 关于对话框文案）
 import { brand } from '../src/brand/tokens.ts'
+// adj1307：首页页脚「调优 N」的数值（必须跟到最新 adj；闸门见下面）
+import { LATEST_ADJ } from '../src/brand/adj.ts'
 import { aboutCopy } from '../src/brand/copy.ts'
 import { uiCopy } from '../src/brand/copy.ts'
 import { appHeightPx } from '../src/pwa/appHeight.ts'
@@ -420,6 +422,50 @@ function check(name: string, cond: boolean, detail?: string) {
     failed++
     console.error(`  ✗ ${name} ${detail ?? ''}`)
   }
+}
+
+/**
+ * adj1307（用户实报）：首页页脚「调优 N」读 `brand/adj.ts` 的 `LATEST_ADJ`；
+ * 0.81.0 发布时忘了更新，线上一直停在 1257（当前已到 1305）。
+ * 闸门：**`LATEST_ADJ` 不得落后于 git log 里最大的 adj 编号**；
+ * 发布前 `npm run version:auto` 会自动把它同步到最大值（见 `scripts/auto-version.mjs`）。
+ * 没有 git（打包后的目录）时跳过，不误报。
+ */
+{
+  let gitMaxAdj = 0
+  try {
+    const subjects = execFileSync('git', ['log', '--format=%s', '-n', '800'], { cwd: root, encoding: 'utf8' })
+    for (const m of subjects.matchAll(/adj(\d{3,4})/g)) gitMaxAdj = Math.max(gitMaxAdj, Number(m[1]))
+  } catch {
+    /* 无 git 或工作树不完整 ⇒ 跳过（打包目录里不该因为这个红） */
+  }
+  check(
+    'adj1307 首页页脚「调优 N」不落后：`LATEST_ADJ` ≥ git log 里最大的 adj 编号（发布前 `version:auto` 自动同步）',
+    gitMaxAdj === 0 || LATEST_ADJ >= gitMaxAdj,
+    JSON.stringify({ LATEST_ADJ, git最大: gitMaxAdj }),
+  )
+}
+
+{
+  const html = String(readFileSync('index.html', 'utf8'))
+  const appHtml = String(readFileSync('app/index.html', 'utf8'))
+  const css = String(readFileSync('src/index.css', 'utf8'))
+  const top = String(readFileSync('src/ui/TopBar.tsx', 'utf8'))
+  check(
+    'adj1306 页面声明 `color-scheme`（禁用安卓 Chrome 自动深色把图标压暗）+ 模式跟随（应用壳 `/app/` 也要有）',
+    /<meta name="color-scheme" content="dark light"\s*\/?>/.test(html) &&
+      /<meta name="color-scheme" content="dark light"\s*\/?>/.test(appHtml) &&
+      /:root \{\s*color-scheme: dark;/.test(css) &&
+      /\.app\[data-mode='light'\] \{\s*color-scheme: light;/.test(css),
+    '',
+  )
+  check(
+    'adj1307 菜单「设置」组常驻「深浅模式」二级菜单：三项都走 `setThemeMode`（顶栏按钮被折叠时也能改）',
+    /const themeSub: \(MenuEntry \| 'sep'\)\[\] = \[/.test(top) &&
+      (top.match(/onPick: \(\) => setThemeMode\('(auto|light|dark)'\)/g) ?? []).length === 3 &&
+      /const settingsEntries[\s\S]{0,400}?entryTheme/.test(top),
+    '',
+  )
 }
 
 /**

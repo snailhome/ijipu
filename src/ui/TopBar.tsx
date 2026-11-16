@@ -1316,9 +1316,27 @@ export function TopBar() {
       ]
   // adj424：新建「设置」分组（仅一项）——与文件组用分隔线隔开，与顶栏按钮「设置」一一对应
   // adj603（用户要求）：拆成两项——「全局设置」对底栏「全局」页签、「谱面设置」对底栏「谱面」页签
+  /**
+   * adj1307（用户实报）：手机窄屏下顶栏「主题」按钮被折进「更多」，用户找不到入口
+   * ⇒ 在菜单「设置」组常驻一条「深浅模式」二级菜单（三项，当前项打 ✓）。
+   * 与顶栏按钮 / `Ctrl+T` / 设置→主题共用同一个 `setThemeMode`，只是多一个入口。
+   */
+  const themeSub: (MenuEntry | 'sep')[] = [
+    { label: `随系统${themeMode === 'auto' ? ' ✓' : ''}`, onPick: () => setThemeMode('auto') },
+    { label: `浅色${themeMode === 'light' ? ' ✓' : ''}`, onPick: () => setThemeMode('light') },
+    { label: `深色${themeMode === 'dark' ? ' ✓' : ''}`, onPick: () => setThemeMode('dark') },
+  ]
+  const themeLabel = themeMode === 'auto' ? '随系统' : themeMode === 'light' ? '浅色' : '深色'
+  const entryTheme: MenuEntry = {
+    label: `深浅模式：${themeLabel}`,
+    kbd: KBD.theme,
+    onPick: () => {},
+    submenu: themeSub,
+  }
   const settingsEntries: (MenuEntry | 'sep')[] = [
     { label: '全局设置(&G)…', hotkey: 'g', onPick: () => toggleDock('settings') },
     { label: '谱面设置(&P)…', hotkey: 'p', onPick: () => toggleDock('score') },
+    entryTheme,
   ]
   // adj422：原「编辑」子菜单（撤销/重做）已从菜单移除——用户要求菜单精简；
   // **功能保留**：撤销 Ctrl+Z / 重做 Ctrl+Shift+Z（见全局快捷键；adj619b 起重做从 Ctrl+Y 挪过来），

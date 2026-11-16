@@ -380,6 +380,38 @@ async function main() {
         narrowLabels.some((l) => l.startsWith('另存为')),
       narrowLabels.slice(0, 4).join(' ／ '),
     )
+    // adj1307（用户实报）：顶栏「主题」按钮窄屏会被折进「更多」⇒ 菜单「设置」组必须常驻
+    // 「深浅模式」二级菜单（三项，当前项打 ✓），否则用户找不到深浅色入口。
+    const menuHasTheme = narrowLabels.some((l) => l.startsWith('深浅模式'))
+    await evalJs(
+      c,
+      `(() => {
+         const e = [...document.querySelectorAll('.topbar-hamburger.open .menu-entry')].find((el) => el.textContent.trim().startsWith('深浅模式'))
+         if (e) e.click()
+         return !!e
+       })()`,
+    )
+    await sleep(250)
+    const themeSubLabels = await evalJs(
+      c,
+      `[...document.querySelectorAll('.topbar-hamburger.open .menu-sub .menu-sub-entry')].map((el) => el.textContent.trim())`,
+    )
+    check(
+      'adj1307 菜单「设置」组有「深浅模式」二级菜单（随系统 / 浅色 / 深色），顶栏按钮被折叠时仍能改',
+      menuHasTheme &&
+        themeSubLabels.some((l) => l.startsWith('随系统')) &&
+        themeSubLabels.some((l) => l.startsWith('浅色')) &&
+        themeSubLabels.some((l) => l.startsWith('深色')),
+      themeSubLabels.join(' ／ '),
+    )
+    // adj1306：页面必须声明 color-scheme（安卓 Chrome 自动深色否则会压暗 mask 图标）
+    const schemeMeta = await evalJs(c, `document.querySelector('meta[name="color-scheme"]')?.content ?? ''`)
+    const appScheme = await evalJs(c, `getComputedStyle(document.querySelector('.app')).colorScheme`)
+    check(
+      'adj1306 页面声明 `color-scheme`（meta=dark light，.app 跟随当前模式）',
+      schemeMeta === 'dark light' && (appScheme === 'dark' || appScheme === 'light'),
+      JSON.stringify({ schemeMeta, appScheme }),
+    )
 
     // ---- ⑩ 有未保存修改时点「新建」⇒ 先问一句；确认后才真的新建 ----
     //   为什么要这条：`newDoc()` 会直接换掉草稿槽（原文件不动，但当前的未保存编辑就此消失）⇒

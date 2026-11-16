@@ -35,6 +35,10 @@
 2. 中文注释：文件头说明 + 导出函数/组件 JSDoc；注释只写「为什么」；**布局/UI 调整标 `adjNN` 编号**（取 git log 最新号 +1），写入注释与 commit
 3. 函数单职责 ≤50 行；禁硬编码（文案→`brand/copy.ts`、主题→`brand/themes.ts`、默认配置→`defaultPageConfig`、存储键→store 顶部常量）
 4. 不主动重构成熟代码；不删校验/异常捕获；不用废弃 API；全部沟通、注释用简体中文
+5. **首页页脚「调优 N」跟着版本走**：数值唯一来源是 `src/brand/adj.ts` 的 `LATEST_ADJ`；
+   **发布前 `npm run version:auto` 会自动把它同步到 git log 里最大的 `adjNNNN`**，
+   `npm run smoke` 有闸门（`LATEST_ADJ` 不得小于 git log 最大 adj）。**不要在首页 HTML/脚本里另写数字**。
+   反例：`0.81.0` 发布时漏了同步，线上页脚一直停在 1257（用户 2026-11-16 实报）。
 
 ## 四、目录与约束
 - src 分层见 `src/AGENTS.md`；示例谱 = `public/samples/*.jps`（构建期自动发现，改/加文件即可，不用改代码）；**「新建」模板 = `src/samples/未命名.jps`**（adj481：改这个文件即改新建出来的空白谱；放源码目录，不随产物发布）；`src-tauri/gen`、`target/`、`dist*` 禁止手改/提交

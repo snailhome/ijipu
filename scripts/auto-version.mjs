@@ -172,4 +172,27 @@ if (app.lock !== null && existsSync(join(root, app.lock))) {
   writeJson(app.lock, lock)
 }
 
+/**
+ * adj1307（用户实报）：**首页页脚「调优 N」跟到最新 adj**。
+ *
+ * 0.81.0 发布时漏了这一步，线上页脚一直停在 1257。现在发布前（本脚本由 `tauri:build`
+ * 与发布流程调用）从 **git log 提交标题**里取最大的 `adjNNNN`，写回 `src/brand/adj.ts`；
+ * 只增不减（用户手写更大的值时不回退）。`npm run smoke` 有对应闸门。
+ */
+if (!dryRun) {
+  const adjFile = join(root, 'src/brand/adj.ts')
+  if (existsSync(adjFile)) {
+    let maxAdj = 0
+    for (const m of git(['log', '--format=%s', '-n', '800']).matchAll(/adj(\d{3,4})/g)) {
+      maxAdj = Math.max(maxAdj, Number(m[1]))
+    }
+    const raw = readFileSync(adjFile, 'utf8')
+    const cur = Number(/export const LATEST_ADJ = (\d+)/.exec(raw)?.[1] ?? 0)
+    if (maxAdj > cur) {
+      writeFileSync(adjFile, raw.replace(/export const LATEST_ADJ = \d+/, `export const LATEST_ADJ = ${maxAdj}`))
+      console.log(`[auto-version] 首页页脚 LATEST_ADJ ${cur} → ${maxAdj}`)
+    }
+  }
+}
+
 console.log(`[auto-version] ${app.label} 版本已更新到 ${next}`)
