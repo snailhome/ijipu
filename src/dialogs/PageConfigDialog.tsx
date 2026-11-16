@@ -18,15 +18,16 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Modal } from '../ui/Modal'
 import { useDocStore } from '../store/docStore'
-import { useUiStore } from '../store/uiStore'
+import { useUiStore, dockModeOf } from '../store/uiStore'
+import type { DockMode } from '../store/uiStore'
 import { clampEditorFontSize, EDITOR_FONT_OPTIONS, EDITOR_FONT_SIZE_RANGE, localAssetRefs, nonDefaultConfigKeys, SCORE_FONT_OPTIONS, SEGMENT_ROW_GAP_DEFAULT } from '@ijipu/engine'
 // adj629x：恢复默认的草稿**整份替换**（纯函数，见该文件头的踩坑说明）
 import { draftAfterReset } from './pageConfigReset'
 import { THEMES, type ThemeMode } from '../brand/themes'
-import { uiCopy, numCopy, cliPathCopy } from '../brand/copy'
+import { uiCopy, numCopy, cliPathCopy, dockRightCopy } from '../brand/copy'
 // adj944：桌面版判定（网页版没有读写 PATH 的能力 ⇒ 界面如实禁用并说明）
 // adj954：环境判定统一走 brand/env.ts（原 brand/platform.ts 已合并删除）
-import { isDesktopShell } from '../brand/env'
+import { isCoarsePointerDevice, isDesktopShell } from '../brand/env'
 // adj944：注册/解除 iJipu CLI（IO 接线在 store/cliPath.ts；**纯逻辑与命令行共用一份** ✓）
 import { applyCliPath, readCliPathStatus } from '../store/cliPath'
 import { PATH_MAX_CHARS, type CliPathStatus } from '../../packages/ijipu-cli/src/envPath'
@@ -185,6 +186,16 @@ export function PageConfigDialog({
   // adj315：全局标签页是应用级偏好（uiStore，全局生效），不写入谱面 pageConfig
   const splitHDir = useUiStore((s) => s.splitHDir)
   const setSplitHDir = useUiStore((s) => s.setSplitHDir)
+  /**
+   * adj1294（用户拍板）：**操作方式**（底栏 / 右侧栏 / 右侧浮动栏）——
+   * 它不是一个新状态，而是 `dockSide` + `dockFloat` 的合成视图（见 `dockModeOf`）。
+   * 手机/平板（粗指针）**不渲染「右侧栏」那一项**：窄屏被右栏挤掉一半内容不好用，
+   * 按项目口径"非适用端不给入口"，而不是给个点了会坏的选项。
+   */
+  const dockSide = useUiStore((s) => s.dockSide)
+  const dockFloat = useUiStore((s) => s.dockFloat)
+  const setDockMode = useUiStore((s) => s.setDockMode)
+  const dockMode = dockModeOf({ dockSide, dockFloat })
   const showScriptPad = useUiStore((s) => s.showScriptPad)
   const setShowScriptPad = useUiStore((s) => s.setShowScriptPad)
   const autoWrap = useUiStore((s) => s.autoWrap)
@@ -497,6 +508,22 @@ export function PageConfigDialog({
         // adj315：应用级全局设置（uiStore，全局生效；不写入谱面 # jps-config）
         return (
           <>
+            {/**
+              * adj1294（用户拍板）：**操作方式**——底栏 / 右侧栏 / 右侧浮动栏。
+              *  · 与下面的「左右排列」同属**版面**类本机偏好（L1），即时生效、不写谱面；
+              *  · 手机上**不渲染「右侧栏」**（窄屏被挤掉一半内容不好用）——按口径是"非适用端
+              *    不给入口"，不是给个点了会坏的选项；默认值本身也在手机上就是底栏；
+              *  · 切壳不换面板：三种方式共用 `uiStore.dockPanel`（用户口径"面板状态互通"）。
+              */}
+            <Row label={dockRightCopy.settingLabel}>
+              <select value={dockMode} onChange={(e) => setDockMode(e.target.value as DockMode)}>
+                <option value="bottom">{dockRightCopy.modeOption.bottom}</option>
+                {!isCoarsePointerDevice() && (
+                  <option value="insert">{dockRightCopy.modeOption.insert}</option>
+                )}
+                <option value="float">{dockRightCopy.modeOption.float}</option>
+              </select>
+            </Row>
             <Row label="左右排列">
               <select
                 value={splitHDir}

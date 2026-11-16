@@ -6983,3 +6983,256 @@ span.ws-check {
   font-size: 11px;
 }
 
+/* ==========================================================================
+ * adj1295：**右侧操作栏**（底栏的另一种壳）—— .app-body / .right-dock / 竖排页签
+ *
+ * 方案：`docs/DOCK-LAYOUT-PLAN.md` §三（目标形态）/ §五（DOM 与布局）。
+ *
+ * ## 为什么这一段放在文件末尾
+ *
+ * 右栏复用 `.tool-dock` 这个类（8 个面板的既有样式、`.pcfg-*` 那一串网格都挂在它下面），
+ * 所以这里要做的是**覆盖**壳的几项：宽度、高度上限、边框、浮动定位。
+ * 覆盖规则必须排在 `.tool-dock` 之后（同特异性下后者胜）——放文件末尾最省事也最不容易被误删。
+ *
+ * ## 两个宽度变量
+ *
+ * | 变量 | 谁写 | 谁读 |
+ * |---|---|---|
+ * | `--jp-right-dock-w` | `RightDock.tsx` 写到 `<html>`（宽 0 时摘掉） | `.right-dock` 的宽度、`.toast`/`.update-prompt` 的让位 |
+ * | `--jp-right-dock-tabs-w` | 本文件（`.right-dock`） | 竖排页签条宽度 |
+ *
+ * 宽度值本身由 `store/fileHost.ts` 的 `dockWidthPx()`（纯函数，smoke 有闸门）算：
+ * PC 窄 320 / 宽 480（夹 45vw）；手机 1/2、2/3 屏宽。
+ * ========================================================================== */
+
+/**
+ * `.app-body`：TopBar 之下、状态栏/抽屉之上的**横向**容器。
+ * 编辑/预览（`.app-main`）在左，右栏在右；浮动右栏靠 `position: relative` 贴在这里。
+ * 包这一层的意义：`adj552` 那套"底栏只占编辑列"的结构**一行都不用动**，
+ * 右栏却是整幅高度（它不在编辑列里）。
+ */
+.app-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: row;
+  position: relative; /* 浮动右栏的定位上下文 */
+}
+
+/* `.app-main` 现在是行内 flex 子项：必须允许被右栏挤压（否则内容的最小宽度会把它顶回去） */
+.app-body > .app-main {
+  min-width: 0;
+}
+
+/**
+ * 右栏本体。`flex: 0 0 auto` + 显式宽度 ⇒ 插入模式下**真的把内容挤窄**；
+ * `height: 100%` 拉满 `.app-body`（= 整幅高度，TopBar 之下、状态栏之上）。
+ */
+.right-dock {
+  /* 竖排页签条宽度（约 44~56px 之间取一个能容下 16px 图标 + 竖排两字的值） */
+  --jp-right-dock-tabs-w: 52px;
+  flex: 0 0 auto;
+  width: var(--jp-right-dock-w, 320px);
+  height: 100%;
+  /* 覆盖 `.tool-dock` 的默认：右栏是整幅高度，不吃底栏那条 `min(55vh, 460px)` */
+  max-height: none;
+  border-left: 1px solid var(--jp-border);
+  background: var(--jp-bg-panel);
+  box-shadow: -6px 0 14px rgb(0 0 0 / 8%);
+  font-size: 12px;
+}
+
+/* 浮动模式：绝对定位贴右、通高，**不改变内容宽度**；盖住内容，所以要有阴影与更高的层级 */
+.right-dock.is-float {
+  position: absolute;
+  inset: 0 0 0 auto; /* top/right/bottom/left = 0/0/0/auto */
+  height: auto;
+  border-left: 1px solid var(--jp-border-strong);
+  box-shadow: -10px 0 24px rgb(0 0 0 / 26%);
+  /* 40：低于顶栏下拉（50）、拖放层（60）、工作区 portal 菜单（80）、对话框（200），
+     高于正文与编辑区浮层（≤30）——工作区菜单必须能压在右栏上面点得动 */
+  z-index: 40;
+  animation: right-dock-in 0.16s ease;
+}
+
+@keyframes right-dock-in {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* 顶部工具条：三个 28px 方形按钮（宽度档 / 页签位置 / 插入⇄浮动）。
+   窄档 320px 下三个按钮 + 两个间隙 ≈ 90px，余量足够（方案 §3.2 的宽度账）。 */
+.right-dock-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--jp-border);
+}
+
+.right-dock-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--jp-border);
+  border-radius: 7px;
+  color: var(--jp-text-primary);
+  font-family: var(--jp-font-sans);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    color 0.15s,
+    background-color 0.15s,
+    border-color 0.15s;
+}
+
+.right-dock-btn:focus-visible {
+  outline: 2px solid var(--jp-accent);
+  outline-offset: -2px;
+}
+
+/* hover 只在真有鼠标的设备上（触屏的 `:hover` 会粘住，底栏页签 adj560 踩过同一个坑） */
+@media (hover: hover) and (pointer: fine) {
+  .right-dock-btn:hover {
+    border-color: var(--jp-accent);
+    color: var(--jp-accent);
+    background: var(--jp-bg-panel-hover);
+  }
+}
+
+/* 内容区 + （竖排时）右侧竖条：横向 flex，DOM 顺序 = 视觉顺序（内容在左、页签在右） */
+.right-dock-main {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: row;
+}
+
+/* 内容区：唯一滚动容器（与 `.tool-dock-body` 同一条口径，只是不带底栏那个 `order: 1`） */
+.right-dock-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+/* 页签组：底部横排（默认）——贴栏底，与底栏同观感 */
+.right-dock-tabs {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  width: 100%;
+  padding: 3px 5px;
+  border-top: 1px solid var(--jp-border);
+}
+
+/* 页签组：右侧竖排——整条变成右缘的竖条（图标在上、文字竖排，超出上下滚） */
+.right-dock-main > .right-dock-tabs {
+  flex-direction: column;
+  align-self: stretch;
+  width: var(--jp-right-dock-tabs-w, 52px);
+  min-height: 0;
+  border-top: 0;
+  border-left: 1px solid var(--jp-border);
+  padding: 5px 3px;
+}
+
+/* 页签区（只有这一块可滚；箭头在它外面、常驻） */
+.right-dock-tabstrip {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x;
+}
+
+.right-dock-tabstrip::-webkit-scrollbar {
+  display: none;
+}
+
+/* 竖排页签区：方向翻过来，纵向滚动（原生滚轮就是上下滚，不劫持） */
+.right-dock-tabstrip.is-vert {
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  touch-action: pan-y;
+}
+
+/* 竖排时两端箭头变成上下两条"横杠"（宽度撑满竖条） */
+.right-dock-tabs.is-vert .right-dock-tab-arrow {
+  width: 100%;
+  min-width: 0;
+  height: 18px;
+}
+
+/* 竖排页签：图标在上、文字竖排 */
+.right-dock-tabs.is-vert .right-dock-tab {
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 4px;
+  width: 100%;
+  height: auto;
+  min-height: 28px;
+  padding: 6px 2px;
+  white-space: normal;
+}
+
+.right-dock-tabs.is-vert .right-dock-tab .tool-dock-tab-label {
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  letter-spacing: 1px;
+  line-height: 1.15;
+}
+
+/**
+ * adj1295：**右上角的提示要给右栏让位**。
+ *
+ * `.toast` / `.update-prompt` 都是 `position: fixed` 贴右（adj1013 从右下挪到右上，
+ * 因为右下是底栏地盘）；右栏出现后它们会正好压在右栏上。让位量就是右栏宽度
+ * （`--jp-right-dock-w` 由 `RightDock` 写到 `<html>`，没有右栏时是 0）。
+ *
+ * ⚠ 这两条必须排在 `.toast` / `.update-prompt` 的原规则以及 640px 媒体查询**之后**
+ * （它们都在本段之前），否则会被原值盖回去。
+ */
+.toast {
+  right: calc(20px + var(--jp-right-dock-w, 0px));
+}
+
+.update-prompt {
+  right: calc(20px + var(--jp-right-dock-w, 0px));
+}
+
+@media (max-width: 640px) {
+  .toast {
+    right: calc(12px + var(--jp-right-dock-w, 0px));
+  }
+  .update-prompt {
+    right: calc(12px + var(--jp-right-dock-w, 0px));
+  }
+}
+

@@ -220,6 +220,70 @@ export function shouldOpenTryoutDock(env: RuntimeEnv, onlineScore: boolean): boo
   return onlineScore || env.device === 'desktop'
 }
 
+/* =====================================================================================
+ * adj1294：**操作栏「壳」的按端默认与宽度换算**（底栏 / 右侧栏 / 右侧浮动栏）
+ *
+ * 为什么放在这个文件：它和上面的 `shouldOpenWorkspaceDock` / `shouldOpenTryoutDock` 是同一族判据——
+ * 「**这台设备该默认怎么摆**」，而且都必须能在 Node 里逐端断言（smoke 有闸门）。
+ * 一旦写进组件里，三端就只能靠真机一个个试，且"手机默认底栏"这条规则会散成好几处 if。
+ *
+ * ⚠ `FileHostProfile` 判不出"手机 vs 桌面版 Firefox"（两者都是 `limited`），所以
+ * 默认值的判据**用 `RuntimeEnv`**（`device` 是粗指针判据、`shell` 是壳），不是 profile。
+ * 方案文档 §4.3 原写的是 `defaultDockMode(profile)`，落地时改成 `RuntimeEnv`——
+ * 理由就是这一句（改法已先同步进 `docs/DOCK-LAYOUT-PLAN.md`）。
+ * ===================================================================================== */
+
+/** 操作栏在哪一侧：底栏（现状） / 右侧栏（adj1294 新增） */
+export type DockSide = 'bottom' | 'right'
+/** 右栏宽度档（PC：窄 320 / 宽 480；手机：1/2 屏宽 / 2/3 屏宽） */
+export type DockWidth = 'narrow' | 'wide'
+/** 右栏里页签组的位置（底部横排 / 右侧竖排） */
+export type DockTabsPos = 'bottom' | 'right'
+
+/** 首次（没有任何存档时）该用哪种壳 */
+export interface DockModeDefault {
+  side: DockSide
+  /** 只在 `side === 'right'` 时有意义：true = 浮动（盖住内容），false = 插入（挤窄内容） */
+  float: boolean
+}
+
+/**
+ * adj1294：**按端算默认壳**（纯函数，只在"没有存档"时用；用户改过设置就以存档为准）。
+ *
+ * | 端 | 默认 | 为什么 |
+ * |---|---|---|
+ * | 手机 / 平板（粗指针）| 底栏 | 屏宽不够，320 的右栏在 375 宽上几乎全屏 |
+ * | 插件嵌入版（`shell === 'host'`）| 底栏 | 它通常挂在 Obsidian 的侧栏/窄面板里，右栏会把可用宽吃掉 |
+ * | 桌面壳 / 桌面浏览器 / 已装 PWA | **右侧浮动栏** | 桌面宽度富余；浮动不挤占编辑/预览，点栏外即收 |
+ *
+ * ⚠ 与 `shouldOpenTryoutDock`（adj1289，管"打开时展开哪个面板"）**互不影响**——
+ * 那个说"先看哪块面板"，这个说"壳摆在哪一边"。
+ */
+export function defaultDockMode(env: RuntimeEnv): DockModeDefault {
+  if (env.device === 'mobile') return { side: 'bottom', float: false }
+  if (env.shell === 'host') return { side: 'bottom', float: false }
+  return { side: 'right', float: true }
+}
+
+/**
+ * adj1294：**右栏宽度换算**（纯函数，smoke 逐档断言）。
+ *
+ * · **PC**：窄 320 / 宽 480，并且**夹到 45vw**（窗口很窄时 480 会把内容挤没）；
+ * · **手机**：不用 320/480 这种硬值——375 宽的手机上 320 几乎是整屏 ⇒ 改成 **1/2** 与 **2/3** 屏宽。
+ * · PC 档的 `45vw` 夹紧自身再兜一道 180px 下限（窗口窄到 400px 以下时，45vw 已经不到 180，
+ *   再按比例收就完全看不清面板内容了）。手机档不夹——它本来就按屏宽比例给。
+ *   两条兜底都只在"极端视口"下生效，正常桌面档就是 320/480。
+ *
+ * 返回**整数像素**（写进 CSS 变量后要做像素级断言，浮点会带来 0.5px 抖动）。
+ */
+export function dockWidthPx(w: DockWidth, viewportW: number, mobile: boolean): number {
+  const vw = Math.max(240, Math.round(viewportW || 0))
+  if (mobile) return Math.round(vw * (w === 'wide' ? 2 / 3 : 1 / 2))
+  const base = w === 'wide' ? 480 : 320
+  const cap = Math.max(180, Math.round(vw * 0.45))
+  return Math.min(base, cap)
+}
+
 /**
  * **文档状态**（adj966d，用户要求：状态栏要能看出"这份是草稿还是已存到文件 / 手里是新版还是旧版"）。
  *

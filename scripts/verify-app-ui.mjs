@@ -1183,15 +1183,18 @@ async function main() {
       if (!el) return null
       const r = el.getBoundingClientRect()
       const tb = document.querySelector('.topbar')?.getBoundingClientRect()
-      return { top: r.top, left: r.left, right: r.right, bottom: r.bottom, height: r.height, vw: innerWidth, vh: innerHeight, topbarBottom: tb ? tb.bottom : null }
+      // adj1295：右栏占着右边一列时，提示贴的是**右栏的左缘**而不是视口右缘
+      const dock = document.querySelector('.right-dock')
+      const dockW = dock ? Math.round(dock.getBoundingClientRect().width) : 0
+      return { top: r.top, left: r.left, right: r.right, bottom: r.bottom, height: r.height, vw: innerWidth, vh: innerHeight, topbarBottom: tb ? tb.bottom : null, dockW }
     })()`)
     check(
-      'adj1013 提示真的落在**右上角、顶栏下方**（顶边在顶栏之下、右缘贴右、不越到下半区 ⇒ 不再压住底部 dock）',
+      'adj1013 提示真的落在**右上角、顶栏下方**（顶边在顶栏之下、右缘贴右——adj1295 起若有右栏则贴右栏左缘、不越到下半区 ⇒ 不再压住底部 dock）',
       !!toastBox &&
         toastBox.topbarBottom !== null &&
         toastBox.top >= toastBox.topbarBottom - 8 &&
-        toastBox.vw - toastBox.right <= 30 &&
-        toastBox.left > toastBox.vw / 2 &&
+        Math.abs(toastBox.vw - toastBox.dockW - toastBox.right) <= 30 &&
+        toastBox.left > (toastBox.vw - toastBox.dockW) / 2 &&
         toastBox.bottom < toastBox.vh / 2,
       JSON.stringify(toastBox),
     )
@@ -1803,6 +1806,464 @@ async function main() {
     await waitFor(c, `!document.querySelector('.problems-drawer')`, 'ESC → 抽屉收起')
     const closedByEsc = await evalJs(c, `!!document.querySelector('.problems-drawer')`)
     check('adj1290 ESC 收起抽屉（捕获阶段监听到、没被底栏的 ESC 抢走）', closedByEsc === false, JSON.stringify(closedByEsc))
+
+    // ============ adj1294 / adj1295：操作栏三种壳（底栏 / 右侧栏 / 右侧浮动栏）============
+    //
+    // 为什么要真浏览器：这一整块是**新交互**——宽度两档、页签两种位置、点栏外关闭、
+    // ESC 只关浮动栏。源码断言能钉住"结构长什么样"，钉不住"点得动、量得准、关得对"
+    // （`adj959` 的教训）。
+    //
+    // 顺序：① 默认（PC 无存档 = 右侧浮动栏）→ ② 顶栏按钮开关 → ③ 宽度档 → ④ 插入模式
+    //      → ⑤ 竖排页签 → ⑥ ESC 三态 → ⑦ 点栏外关闭 → ⑧ 负向：portal 菜单不许误关
+    //      → ⑨ 切壳不丢面板 → ⑩ 手机档（默认底栏 + 没有「右侧栏」选项）。
+    console.log('[verify-app-ui] adj1294/1295：右侧栏（三种壳 / 宽度两档 / 页签两种位置 / 负向判据）')
+    {
+      /** 量一个元素的盒（`null` = 不存在）；`pos` 是 computed position，用来分辨浮动/插入 */
+      const boxOf = async (sel) =>
+        await evalJs(
+          c,
+          `(() => {
+             const el = document.querySelector('${sel}')
+             if (!el) return null
+             const r = el.getBoundingClientRect()
+             const s = getComputedStyle(el)
+             return { w: Math.round(r.width), l: Math.round(r.left), r: Math.round(r.right),
+                      t: Math.round(r.top), b: Math.round(r.bottom), h: Math.round(r.height), pos: s.position }
+           })()`,
+        )
+      /** 真鼠标点（CDP 原生事件路径；合成 `.click()` 拿不到"按下"这一类指针事件） */
+      const realClickAt = async (x, y) => {
+        await c.send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount: 1 })
+        await c.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount: 1 })
+        await sleep(250)
+      }
+      /** 点某元素的正中（先按它自己的 rect 算坐标） */
+      const realClickOn = async (sel) => {
+        const b = await boxOf(sel)
+        if (!b) throw new Error(`点不到：${sel} 不存在`)
+        await realClickAt((b.l + b.r) / 2, (b.t + b.b) / 2)
+      }
+      /** 走真实菜单打开「全局设置」（底栏/右栏都会切到 settings 面板） */
+      const openGlobalSettings = async () => {
+        await evalJs(c, `document.querySelector('.topbar-hamburger-btn').click(), true`)
+        await waitFor(
+          c,
+          `[...document.querySelectorAll('.menu-entry')].some((el) => el.textContent.includes('全局设置'))`,
+          '菜单里有「全局设置」',
+        )
+        await evalJs(
+          c,
+          `[...document.querySelectorAll('.menu-entry')].find((el) => el.textContent.includes('全局设置')).click(), true`,
+        )
+        await sleep(400)
+      }
+
+      // ---- 清存档 + 桌面视口重载：量"首次默认" ----
+      await c.send('Emulation.setDeviceMetricsOverride', {
+        width: 1440,
+        height: 900,
+        deviceScaleFactor: 1,
+        mobile: false,
+      })
+      await c.send('Emulation.setTouchEmulationEnabled', { enabled: false })
+      await evalJs(c, `localStorage.clear(), true`)
+      await c.send('Page.navigate', { url: `${origin}/app/` })
+      await waitFor(c, `!!document.querySelector('.editor-main textarea')`, '三壳用例：应用首屏')
+      await sleep(500)
+
+      const rd0 = await boxOf('.right-dock')
+      check(
+        'adj1295 PC 首次（无存档）默认**右侧浮动栏**：右栏在、`position: absolute`、宽度 320',
+        rd0 !== null && rd0.pos === 'absolute' && rd0.w === 320,
+        JSON.stringify(rd0),
+      )
+      const main0 = await boxOf('.app-main')
+      check(
+        'adj1295 浮动模式**不挤占内容**（`.app-main` 仍是整幅宽度 1440）',
+        main0 !== null && main0.w === 1440,
+        JSON.stringify(main0),
+      )
+      check(
+        'adj1295 右栏是**整幅高度**（顶边贴 TopBar 下沿、底边贴状态栏/抽屉上沿）',
+        rd0 !== null && rd0.t > 0 && Math.abs(rd0.b - (main0 ? main0.b : rd0.b)) <= 1,
+        JSON.stringify({ 右栏: rd0, 内容区: main0 }),
+      )
+
+      // ---- ② 顶栏那个**常驻**按钮能开合（且它自己不被"点栏外关闭"误伤）----
+      await realClickOn('.topbar-right-dock')
+      check(
+        'adj1295 顶栏常驻按钮能**关**右栏（点它不会被"点栏外关闭"抢跑成"关了又开"）',
+        (await evalJs(c, `!!document.querySelector('.right-dock')`)) === false,
+        '',
+      )
+      await realClickOn('.topbar-right-dock')
+      check(
+        'adj1295 再点一次能**开**',
+        (await evalJs(c, `!!document.querySelector('.right-dock')`)) === true,
+        '',
+      )
+
+      // ---- ③ 宽度档：320 → 480（浮动档下内容宽不变）----
+      await realClickOn('.right-dock-bar button[data-right-dock-width]')
+      const rdWide = await boxOf('.right-dock')
+      check('adj1295 宽度档切换生效（320 → 480），且浮动模式下内容宽**仍然不受影响**',
+        rdWide !== null && rdWide.w === 480 && (await boxOf('.app-main')).w === 1440,
+        JSON.stringify(rdWide),
+      )
+
+      // ---- ④ 模式：浮动 → 插入（内容真的被挤窄）----
+      await realClickOn('.right-dock-bar button[data-right-dock-mode]')
+      const rdIns = await boxOf('.right-dock')
+      const mainIns = await boxOf('.app-main')
+      check(
+        'adj1295 插入模式**真的挤窄内容**（内容宽 = 视口 − 右栏宽；右栏不再是绝对定位）',
+        rdIns !== null && rdIns.pos !== 'absolute' && mainIns.w === 1440 - rdIns.w,
+        JSON.stringify({ 右栏: rdIns, 内容区: mainIns }),
+      )
+
+      // ---- ⑤ 页签位置：底部 → 右侧竖排 ----
+      await realClickOn('.right-dock-bar button[data-right-dock-tabs]')
+      const vert = await evalJs(
+        c,
+        `(() => {
+           const t = document.querySelector('.right-dock-tabs.is-vert')
+           if (!t) return null
+           const lab = t.querySelector('.tool-dock-tab-label')
+           const r = t.getBoundingClientRect()
+           return {
+             inMain: !!t.closest('.right-dock-main'),
+             writing: lab ? getComputedStyle(lab).writingMode : '',
+             tabs: t.querySelectorAll('.right-dock-tab').length,
+             w: Math.round(r.width),
+           }
+         })()`,
+      )
+      check(
+        'adj1295 页签组切到**右侧竖排**：竖条在 `.right-dock-main` 里、文字 `vertical-rl`、8 个页签都在',
+        vert !== null && vert.inMain === true && vert.writing === 'vertical-rl' && vert.tabs === 8,
+        JSON.stringify(vert),
+      )
+
+      // ---- ⑤b 阶段 B 的「手工核对」机器化：**三种壳 × 8 个面板**逐个点开 ----
+      //
+      // 方案 §十 要求"三种操作方式 × 8 个页签，逐个点开看有没有崩、有没有被裁"。
+      // 这一步曾经只能靠人眼，现在扫一遍：每个页签点开 ⇒ 对应 `.pane-<key>` 必须**露出来**
+      // （`hidden` 去掉）且**有真实尺寸**（宽高都 > 0——被裁成 0 就是这么被发现的）。
+      const TAB_KEYS = ['workspace', 'import', 'find', 'tryout', 'export', 'settings', 'score', 'about']
+      const sweep = async (scopeSel) => {
+        const bad = []
+        for (const k of TAB_KEYS) {
+          const clicked = await evalJs(
+            c,
+            `(() => {
+               const b = document.querySelector('${scopeSel} [data-key="${k}"]')
+               if (!b) return 'no-tab'
+               b.click()
+               return true
+             })()`,
+          )
+          await sleep(450) // 懒加载 chunk 首次要点一下才下载
+          const st = await evalJs(
+            c,
+            `(() => {
+               const p = document.querySelector('${scopeSel} .pane-${k}')
+               if (!p) return { pane: false }
+               const r = p.getBoundingClientRect()
+               return { pane: true, shown: p.hidden !== true, w: Math.round(r.width), h: Math.round(r.height) }
+             })()`,
+          )
+          if (clicked !== true || !st.pane || st.shown !== true || st.w <= 0 || st.h <= 0) bad.push({ k, clicked, st })
+        }
+        return bad
+      }
+      const rightSweep = await sweep('.right-dock')
+      check(
+        'adj1295 右栏能进**全部 8 个面板**（逐个点开：面板露出来、宽高都 > 0、没有崩）',
+        rightSweep.length === 0,
+        JSON.stringify(rightSweep),
+      )
+      check(
+        'adj1295 扫完 8 个面板后应用仍活着（编辑区 + 右栏都在，没被某个面板的异常带走）',
+        (await evalJs(c, `!!document.querySelector('.editor-main textarea') && !!document.querySelector('.right-dock')`)) ===
+          true,
+        '',
+      )
+
+      // ---- ⑥ 负向②：右栏没有"最小化"，ESC 只在浮动模式关它 ----
+      check(
+        'adj1295 **负向②**：右栏里没有「最小化 / 高度档位 / ✕」这些底栏控件',
+        (await evalJs(
+          c,
+          `(() => {
+             const d = document.querySelector('.right-dock')
+             return !!d && !d.querySelector('.tool-dock-size-btn') && !d.querySelector('.tool-dock-collapse') && !d.querySelector('.tool-dock-close')
+           })()`,
+        )) === true,
+        '',
+      )
+      await evalJs(c, `window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })), true`)
+      await sleep(250)
+      check(
+        'adj1295 **负向②**：**插入模式**下 ESC **不关**右栏（它是布局的一部分）',
+        (await evalJs(c, `!!document.querySelector('.right-dock')`)) === true,
+        '',
+      )
+      await realClickOn('.right-dock-bar button[data-right-dock-mode]') // 插回浮动
+      await sleep(200)
+      await evalJs(c, `window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })), true`)
+      await sleep(250)
+      check(
+        'adj1295 **负向②**：**浮动模式**下 ESC 关右栏',
+        (await evalJs(c, `!!document.querySelector('.right-dock')`)) === false,
+        '',
+      )
+
+      // ---- ⑦ 点栏外关闭（浮动模式）----
+      await realClickOn('.topbar-right-dock') // 重新打开（浮动档是记着的）
+      await sleep(200)
+      const beforeOutside = await evalJs(c, `!!document.querySelector('.right-dock')`)
+      /**
+       * 点哪儿才算"栏外"：**内容区里、且不在右栏下面的那一点**。
+       * 不能直接拿 `.editor-main textarea` 的中心——右栏是浮在上面的，中心点很可能正好落在
+       * 右栏里（那按设计就不该关）。所以按 `.app-main` 的盒、扣掉右栏宽，取左半边的中心。
+       */
+      const clickPt = await evalJs(
+        c,
+        `(() => {
+           const m = document.querySelector('.app-main').getBoundingClientRect()
+           const dw = document.querySelector('.right-dock')?.getBoundingClientRect().width ?? 0
+           const x = Math.round(m.left + Math.max(60, (m.width - dw) / 2))
+           const y = Math.round(m.top + m.height / 2)
+           const hit = document.elementFromPoint(x, y)
+           return { x, y, hit: hit ? hit.tagName + '.' + String(hit.className) : null }
+         })()`,
+      )
+      await realClickAt(clickPt.x, clickPt.y)
+      check(
+        'adj1295 浮动栏**点栏外关闭**（在内容区左半边点一下 ⇒ 右栏收起来）',
+        beforeOutside === true && (await evalJs(c, `!!document.querySelector('.right-dock')`)) === false,
+        JSON.stringify({ 点之前: beforeOutside, 点击点: clickPt }),
+      )
+
+      // ---- ⑧ 负向①：点**portal 到 body 的菜单**（.ws-menu）不许误关 ----
+      //
+      // 真工作区菜单需要先授权一个文件夹（本轮不铺那个夹具）；这里补的是**同一个判据**：
+      // 往 `body` 里放一个 `.ws-menu`（真实 portal 菜单就是这个位置，`adj540` 有断言钉着），
+      // 用真鼠标点它 ⇒ 右栏必须还在。判据本身（`composedPath` + `.ws-menu` 豁免 + 只认
+      // `.app-body` 之内）与真菜单走的是同一条代码路径。
+      await realClickOn('.topbar-right-dock')
+      await sleep(200)
+      const menuPlaced = await evalJs(
+        c,
+        `(() => {
+           const d = document.createElement('div')
+           d.className = 'ws-menu'
+           d.id = 'adj1295-ws-menu'
+           d.textContent = '操作菜单（模拟 portal）'
+           Object.assign(d.style, { position: 'fixed', left: '160px', top: '320px', width: '180px',
+                                    height: '40px', zIndex: '90', background: '#333', color: '#fff' })
+           document.body.appendChild(d)
+           return {
+             portal: d.closest('.app-body') === null,
+             insideDock: !!d.closest('.right-dock'),
+           }
+         })()`,
+      )
+      await realClickAt(250, 340)
+      check(
+        'adj1295 **负向①**：点工作区那种 **portal 到 body 的菜单**（`.ws-menu`）**不关**浮动栏',
+        menuPlaced.portal === true &&
+          menuPlaced.insideDock === false &&
+          (await evalJs(c, `!!document.querySelector('.right-dock')`)) === true,
+        JSON.stringify(menuPlaced),
+      )
+      await evalJs(c, `document.getElementById('adj1295-ws-menu')?.remove(), true`)
+
+      // ---- ⑨ 切壳不丢当前面板：右栏里选「导出」→ 走菜单进设置 → 换回底栏 → 底栏停在同一块面板 ----
+      await evalJs(
+        c,
+        `[...document.querySelectorAll('.right-dock .right-dock-tab')].find((b) => b.dataset.key === 'export').click(), true`,
+      )
+      await waitFor(c, `!!document.querySelector('.right-dock .pane-export:not([hidden])')`, '右栏里打开「导出」面板', 60)
+      await openGlobalSettings()
+      /** 切壳**前**右栏高亮的页签（openGlobalSettings 会把面板切到「设置」） */
+      const beforeSwitch = await evalJs(
+        c,
+        `document.querySelector('.right-dock .right-dock-tab.is-active')?.dataset.key ?? ''`,
+      )
+      const changed = await evalJs(
+        c,
+        `(() => {
+           const row = [...document.querySelectorAll('.pcfg-row')].find((r) => r.textContent.includes('操作方式'))
+           if (!row) return 'no-row'
+           const s = row.querySelector('select')
+           if (!s) return 'no-select'
+           // 走原生 setter 再派发 change：React 的 value 追踪器才会认为值真的变了
+           Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(s, 'bottom')
+           s.dispatchEvent(new Event('change', { bubbles: true }))
+           return [...s.options].map((o) => o.value).join(',')
+         })()`,
+      )
+      await sleep(500)
+      const afterSwitch = await evalJs(
+        c,
+        `({
+           right: !!document.querySelector('.right-dock'),
+           bottom: !!document.querySelector('.tool-dock:not(.right-dock)'),
+           activeTab: document.querySelector('.tool-dock-tab.is-active')?.dataset.key ?? '',
+         })`,
+      )
+      check(
+        'adj1295 设置里换回**底栏**：右栏消失、底栏出现，且当前面板**没变**（切壳不丢面板）',
+        changed === 'bottom,insert,float' &&
+          beforeSwitch === 'settings' &&
+          afterSwitch.right === false &&
+          afterSwitch.bottom === true &&
+          afterSwitch.activeTab === beforeSwitch,
+        JSON.stringify({ 选项: changed, 切前页签: beforeSwitch, 切后: afterSwitch }),
+      )
+      const bottomSweep = await sweep('.tool-dock')
+      check(
+        'adj1295 底栏也照样能进**全部 8 个面板**（切壳后没有"少一个 / 坏一个"——负向③回归的一部分）',
+        bottomSweep.length === 0,
+        JSON.stringify(bottomSweep),
+      )
+
+      // ---- ⑫ 宽屏左右拆分：底栏那条 `adj552` 不变、抽屉仍**贯穿整幅**、右栏仍**整幅高度** ----
+      //
+      // 这是本轮两个痛点的**交集**：① 宽屏左右拆分时底栏只占编辑列（adj552 的现状，要保住）；
+      // ② 告警抽屉与右栏必须是整幅高度/整幅宽度（不受那条影响）。三者共存这一档
+      // 之前没人钉过——`splitH` 下点一遍才算数。
+      await evalJs(c, `document.querySelector('.topbar-view-btn').click(), true`)
+      await waitFor(c, `!!document.querySelector('.topbar-view-dropdown')`, '视图下拉打开')
+      await evalJs(
+        c,
+        `[...document.querySelectorAll('.topbar-view-dropdown .menu-entry')].find((e) => e.textContent.includes('左右拆分')).click(), true`,
+      )
+      await sleep(500)
+      const splitH = await evalJs(
+        c,
+        `(() => {
+           const main = document.querySelector('.app-main')
+           const dock = document.querySelector('.tool-dock:not(.right-dock)')
+           return {
+             isH: !!main && main.classList.contains('app-main-h'),
+             bottomInEditorCol: !!dock && !!dock.closest('.editor-col'),
+             rightDock: !!document.querySelector('.right-dock'),
+           }
+         })()`,
+      )
+      check(
+        'adj1295 左右拆分下底栏那条 `adj552` **不变**：底栏仍在编辑列里（负向③的回归面）',
+        splitH.isH === true && splitH.bottomInEditorCol === true,
+        JSON.stringify(splitH),
+      )
+      await evalJs(c, `document.querySelector('.footer-problems').click(), true`)
+      await waitFor(c, `!!document.querySelector('.problems-drawer')`, '左右拆分下打开告警抽屉')
+      const splitHBox = await evalJs(
+        c,
+        `(() => {
+           const d = document.querySelector('.problems-drawer').getBoundingClientRect()
+           return { left: Math.round(d.left), right: Math.round(d.right), vw: window.innerWidth }
+         })()`,
+      )
+      check(
+        'adj1295 左右拆分下告警抽屉仍**贯穿整幅宽度**（不是编辑列宽）——阶段 A 的痛点在这一档成立',
+        splitHBox.left <= 1 && Math.abs(splitHBox.right - splitHBox.vw) <= 1,
+        JSON.stringify(splitHBox),
+      )
+      await evalJs(c, `document.querySelector('.footer-problems').click(), true`) // 收起抽屉
+      await sleep(200)
+
+      // ---- ⑬ 左右拆分 + **右侧浮动栏**：右栏整幅高度、内容不被挤窄；插入档则挤窄 ----
+      await openGlobalSettings() // 底栏里打开设置（它在编辑列里，照样能用）
+      const toFloat = await evalJs(
+        c,
+        `(() => {
+           const row = [...document.querySelectorAll('.pcfg-row')].find((r) => r.textContent.includes('操作方式'))
+           const s = row?.querySelector('select')
+           if (!s) return 'no-select'
+           Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(s, 'float')
+           s.dispatchEvent(new Event('change', { bubbles: true }))
+           return [...s.options].map((o) => o.value).join(',')
+         })()`,
+      )
+      await sleep(500)
+      const rdSplit = await evalJs(
+        c,
+        `(() => {
+           const d = document.querySelector('.right-dock')
+           const m = document.querySelector('.app-main')
+           const f = document.querySelector('.footer')
+           if (!d || !m || !f) return null
+           const dr = d.getBoundingClientRect()
+           const mr = m.getBoundingClientRect()
+           return {
+             w: Math.round(dr.width), top: Math.round(dr.top), bottom: Math.round(dr.bottom),
+             footerTop: Math.round(f.getBoundingClientRect().top), mainW: Math.round(mr.width), vw: window.innerWidth,
+             bottomDockGone: !document.querySelector('.tool-dock:not(.right-dock)'),
+             pos: getComputedStyle(d).position,
+           }
+         })()`,
+      )
+      check(
+        'adj1295 左右拆分 + 右侧浮动栏：右栏**整幅高度**（上贴 TopBar、下贴状态栏）、浮动不挤窄内容、底栏已让位',
+        toFloat === 'bottom,insert,float' &&
+          rdSplit !== null &&
+          rdSplit.pos === 'absolute' &&
+          Math.abs(rdSplit.bottom - rdSplit.footerTop) <= 1 &&
+          rdSplit.mainW === rdSplit.vw &&
+          rdSplit.bottomDockGone === true,
+        JSON.stringify({ 选项: toFloat, 右栏: rdSplit }),
+      )
+
+      // ---- ⑩ 手机档：默认底栏 + 设置里**没有「右侧栏」** ----
+      const DESKTOP_UA2 = await evalJs(c, 'navigator.userAgent')
+      const MOBILE_UA2 =
+        'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
+      await c.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 3, mobile: true })
+      await c.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 })
+      await c.send('Emulation.setUserAgentOverride', { userAgent: MOBILE_UA2 })
+      await evalJs(c, `localStorage.clear(), true`)
+      await c.send('Page.reload')
+      await sleep(700)
+      await waitFor(c, `!!document.querySelector('.editor-main textarea')`, '手机档首屏')
+      const mobileShell = await evalJs(
+        c,
+        `({ right: !!document.querySelector('.right-dock'), bottom: !!document.querySelector('.tool-dock:not(.right-dock)'),
+            w: window.innerWidth, coarse: window.matchMedia('(pointer: coarse)').matches })`,
+      )
+      check(
+        'adj1294 手机（粗指针 + 移动 UA）首次默认**底栏**：右栏不存在、底栏在',
+        mobileShell.right === false && mobileShell.bottom === true && mobileShell.coarse === true,
+        JSON.stringify(mobileShell),
+      )
+      await openGlobalSettings()
+      const mobileOpts = await evalJs(
+        c,
+        `(() => {
+           const row = [...document.querySelectorAll('.pcfg-row')].find((r) => r.textContent.includes('操作方式'))
+           if (!row) return null
+           const s = row.querySelector('select')
+           return s ? [...s.options].map((o) => o.value) : null
+         })()`,
+      )
+      check(
+        'adj1294 **负向④**：手机设置里**没有「右侧栏」**（只剩底栏 / 右侧浮动栏两项）',
+        mobileOpts !== null && mobileOpts.join(',') === 'bottom,float',
+        JSON.stringify(mobileOpts),
+      )
+      // 收尾：恢复桌面视口与 UA（这段是本脚本最后一段，但保持"跑完不留脏环境"的习惯）
+      await c.send('Emulation.setDeviceMetricsOverride', {
+        width: 1440,
+        height: 900,
+        deviceScaleFactor: 1,
+        mobile: false,
+      })
+      await c.send('Emulation.setTouchEmulationEnabled', { enabled: false })
+      await c.send('Emulation.setUserAgentOverride', { userAgent: DESKTOP_UA2 })
+      await evalJs(c, `localStorage.clear(), true`)
+    }
 
     c.close()
   } catch (e) {

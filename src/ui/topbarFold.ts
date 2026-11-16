@@ -43,6 +43,14 @@ export interface FoldInput<K extends string = string> {
   fixedW: number
   /** 「支持」槽位宽（含外边距）——与它当前是否显示无关，恒预留 */
   donateW: number
+  /**
+   * 「右侧栏开关」槽位宽（含外边距）——adj1295 新增的**常驻**按钮。
+   *
+   * 它是"开关右侧操作栏"的唯一入口，用户口径是**常驻**（不许躲进「更多」，
+   * 否则窄屏下"想开右栏"得先点开更多）⇒ 不进折叠链，但**必须扣宽度预算**
+   * （`adj453` 的原始教训：漏扣一个常驻按钮，最右侧的「更多」就被顶出视口）。
+   */
+  rightDockW: number
   /** 「更多」槽位宽（含外边距）——同上，恒预留 */
   moreW: number
   /** 顶栏自身左右内边距 */
@@ -77,11 +85,14 @@ export function foldKeys<K extends string>(o: FoldInput<K>): K[] {
       groupW(fn, o.fnBox) +
       (fn.length > 0 && ed.length > 0 ? o.toolbar.gap : 0) +
       groupW(ed, o.editBox)
-    const kids = TOPBAR_FIXED_KIDS + (visible.has(TOPBAR_DONATE_KEY) ? 1 : 0) + (withMore ? 1 : 0)
+    // adj1295：「右侧栏开关」是**常驻**槽位（不进折叠链，见 TopBar 的渲染）——
+    // 它一位不扣，「更多」就容易被顶出视口（与 adj453 漏扣「支持」是同一类账）。
+    const kids = TOPBAR_FIXED_KIDS + (visible.has(TOPBAR_DONATE_KEY) ? 1 : 0) + (withMore ? 1 : 0) + 1
     const total =
       o.fixedW +
       toolbarW +
       (visible.has(TOPBAR_DONATE_KEY) ? o.donateW : 0) +
+      o.rightDockW +
       (withMore ? o.moreW : 0) +
       o.gap * (kids - 1) +
       o.safe

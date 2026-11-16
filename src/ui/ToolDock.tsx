@@ -242,6 +242,15 @@ const AUTO_FIT: readonly DockPanelKey[] = ['tryout', 'export', 'about', 'find']
 
 export function ToolDock() {
   const dockOpen = useUiStore((s) => s.dockOpen)
+  /**
+   * adj1295：**操作方式不是底栏时，本组件整块不存在**。
+   *
+   * 为什么由底栏自己判、而不是让 `App.tsx` 条件渲染：左右拆分那条路（`adj552`）把底栏
+   * 塞进了编辑列（`editorWithDock`），App 里有两处渲染点；两处各写一遍条件是典型的
+   * "改一处忘一处"。这里一个 guard 就把两种模式分开，`App.tsx` 的结构一行不用动
+   * ——也就保住了 `adj552` 那批源码断言与"底栏行为完全一致"这条回归判据。
+   */
+  const dockSide = useUiStore((s) => s.dockSide)
   const dockPanel = useUiStore((s) => s.dockPanel)
   const setDockPanel = useUiStore((s) => s.setDockPanel)
   const closeDock = useUiStore((s) => s.closeDock)
@@ -760,6 +769,9 @@ export function ToolDock() {
       if (e.key !== 'Escape' || e.defaultPrevented) return
       if (useUiStore.getState().modal) return // 对话框还没被关掉时（极端时序）也不抢
       if (!useUiStore.getState().dockOpen) return
+      // adj1295：切到右侧栏后本组件不渲染 ⇒ ESC 不该再去"最小化一个看不见的底栏"
+      // （否则切回底栏时会看到一个内容区被收起的底栏）
+      if (useUiStore.getState().dockSide !== 'bottom') return
       // adj613：底栏内容区里的输入框 ⇒ 这一下先退出输入（第二下才最小化）
       const active = document.activeElement
       if (active instanceof HTMLElement && isTextEntry(active) && dockRef.current?.contains(active)) {
@@ -787,6 +799,8 @@ export function ToolDock() {
   cycleDockHeightRef.current = cycleDockHeight
   useEffect(() => {
     if (dockSizeStep === 0) return // 初始值（没按过 Ctrl+H）不触发
+    // adj1295：右栏没有高度档位（它只有宽度两档）⇒ 这条请求只归底栏
+    if (useUiStore.getState().dockSide !== 'bottom') return
     cycleDockHeightRef.current()
   }, [dockSizeStep])
 
@@ -912,7 +926,8 @@ export function ToolDock() {
   // adj491：dock 关闭时**不渲染**。⚠ 这条守卫曾在 adj487（把拖拽从 mouse 改 Pointer Events）时
   // 被连带删除——后果是「点 ✕ 后 `dockOpen` 已置 false，但组件照样渲染」⇒ 关闭按钮看着"失灵"（用户报）。
   // 凡是"按状态决定渲染与否"的早退守卫，重构它前后的代码块时必须单独核对有没有被一起删掉。
-  if (!dockOpen) return null
+  // adj1295：**操作方式切到右侧栏后同样整块不渲染**（见 `dockSide` 的说明）。
+  if (!dockOpen || dockSide !== 'bottom') return null
 
   /**
    * adj724b（用户实测反馈 #2）：**嵌入版里隐藏「工作区」页签**。

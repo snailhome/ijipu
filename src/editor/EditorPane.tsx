@@ -81,6 +81,14 @@ export function EditorPane() {
   const showScriptPad = useUiStore((s) => s.showScriptPad)
   // adj541：底栏展开悬浮按钮要读的状态（关着才显示；点开时保留上次的页签）
   const dockOpen = useUiStore((s) => s.dockOpen)
+  /**
+   * adj1295：操作方式切到**右侧栏**后，编辑区左下角那个「展开底栏」悬浮按钮**不再出现**。
+   *
+   * 理由：那个按钮的文案与语义都是"底栏"（`dockCopy.expandTitle`），而右栏模式关起来之后，
+   * 打开它走的是顶栏那个**常驻**的右栏开关——两个入口指向同一个状态、却挂两个名字，
+   * 用户只会觉得"这个『展开底栏』怎么把右边展开了"。
+   */
+  const dockSide = useUiStore((s) => s.dockSide)
   // adj610：展开动作收进 store——「展开底栏」按钮 / Ctrl+D / Ctrl+H 三个入口共用同一条规则
   // adj1290（用户拍板）：告警已独立成抽屉，`expandDock()` 不再带"有告警先切告警"的参数
   const expandDockPanel = useUiStore((s) => s.expandDock)
@@ -962,7 +970,7 @@ export function EditorPane() {
             的装饰层，不能把可点按钮塞进去；放这里既能对齐行号列，又保留可访问性。
             又因为它属于 `.editor-body`（输入条 `.script-pad` 在其下方、属于 `.editor-pane`），
             输入条显示时按钮**自然位于输入条上方**、不占输入条位置。 */}
-        {!dockOpen && (
+        {!dockOpen && dockSide === 'bottom' && (
           <button
             type="button"
             className="dock-fab"

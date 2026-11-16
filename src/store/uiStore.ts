@@ -11,7 +11,10 @@ import { DEFAULT_THEME, DEFAULT_THEME_MODE, type ThemeMode } from '../brand/them
 // adj954：运行环境/设备判据统一走品牌层唯一出处（原先本文件自己写了一份 matchMedia）
 import { getRuntimeEnv, isCoarsePointerDevice } from '../brand/env'
 // adj966g：底栏默认页按**本端能力档**决定（要权限的那一档展开在工作区，PC/插件收起）
-import { hostProfile, shouldOpenTryoutDock, shouldOpenWorkspaceDock } from './fileHost'
+import { defaultDockMode, hostProfile, shouldOpenTryoutDock, shouldOpenWorkspaceDock } from './fileHost'
+// adj1294：底栏 / 右侧栏「壳」的类型与按端默认判据（纯函数，smoke 有闸门）
+import type { DockSide, DockTabsPos, DockWidth } from './fileHost'
+export type { DockSide, DockTabsPos, DockWidth } from './fileHost'
 // adj1173：节拍器音色（L1 用户偏好；取值域与合成音在 playback/metronome）
 // adj987（用户需求）：试听「练习段」的数据类型与命名（标记本身按文档存，见 practiceMarks.ts）
 import { defaultMarkName, nextMarkId, type PracticeMark } from './practiceMarks'
@@ -61,6 +64,15 @@ export type DockPanelKey =
   | 'workspace'
   | 'import'
   | 'find'
+
+/**
+ * adj1294：**全局设置里那个「操作方式」下拉的三个取值**——底栏 / 右侧栏 / 右侧浮动栏。
+ *
+ * 它不是第三个存储键，而是 `dockSide` + `dockFloat` 两个 L1 键的**合成视图**：
+ * `bottom` ↔ `side:'bottom'`；`insert` ↔ `side:'right', float:false`；`float` ↔ `side:'right', float:true`。
+ * 互转只允许走 `dockModeOf()` / `setDockMode()`（一处实现，UI 与断言都读它）。
+ */
+export type DockMode = 'bottom' | 'insert' | 'float'
 
 /** 轻量浮动提示（toast）：kind 决定配色；nonce 用于同文案重复触发时重置隐藏计时 */
 export type NoticeKind = 'ok' | 'warn' | 'error'
@@ -166,6 +178,25 @@ export type PreviewSoften = 'off' | 'light' | 'mid'
  */
 const EXPORT_BG_KEY = 'ijipu.exportBg'
 const EXPORT_BG_IMAGE_KEY = 'ijipu.exportBgImage'
+/**
+ * adj1294（用户 2026-11-16 拍板）：**操作栏的「壳」**四项 L1 用户个性。
+ *
+ * | 键 | 取值 | 默认 | 说明 |
+ * |---|---|---|---|
+ * | `ijipu.dockSide` | `bottom` / `right` | **按端算** | 操作方式：底栏 / 右侧栏 |
+ * | `ijipu.dockFloat` | `0` / `1` | **按端算** | 右栏是否浮动（PC 默认浮动） |
+ * | `ijipu.dockWidth` | `narrow` / `wide` | `narrow` | 右栏宽度档 |
+ * | `ijipu.dockTabsPos` | `bottom` / `right` | `bottom` | 右栏页签组位置 |
+ *
+ * 为什么都属于 **L1**（`docs/SETTINGS-AUDIT.md` 分层）：它们只决定"这个人怎么用"，与具体谱无关，
+ * 换台机器可以不一样，丢了用户会烦 ⇒ 落本机缓存、不进 `# jps-config`。宽度档尤其不是"这次会话的
+ * 临时状态"——用户当场切了档，下次打开还应该是那一档。
+ */
+const DOCK_SIDE_KEY = 'ijipu.dockSide'
+const DOCK_FLOAT_KEY = 'ijipu.dockFloat'
+const DOCK_WIDTH_KEY = 'ijipu.dockWidth'
+const DOCK_TABS_POS_KEY = 'ijipu.dockTabsPos'
+
 export type ExportBg = 'none' | 'white' | 'paper'
 // adj347：默认启用的常用音色（初次用户打开试听即可选）——大钢琴/八音盒/小提琴/弦乐/小号/单簧管/长笛
 const DEFAULT_HQ_ENABLED: number[] = [0, 10, 40, 48, 56, 71, 73]
@@ -282,6 +313,67 @@ function loadNum(key: string, fallback: number): number {
     return Number.isFinite(v) && v > 0 ? v : fallback
   } catch {
     return fallback
+  }
+}
+
+/**
+ * adj1294：**操作栏壳的四项偏好**读取（L1，见上面 `DOCK_*_KEY` 的说明）。
+ *
+ * 三条口径：
+ *  ① 默认值**按端算**（`fileHost.defaultDockMode`，纯函数有闸门）——只在"没存过"时用；
+ *  ② 存过的值**不认识就回退默认**（手改缓存/旧版本残留不该让界面变成空白壳）；
+ *  ③ 读取一律 try/catch（无 localStorage 的 Node 环境里 store 也要能建起来）。
+ */
+function dockDefault(): { side: DockSide; float: boolean } {
+  try {
+    return defaultDockMode(getRuntimeEnv())
+  } catch {
+    // 环境探测失败（极早期/无 window）⇒ 最保守的底栏，不猜"这是 PC"
+    return { side: 'bottom', float: false }
+  }
+}
+
+function loadDockSide(def: DockSide): DockSide {
+  try {
+    const v = localStorage.getItem(DOCK_SIDE_KEY)
+    return v === 'right' || v === 'bottom' ? v : def
+  } catch {
+    return def
+  }
+}
+
+function loadDockFloat(def: boolean): boolean {
+  try {
+    const v = localStorage.getItem(DOCK_FLOAT_KEY)
+    if (v === null) return def
+    return v === '1' || v === 'true'
+  } catch {
+    return def
+  }
+}
+
+function loadDockWidth(): DockWidth {
+  try {
+    return localStorage.getItem(DOCK_WIDTH_KEY) === 'wide' ? 'wide' : 'narrow'
+  } catch {
+    return 'narrow'
+  }
+}
+
+function loadDockTabsPos(): DockTabsPos {
+  try {
+    return localStorage.getItem(DOCK_TABS_POS_KEY) === 'right' ? 'right' : 'bottom'
+  } catch {
+    return 'bottom'
+  }
+}
+
+/** 写一个字符串偏好（失败静默——缓存不可用不该让开关失灵） */
+function saveStr(key: string, v: string): void {
+  try {
+    localStorage.setItem(key, v)
+  } catch {
+    /* 忽略 */
   }
 }
 
@@ -481,6 +573,36 @@ interface UiState {
   expandDock: () => void
   /** dock 标题栏 × 关闭：只关，不切面板（下次任意入口 toggle 会重新开） */
   closeDock: () => void
+  // ---- adj1294：操作栏的「壳」（底栏 / 右侧栏 / 右侧浮动栏）——四项 L1 用户个性 ----
+  /**
+   * 操作方式落在哪一侧：`bottom` = 底栏（现状，保留）/ `right` = 右侧栏。
+   * 右栏内部再分**插入**（`dockFloat === false`，挤窄内容）与**浮动**（`true`，盖住内容）。
+   */
+  dockSide: DockSide
+  /** 右栏是否浮动（只在 `dockSide === 'right'` 时有意义） */
+  dockFloat: boolean
+  /** 右栏宽度档（PC 320/480；手机 1/2、2/3 屏宽——换算见 `fileHost.dockWidthPx`） */
+  dockWidth: DockWidth
+  /** 右栏页签组位置：底部横排 / 右侧竖排 */
+  dockTabsPos: DockTabsPos
+  /**
+   * 切操作方式。⚠ 切到 `right` 时**顺带展开**（用户点了"右侧栏"当然是想看见它）；
+   * 切回 `bottom` **不动** `dockOpen`（保持当前开合，让用户看到同一块面板换个壳）。
+   */
+  setDockSide: (side: DockSide) => void
+  setDockFloat: (float: boolean) => void
+  setDockWidth: (w: DockWidth) => void
+  setDockTabsPos: (pos: DockTabsPos) => void
+  /** 一步设置"操作方式"三选一（设置面板那个下拉用；见 `dockModeOf`） */
+  setDockMode: (mode: DockMode) => void
+  /**
+   * adj1295：顶栏那个**常驻**的右栏开关（用户口径"顶栏「支持」右侧加一个常驻图标开关"）。
+   *
+   * 两段语义（写在 store 里，免得顶栏按钮与设置面板各猜一套）：
+   *  · 当前是底栏 ⇒ **切到右侧栏并展开**（点这个图标就是"我要右栏"）；
+   *  · 当前是右栏 ⇒ 开关它（跟其他入口一样是 toggle）。
+   */
+  toggleRightDock: () => void
   /**
    * adj1290（用户拍板）：**告警抽屉**的开关状态（L3 会话级，不落盘）。
    *
@@ -724,6 +846,15 @@ export function enabledVoicesOf(
   const libId = resolveActiveLibrary(s.playbackHqLibrary).lib.id
   const map = s.playbackHqEnabledByLib
   return Object.prototype.hasOwnProperty.call(map, libId) ? (map[libId] ?? []) : DEFAULT_HQ_ENABLED
+}
+
+/**
+ * adj1294：`dockSide` + `dockFloat` ⇒ 设置面板下拉里的三选一（见 `DockMode` 的说明）。
+ * 纯推导，不是第三个状态——所以"设置显示哪一种"与"壳真的渲染哪一种"永远不会漂移。
+ */
+export function dockModeOf(s: Pick<UiState, 'dockSide' | 'dockFloat'>): DockMode {
+  if (s.dockSide === 'bottom') return 'bottom'
+  return s.dockFloat ? 'float' : 'insert'
 }
 
 export const useUiStore = create<UiState>()((set) => ({
@@ -1116,6 +1247,20 @@ export const useUiStore = create<UiState>()((set) => ({
   // （PC 的习惯是直接操作系统文件，插件由 OB 自己管文件）。判据只有一处：`fileHost.shouldOpenWorkspaceDock`。
   dockOpen: initialDock().open,
   dockPanel: initialDock().panel,
+  /**
+   * adj1294：操作栏壳的四项 L1 偏好。默认值**按端算**——
+   * 手机/平板与插件嵌入版 ⇒ 底栏；桌面壳/桌面浏览器/已装 PWA ⇒ 右侧浮动栏。
+   * 只在"没存过"时用默认；用户改过就以存档为准。
+   */
+  ...(() => {
+    const def = dockDefault()
+    return {
+      dockSide: loadDockSide(def.side),
+      dockFloat: loadDockFloat(def.float),
+      dockWidth: loadDockWidth(),
+      dockTabsPos: loadDockTabsPos(),
+    }
+  })(),
   exportJob: null,
   toggleDock: (panel) =>
     set((s) => {
@@ -1128,6 +1273,41 @@ export const useUiStore = create<UiState>()((set) => ({
   // adj610/adj1290：展开底栏的唯一实现（告警抽屉已独立，不再顺带切告警）
   expandDock: () => set({ dockOpen: true }),
   closeDock: () => set({ dockOpen: false }),
+  // adj1294：操作栏壳四项（L1，写 `ijipu.dock*`）——每一处都"先落盘再改内存"，
+  // 与 setTheme/setAutoWrap 等既有 L1 action 同一套路（写失败静默，不影响本次生效）
+  setDockSide: (side) => {
+    saveStr(DOCK_SIDE_KEY, side)
+    // 切到右栏 ⇒ 顺带展开（用户点"右侧栏"是想看见它）；切回底栏不动开合（见接口注释）
+    set(side === 'right' ? { dockSide: side, dockOpen: true } : { dockSide: side })
+  },
+  setDockFloat: (float) => {
+    saveStr(DOCK_FLOAT_KEY, float ? '1' : '0')
+    set({ dockFloat: float })
+  },
+  setDockWidth: (dockWidth) => {
+    saveStr(DOCK_WIDTH_KEY, dockWidth)
+    set({ dockWidth })
+  },
+  setDockTabsPos: (dockTabsPos) => {
+    saveStr(DOCK_TABS_POS_KEY, dockTabsPos)
+    set({ dockTabsPos })
+  },
+  setDockMode: (mode) => {
+    const side: DockSide = mode === 'bottom' ? 'bottom' : 'right'
+    const float = mode === 'float'
+    saveStr(DOCK_SIDE_KEY, side)
+    saveStr(DOCK_FLOAT_KEY, float ? '1' : '0')
+    set(side === 'right' ? { dockSide: side, dockFloat: float, dockOpen: true } : { dockSide: side, dockFloat: float })
+  },
+  toggleRightDock: () =>
+    set((s) => {
+      if (s.dockSide !== 'right') {
+        // 底栏 ⇒ 切到右侧栏并展开（沿用用户上次记的浮/插档）
+        saveStr(DOCK_SIDE_KEY, 'right')
+        return { dockSide: 'right', dockOpen: true }
+      }
+      return { dockOpen: !s.dockOpen }
+    }),
   // adj1290：告警抽屉（L3，不落盘；默认收起）
   problemsDrawerOpen: false,
   setProblemsDrawer: (problemsDrawerOpen) => set({ problemsDrawerOpen }),

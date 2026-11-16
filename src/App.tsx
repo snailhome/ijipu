@@ -9,6 +9,8 @@ import { Suspense, lazy, useEffect, useRef, useSyncExternalStore } from 'react'
 import { TopBar } from './ui/TopBar'
 import { EditorFootBar } from './ui/EditorFootBar'
 import { ToolDock } from './ui/ToolDock'
+// adj1295：右侧操作栏（底栏的另一种壳：插入挤窄内容 / 浮动盖住内容）
+import { RightDock } from './ui/RightDock'
 // adj1290：告警抽屉（贯穿整幅窗口底部，独立于操作底栏）
 import { ProblemsDrawer } from './ui/ProblemsDrawer'
 import { beginDrag } from './ui/dragGesture'
@@ -657,25 +659,34 @@ function App() {
   return (
     <div className="app" data-theme={theme} data-mode={effectiveMode} data-soften={previewSoften}>
       <TopBar />
-      <div className={`app-main${isSplitHView ? ' app-main-h' : ''}`} ref={mainRef}>
-        {viewType === 'code' && <EditorPane />}
-        {viewType === 'preview' && <PreviewPane />}
-        {viewType === 'split' && (
-          <>
-            <div className="split-pane" style={{ flex: `0 0 ${splitPct}%` }}>
-              <PreviewPane />
-            </div>
-            <div className="split-divider" onPointerDown={startSplitDrag('v')} title="拖动调整上下窗格高度" />
-            <div className="split-pane">
-              <EditorPane />
-            </div>
-          </>
-        )}
-        {/* adj552：**只有**宽屏左右拆分把底栏放进编辑列（见 editorWithDock） */}
-        {(viewType === 'splitH' || viewType === 'splitHE') && renderSplitH()}
+      {/* adj1295（方案 §五）：`.app-body` = 横向容器，编辑/预览在左、右栏在右。
+          · **插入模式**：右栏是 flex 子项，真的把编辑/预览挤窄；
+          · **浮动模式**：右栏绝对定位贴右、通高，不改变内容宽度。
+          两壳互斥由它们自己按 `uiStore.dockSide` 自锁（这里照旧都渲染）——
+          这样「左右拆分时底栏只占编辑列」（adj552）那套结构一行都不用动。 */}
+      <div className="app-body">
+        <div className={`app-main${isSplitHView ? ' app-main-h' : ''}`} ref={mainRef}>
+          {viewType === 'code' && <EditorPane />}
+          {viewType === 'preview' && <PreviewPane />}
+          {viewType === 'split' && (
+            <>
+              <div className="split-pane" style={{ flex: `0 0 ${splitPct}%` }}>
+                <PreviewPane />
+              </div>
+              <div className="split-divider" onPointerDown={startSplitDrag('v')} title="拖动调整上下窗格高度" />
+              <div className="split-pane">
+                <EditorPane />
+              </div>
+            </>
+          )}
+          {/* adj552：**只有**宽屏左右拆分把底栏放进编辑列（见 editorWithDock） */}
+          {(viewType === 'splitH' || viewType === 'splitHE') && renderSplitH()}
+        </div>
+        <RightDock />
       </div>
       {/* adj462/adj552：底部 dock（告警/试听/导出/设置 共用一个 dock，同一时间只显示一块）。
-          **窄屏及非左右拆分的视图保持原样**：底栏仍在窗口底部、整幅宽度。 */}
+          **窄屏及非左右拆分的视图保持原样**：底栏仍在窗口底部、整幅宽度。
+          adj1295：切到右侧栏后 `ToolDock` 自己 return null（模式不在它身上就整块不存在）。 */}
       {!isSplitHView && <ToolDock />}
       {/* adj1290（用户拍板）：告警抽屉——贯穿整幅窗口底部、紧贴状态栏上方，默认收起 */}
       <ProblemsDrawer />

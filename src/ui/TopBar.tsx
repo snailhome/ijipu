@@ -287,6 +287,13 @@ export function TopBar() {
   const toggleDock = useUiStore((s) => s.toggleDock)
   const dockOpen = useUiStore((s) => s.dockOpen)
   const dockPanel = useUiStore((s) => s.dockPanel)
+  /**
+   * adj1295（用户拍板）：顶栏「支持」右侧那个**常驻**的「右侧栏开关」。
+   * · `dockSide === 'right'` 才是"右栏模式"，此时按钮高亮跟随 `dockOpen`；
+   * · 底栏模式下点它 = 切到右侧栏并展开（语义在 `uiStore.toggleRightDock`，不在这里猜）。
+   */
+  const dockSide = useUiStore((s) => s.dockSide)
+  const toggleRightDock = useUiStore((s) => s.toggleRightDock)
   const showGuides = useUiStore((s) => s.showGuides)
   const setShowGuides = useUiStore((s) => s.setShowGuides)
   const previewZoom = useUiStore((s) => s.previewZoom)
@@ -528,6 +535,11 @@ export function TopBar() {
   const measureRef = useRef<HTMLDivElement>(null) // 隐藏测量容器（渲染全部按钮量宽）
   const moreMeasureRef = useRef<HTMLButtonElement>(null) // 「更多」按钮的隐形副本（实测槽位宽）
   const donateMeasureRef = useRef<HTMLButtonElement>(null) // 「支持」按钮的隐形副本（实测槽位宽，含外边距）
+  /**
+   * adj1295：「右侧栏开关」按钮的隐形副本——它和「支持」「更多」一样是**常驻槽位**，
+   * 必须**恒预留**宽度（否则窄屏下它自己会被顶出视口，见 `adj453` 的账）。
+   */
+  const rightDockMeasureRef = useRef<HTMLButtonElement>(null)
   const overflowDropdownRef = useRef<HTMLDivElement>(null) // 「更多」下拉容器
   // adj：视口很窄时下拉可能向左溢出视口，用 translateX 把它拉回视口内
   const [overflowShiftX, setOverflowShiftX] = useState(0)
@@ -1036,6 +1048,8 @@ export function TopBar() {
         )
       }
       const donateSlot = outerW(donateMeasureRef.current)
+      // adj1295：常驻的「右侧栏开关」也占位——漏扣它，"更多"或它自己就会被顶出视口
+      const rightDockSlot = outerW(rightDockMeasureRef.current)
       const moreSlot = moreMeasureRef.current ? outerW(moreMeasureRef.current) : 30
       // 顶栏左侧固定项：Logo + 汉堡（adj530：视图/主题已并入功能组，不再是常驻项）
       const fixedW = outerW(topbar.querySelector('.topbar-brand')) + outerW(topbar.querySelector('.topbar-hamburger'))
@@ -1086,6 +1100,7 @@ export function TopBar() {
           toolbar: tbox,
           fixedW,
           donateW: donateSlot,
+          rightDockW: rightDockSlot,
           moreW: moreSlot,
           pad,
           gap,
@@ -1436,6 +1451,36 @@ export function TopBar() {
         </button>
       )}
 
+      {/* adj1295（用户拍板）：**常驻**的「右侧栏开关」——位置在「支持」右侧、「更多」之前。
+          · 为什么常驻：它是"打开操作台"的图标入口，窄屏下若被折进「更多」，用户得先点开更多
+            才能开右栏（用户原话：「别让它躲进「更多」」）⇒ 它**不进折叠链**（不在 `TOOL_PRIORITY`
+            里），但宽度由 `topbarFold` 的 `rightDockW` **恒扣**（adj453 的口径：常驻就必须进预算）。
+          · 高亮语义：只有"右栏模式 + 已展开"才算开；底栏模式下它是"切过去"的入口。
+          · 图标：`public/icons/右侧边栏.png`（adj1293 从 cp 的 svg 栅格化，形状在 alpha 通道）。 */}
+      <button
+        type="button"
+        className={`topbar-btn topbar-right-dock${dockSide === 'right' && dockOpen ? ' active' : ''}`}
+        onClick={() => toggleRightDock()}
+        title={
+          dockSide === 'right'
+            ? dockOpen
+              ? '收起右侧栏'
+              : '展开右侧栏'
+            : '切换到右侧栏（当前为底栏）'
+        }
+        aria-label={
+          dockSide === 'right'
+            ? dockOpen
+              ? '收起右侧栏'
+              : '展开右侧栏'
+            : '切换到右侧栏（当前为底栏）'
+        }
+        aria-pressed={dockSide === 'right' && dockOpen}
+        data-right-dock-toggle={dockSide === 'right' && dockOpen ? 'on' : 'off'}
+      >
+        <ToolIcon name="rightDock" />
+      </button>
+
       {/* 「更多」按钮：常驻顶栏最右、按需出现（**有按钮被折叠时**才显示，行为与之前一致） */}
       {hiddenList.length > 0 && (
         <div className={`topbar-overflow${overflowOpen ? ' open' : ''}`}>
@@ -1507,6 +1552,16 @@ export function TopBar() {
         >
           {iconOf('donate')}
           <span className="tool-label">支持</span>
+        </button>
+        {/* adj1295：常驻的「右侧栏开关」隐形副本（量它真实占位，见 `rightDockMeasureRef`） */}
+        <button
+          type="button"
+          className="topbar-btn topbar-right-dock"
+          ref={rightDockMeasureRef}
+          tabIndex={-1}
+          aria-hidden="true"
+        >
+          <ToolIcon name="rightDock" />
         </button>
         <button type="button" className="topbar-overflow-btn" ref={moreMeasureRef} tabIndex={-1} aria-hidden="true">
           <ToolIcon name="more" />

@@ -602,6 +602,45 @@ export const dockCopy = {
 } as const
 
 /**
+ * adj1294（用户 2026-11-16 拍板）：**右侧操作栏（右栏）**的文案。
+ *
+ * 右栏与底栏是**同一批面板的两种壳**（内容见 `ui/dock/dockPanels.tsx`），
+ * 所以这里只有"壳"自己的话：三个工具条按钮、页签位置名、以及设置里那个「操作方式」下拉。
+ * 所有字面量都收在这里，组件里不写中文（`src/AGENTS.md` 四·2）。
+ */
+export const dockRightCopy = {
+  /** 整栏的 aria-label（读屏念的一句） */
+  wrapLabel: '右侧工具面板',
+  /**
+   * 顶部工具条三个按钮（宽度档 / 页签位置 / 插入⇄浮动）。
+   * 宽度档与模式**没有现成的设计图标**（`上/下/左/右` 都是方向箭头，语义对不上），
+   * 按"宁可写字也不乱用图标"的口径做成**单字按钮**；页签位置另有方向箭头图标，仍走 `ToolIcon`。
+   */
+  widthName: { narrow: '窄', wide: '宽' } as const,
+  /** 宽度档提示：当前档的实际像素 + 点一下到哪一档（像素随视口变，故做成函数） */
+  widthTitle: (cur: string, px: number, next: string): string => `右栏宽度：${cur}（${px}px，点击 → ${next}）`,
+  /** 页签组位置（底部横排 / 右侧竖排） */
+  tabsPosName: { bottom: '底部', right: '右侧' } as const,
+  /** 页签位置按钮上的单字（同宽度/模式按钮，显示**当前**状态） */
+  tabsPosShort: { bottom: '底', right: '右' } as const,
+  tabsPosTitle: (cur: string, next: string): string => `页签位置：${cur}（点击 → ${next}）`,
+  /** 模式：插入（挤窄内容）/ 浮动（盖住内容、点栏外关闭） */
+  modeName: { insert: '插入', float: '浮动' } as const,
+  modeShort: { insert: '插', float: '浮' } as const,
+  modeTitle: (cur: string, next: string): string => `右栏模式：${cur}（点击 → ${next}）`,
+  /** 竖排页签条的溢出箭头（上/下）与横排（左/右）——横排复用 `dockCopy` 那两条 */
+  tabsUpTitle: '向上翻看页签',
+  tabsDownTitle: '向下翻看页签',
+  /**
+   * 全局设置（「版面」页签）里那个下拉：**操作方式**三选一。
+   * 手机上「右侧栏」（插入）**不渲染**——窄屏被挤掉一半内容不好用，按项目口径是"非适用端不给入口"。
+   */
+  settingLabel: '操作方式',
+  modeOption: { bottom: '底栏', insert: '右侧栏', float: '右侧浮动栏' } as const,
+  settingNote: '底栏与右侧栏用的是同一批面板，切壳不会丢当前页签。',
+} as const
+
+/**
  * adj641（用户要求）：**查找替换面板**（底栏「查找替换」页签）的文案。
  *
  * 用户口径："页签里有查找内容框、替换内容框，有查找统计，还有查找按钮、替换按钮。"

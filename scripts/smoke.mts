@@ -294,7 +294,9 @@ import { foldKeys, TOPBAR_DONATE_KEY, TOPBAR_FIXED_KIDS } from '../src/ui/topbar
 // adj538：桌面壳「外部打开」——多文件取舍是纯逻辑，可在 Node 里直接断言（模块不碰 window 顶层）
 import { pickPrimary, hasShell, type ExternalFile } from '../src/store/externalOpen.ts'
 // adj966：文件宿主能力与降级决策（纯函数 ⇒ 逐端逐档断言，不必真跑三端；口径见 docs/FILE-MODEL.md）
-import { hostIdOf, hostProfile, decideWriteMode, decideWatch, decideWriteGate, shouldGuidePersistPermission, shouldOpenWorkspaceDock, shouldOpenTryoutDock, docStateOf } from '../src/store/fileHost.ts'
+import { defaultDockMode, dockWidthPx, hostIdOf, hostProfile, decideWriteMode, decideWatch, decideWriteGate, shouldGuidePersistPermission, shouldOpenWorkspaceDock, shouldOpenTryoutDock, docStateOf } from '../src/store/fileHost.ts'
+// adj1294：设置里那个「操作方式」三选一是 dockSide/dockFloat 的合成视图（纯函数）
+import { dockModeOf } from '../src/store/uiStore.ts'
 import type { FileHostProfile } from '../src/store/fileHost.ts'
 // adj966b：外部改动轮询编排（定时器/IO 全注入 ⇒ 在 Node 里真跑时序）
 import { EXT_POLL_MS, watchTick, startExternalWatch } from '../src/store/externalChangeWatch.ts'
@@ -13371,6 +13373,10 @@ function runAdj530TopBarLayoutTests() {
     toolbar: ZERO,
     fixedW: 100,
     donateW: 50,
+    // adj1295：顶栏新增一个**常驻**的「右侧栏开关」槽位（宽度由调用方实测传入）。
+    // 这组 adj530 的老用例里把它记 0（且顶层 `gap: 0`），所以下面那些阈值一个都不用改——
+    // 这正是"常驻槽位恒预留"该有的性质：**没有它时一位不扣**。
+    rightDockW: 0,
     moreW: 30,
     pad: 0,
     gap: 0,
@@ -18097,7 +18103,10 @@ async function runAdj541DockToggleTests() {
     /dockExpand: '底栏展开'/.test(iconSrc) && /dockCollapse: '底栏收起'/.test(iconSrc),
     '')
   check('adj541/adj591 收起底栏时，编辑区**行号栏位置**浮出「展开底栏」按钮（`!dockOpen` 才渲染 + 点它展开）',
-    /\{!dockOpen && \([\s\S]{0,400}?className="dock-fab"[\s\S]{0,300}?onClick=\{expandDock\}/.test(editorSrc) &&
+    // adj1295：**只在底栏模式**才出这个按钮——它的文案/语义都是"底栏"，右栏模式的入口是顶栏那个常驻开关
+    /\{!dockOpen && dockSide === 'bottom' && \([\s\S]{0,400}?className="dock-fab"[\s\S]{0,300}?onClick=\{expandDock\}/.test(
+      editorSrc,
+    ) &&
       /<ToolIcon name="dockExpand" \/>/.test(editorSrc) &&
       // 用文案断言"组件确实引用了集中管理的文案"（文案本体在 copy.ts 的 dockCopy 里）
       /dockCopy\.expandTitle/.test(editorSrc) &&
@@ -20041,6 +20050,12 @@ runAdj927ExternalChangeTests()
     } catch (e) {
       failed++
       console.error('  ✗ adj966 文件宿主能力用例抛异常', e)
+    }
+    try {
+      runAdj1294Tests()
+    } catch (e) {
+      failed++
+      console.error('  ✗ adj1294/1295 操作栏三种壳用例抛异常', e)
     }
   })
   .then(() => {
@@ -27766,6 +27781,322 @@ function runAdj966Tests() {
       只本地改: docStateOf({ bound: true, dirty: true, verdict: 'unchanged' }),
       都没改: docStateOf({ bound: true, dirty: false, verdict: 'unchanged' }),
     }))
+}
+
+/**
+ * adj1294 / adj1295：**操作栏的「壳」**——底栏 / 右侧栏 / 右侧浮动栏（用户 2026-11-16 拍板）。
+ *
+ * 方案：`docs/DOCK-LAYOUT-PLAN.md` §三（目标形态）/ §四（状态）/ §五（DOM）/ §六·阶段 B。
+ *
+ * 这里钉四类东西：
+ *  ① **按端默认 + 宽度换算**是纯函数（`fileHost.ts`），逐端逐档断言，不靠真机试；
+ *  ② **状态归属**：4 个 `ijipu.dock*` L1 键、三选一的合成视图（`dockModeOf`）、切壳不换面板；
+ *  ③ **结构**：`.app-body` 容器、右栏自锁、底栏自锁、顶栏那个常驻按钮**进折叠预算**；
+ *  ④ **负向判据**（用户点名的四条）：浮动栏点栏外关闭但**不许**被 portal 菜单误关、
+ *     右栏**没有最小化**、ESC **只在浮动模式**关它、手机上**没有「右侧栏」选项**。
+ *
+ * ⚠ 负向断言一律**先剥注释**（`E-2026-237` 同款）：本例的注释里故意写了"最小化/MINIMIZED/
+ * `.ws-menu`"这些词来解释口径，不剥注释就会撞上自己写的字。
+ */
+function runAdj1294Tests() {
+  console.log('[211] 操作栏三种壳：右侧栏 + 按端默认 + 宽度换算（adj1294/1295）')
+
+  // ================= ① 按端默认（纯函数） =================
+  const webD: RuntimeEnv = { shell: 'web', host: null, device: 'desktop', installed: false }
+  const webM: RuntimeEnv = { ...webD, device: 'mobile' }
+  const pwaD: RuntimeEnv = { ...webD, installed: true }
+  const tauriD: RuntimeEnv = { shell: 'tauri', host: null, device: 'desktop', installed: false }
+  const hostD: RuntimeEnv = { shell: 'host', host: 'obsidian', device: 'desktop', installed: false }
+  const mobileDefault = defaultDockMode(webM)
+  check(
+    'adj1294 默认壳：手机/平板 ⇒ 底栏；插件嵌入版 ⇒ 底栏；桌面壳/桌面浏览器/已装 PWA ⇒ **右侧浮动栏**',
+    mobileDefault.side === 'bottom' &&
+      mobileDefault.float === false &&
+      defaultDockMode(hostD).side === 'bottom' &&
+      defaultDockMode(tauriD).side === 'right' &&
+      defaultDockMode(tauriD).float === true &&
+      defaultDockMode(webD).side === 'right' &&
+      defaultDockMode(webD).float === true &&
+      defaultDockMode(pwaD).side === 'right',
+    JSON.stringify({
+      手机: mobileDefault,
+      插件: defaultDockMode(hostD),
+      桌面壳: defaultDockMode(tauriD),
+      桌面浏览器: defaultDockMode(webD),
+      已装PWA: defaultDockMode(pwaD),
+    }),
+  )
+  check(
+    'adj1294 **负对照**：同一个前端只把 `device` 改成 `mobile` ⇒ 默认值必须翻成底栏（证明判据真的读设备，不是写死 PC）',
+    defaultDockMode(webD).side === 'right' && defaultDockMode({ ...webD, device: 'mobile' }).side === 'bottom',
+    JSON.stringify({ 桌面: defaultDockMode(webD), 手机: defaultDockMode({ ...webD, device: 'mobile' }) }),
+  )
+
+  // ================= ② 宽度换算（纯函数） =================
+  const w1440n = dockWidthPx('narrow', 1440, false)
+  const w1440w = dockWidthPx('wide', 1440, false)
+  check(
+    'adj1294 宽度：PC 窄档 **320** / 宽档 **480**（1440 视口下不触发夹紧）',
+    w1440n === 320 && w1440w === 480,
+    JSON.stringify({ 窄: w1440n, 宽: w1440w }),
+  )
+  check(
+    'adj1294 宽度夹紧：PC 窗口 700 宽时两档都收到 **45vw**（=315），不会把内容挤没',
+    dockWidthPx('narrow', 700, false) === 315 && dockWidthPx('wide', 700, false) === 315,
+    JSON.stringify({ 窄: dockWidthPx('narrow', 700, false), 宽: dockWidthPx('wide', 700, false) }),
+  )
+  check(
+    'adj1294 宽度：手机按屏宽比例——窄 **1/2**、宽 **2/3**（375 宽 ⇒ 188 / 250；不用 320/480 硬值）',
+    dockWidthPx('narrow', 375, true) === 188 &&
+      dockWidthPx('wide', 375, true) === 250 &&
+      dockWidthPx('narrow', 390, true) === 195 &&
+      dockWidthPx('wide', 390, true) === 260,
+    JSON.stringify({
+      窄375: dockWidthPx('narrow', 375, true),
+      宽375: dockWidthPx('wide', 375, true),
+      窄390: dockWidthPx('narrow', 390, true),
+      宽390: dockWidthPx('wide', 390, true),
+    }),
+  )
+  check(
+    'adj1294 宽度结果一律是**整数像素**（写进 CSS 变量后要做像素级断言，不能留 0.5px 抖动）',
+    [dockWidthPx('narrow', 375, true), dockWidthPx('wide', 393, true), dockWidthPx('wide', 700, false)].every((v) =>
+      Number.isInteger(v),
+    ) &&
+      dockWidthPx('wide', 393, true) === 262,
+    JSON.stringify({ 手机393宽档: dockWidthPx('wide', 393, true) }),
+  )
+  check(
+    'adj1294 **负对照**：同一视口换 `mobile` 开关 ⇒ 宽度必须跟着换公式（比例档 vs 320/480 档）',
+    dockWidthPx('narrow', 375, false) === 180 && dockWidthPx('narrow', 375, true) === 188,
+    JSON.stringify({ PC公式: dockWidthPx('narrow', 375, false), 手机公式: dockWidthPx('narrow', 375, true) }),
+  )
+
+  // ================= ③ 状态：4 个 L1 键 + 三选一合成视图 =================
+  const uiSrc = String(readFileSync('src/store/uiStore.ts', 'utf8'))
+  const uiCode = uiSrc.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
+  check(
+    'adj1294 四项偏好都是 **L1 本机键**（`ijipu.dockSide/dockFloat/dockWidth/dockTabsPos`）+ 各自有存取动作',
+    ["'ijipu.dockSide'", "'ijipu.dockFloat'", "'ijipu.dockWidth'", "'ijipu.dockTabsPos'"].every((k) =>
+      uiSrc.includes(`= ${k}`),
+    ) &&
+      /setDockSide: \(side\) => \{\s*saveStr\(DOCK_SIDE_KEY, side\)/.test(uiCode) &&
+      /setDockFloat: \(float\) => \{\s*saveStr\(DOCK_FLOAT_KEY/.test(uiCode) &&
+      /setDockWidth: \(dockWidth\) => \{\s*saveStr\(DOCK_WIDTH_KEY/.test(uiCode) &&
+      /setDockTabsPos: \(dockTabsPos\) => \{\s*saveStr\(DOCK_TABS_POS_KEY/.test(uiCode),
+    JSON.stringify({
+      四个键: ["'ijipu.dockSide'", "'ijipu.dockFloat'", "'ijipu.dockWidth'", "'ijipu.dockTabsPos'"].filter(
+        (k) => !uiSrc.includes(`= ${k}`),
+      ),
+    }),
+  )
+  check(
+    'adj1294 默认值**按端算**（`defaultDockMode(getRuntimeEnv())`），损坏/不认识的值回退默认（不留在空白壳）',
+    uiCode.includes('defaultDockMode(getRuntimeEnv())') &&
+      /localStorage\.getItem\(DOCK_SIDE_KEY\)/.test(uiCode) &&
+      /v === 'right' \|\| v === 'bottom' \? v : def/.test(uiCode) &&
+      /getItem\(DOCK_TABS_POS_KEY\) === 'right' \? 'right' : 'bottom'/.test(uiCode),
+    '',
+  )
+  const modeOf = (s: 'bottom' | 'right', f: boolean): string => dockModeOf({ dockSide: s, dockFloat: f })
+  check(
+    'adj1294 设置里那个「操作方式」是**合成视图**（不是第三个存储键）：底栏 / 右侧栏(插入) / 右侧浮动栏',
+    modeOf('bottom', true) === 'bottom' &&
+      modeOf('bottom', false) === 'bottom' &&
+      modeOf('right', false) === 'insert' &&
+      modeOf('right', true) === 'float',
+    JSON.stringify({ 底栏: modeOf('bottom', true), 插入: modeOf('right', false), 浮动: modeOf('right', true) }),
+  )
+  check(
+    'adj1295 **切壳不换面板**：右栏读的是同一份 `uiStore.dockPanel`（不是自己另开一个页签状态）',
+    String(readFileSync('src/ui/RightDock.tsx', 'utf8')).includes('useUiStore((s) => s.dockPanel)') &&
+      String(readFileSync('src/ui/RightDock.tsx', 'utf8')).includes("from './dock/dockPanels'"),
+    '',
+  )
+
+  // ================= ④ 右栏壳：结构与四条负向判据 =================
+  const rd = String(readFileSync('src/ui/RightDock.tsx', 'utf8'))
+  /** 负向断言前先剥注释（注释里故意引用了"最小化"等旧口径，见本条说明） */
+  const rdCode = rd.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
+  check(
+    'adj1295 顶部工具条**三个按钮**（宽度档 / 页签位置 / 模式），每个都带 data 标记（真浏览器按它取节点）',
+    ['data-right-dock-width', 'data-right-dock-tabs', 'data-right-dock-mode'].every((k) => rdCode.includes(k)) &&
+      (rdCode.match(/className="right-dock-btn"/g) ?? []).length === 3,
+    JSON.stringify({ 按钮数: (rdCode.match(/className="right-dock-btn"/g) ?? []).length }),
+  )
+  check(
+    'adj1295 页签组两种位置都在：横排贴栏底、竖排进 `right-dock-main`（图标在上 + 文字竖排由 CSS 的 `writing-mode` 给）',
+    /vertical && tabStrip\}/.test(rdCode) &&
+      /!vertical && tabStrip\}/.test(rdCode) &&
+      rdCode.includes("right-dock-tabs${vertical ? ' is-vert' : ''}"),
+    '',
+  )
+  check(
+    'adj1295 **右栏没有「最小化」这一档**（用户拍板：宽度只有两档）——也没有「收起 / 高度档位 / ✕」三个底栏按钮',
+    !/minimized|最小化|高度档位|tool-dock-size-btn|tool-dock-collapse|tool-dock-close/.test(rdCode),
+    '',
+  )
+  check(
+    'adj1295 **ESC 只在浮动模式关闭右栏**（插入模式是布局的一部分，ESC 不该把它关掉）',
+    rdCode.includes('if (!active || !float) return') &&
+      rdCode.includes("if (e.key !== 'Escape' || e.defaultPrevented) return") &&
+      /addEventListener\('keydown', onKey, true\)/.test(rdCode),
+    '',
+  )
+  check(
+    'adj1295 点栏外关闭：用 **composedPath** 判路径、`.ws-menu` 等 portal 浮层**不算栏外**、只认 `.app-body` 之内',
+    rdCode.includes('composedPath()') &&
+      rdCode.includes(".closest('.ws-menu, .menu-dropdown, .modal, [data-dock-portal]')") &&
+      rdCode.includes("n.classList.contains('app-body')"),
+    '',
+  )
+  check(
+    'adj1295 右栏**自锁**（不是右侧栏模式就整块不渲染）+ 宽度写成 CSS 变量（Toast 让位共用同一个值）',
+    rdCode.includes("const active = open && side === 'right'") &&
+      rdCode.includes('if (!active) return null') &&
+      rdCode.includes("setProperty('--jp-right-dock-w'"),
+    '',
+  )
+
+  // ================= ⑤ App / 底栏：`.app-body` 与两壳自锁 =================
+  const appSrc = String(readFileSync('src/App.tsx', 'utf8'))
+  check(
+    'adj1295 App 新增 `.app-body` 横向容器，且 `<RightDock />` 在它**之内**（插入=flex 子项 / 浮动=贴右通高）',
+    (() => {
+      const iBody = appSrc.indexOf('<div className="app-body">')
+      const iRight = appSrc.indexOf('<RightDock />')
+      const iBodyEnd = appSrc.indexOf('{!isSplitHView && <ToolDock />}')
+      return iBody > 0 && iRight > iBody && iBodyEnd > iRight
+    })(),
+    '',
+  )
+  check(
+    'adj1295 底栏那条 `adj552` 结构**没动**（左右拆分仍把底栏放进编辑列；非拆分仍在窗口底部）',
+    /const editorWithDock = \(\s*\n\s*<div className="editor-col">[\s\S]{0,200}?<EditorPane \/>[\s\S]{0,100}?<ToolDock \/>/.test(
+      appSrc,
+    ) && /\{!isSplitHView && <ToolDock \/>\}/.test(appSrc),
+    '',
+  )
+  check(
+    'adj1295 底栏**自锁**：切到右侧栏后 `ToolDock` 整块不渲染（ESC / Ctrl+H 也不再动那个看不见的底栏）',
+    String(readFileSync('src/ui/ToolDock.tsx', 'utf8')).includes("if (!dockOpen || dockSide !== 'bottom') return null") &&
+      String(readFileSync('src/ui/ToolDock.tsx', 'utf8')).includes(
+        "if (useUiStore.getState().dockSide !== 'bottom') return",
+      ),
+    '',
+  )
+
+  // ================= ⑥ 顶栏常驻按钮 + 折叠预算 =================
+  {
+    const foldBase = {
+      priority: ['view', 'donate', 'a'] as const,
+      widthByKey: new Map<string, number>([
+        ['view', 50],
+        ['donate', 50],
+        ['a', 50],
+      ]),
+      fnKeys: ['view', 'a'] as const,
+      editKeys: [] as const,
+      fnBox: { overhead: 0, gap: 0 },
+      editBox: { overhead: 0, gap: 0 },
+      toolbar: { overhead: 0, gap: 0 },
+      fixedW: 100,
+      donateW: 50,
+      rightDockW: 0,
+      moreW: 30,
+      pad: 0,
+      gap: 6,
+      safe: 0,
+    }
+    // 算式：100(fixed) + 100(工具条) + 50(支持) + rightDockW + 6×(子项数−1)
+    //   0 时：子项 4 个 ⇒ 100+100+50+0+18 = 268
+    //   30 时：子项 5 个（多一个常驻按钮 ⇒ 多一个 flex 间距）⇒ 100+100+50+30+24 = 304
+    //   收掉最低一位后再加「更多」：工具条少 50、多一个 30 的槽位 + 一个间距 ⇒ 290
+    check(
+      'adj1295 顶栏折叠预算**扣掉常驻的右侧栏开关**（宽度 + 它占的那一个 flex 间距）',
+      foldKeys({ ...foldBase, rightDockW: 0, totalW: 295 }).length === 0 &&
+        foldKeys({ ...foldBase, rightDockW: 30, totalW: 295 }).length === 1 &&
+        foldKeys({ ...foldBase, rightDockW: 30, totalW: 305 }).length === 0,
+      JSON.stringify({
+        不扣: foldKeys({ ...foldBase, rightDockW: 0, totalW: 295 }).length,
+        扣30: foldKeys({ ...foldBase, rightDockW: 30, totalW: 295 }).length,
+        够宽: foldKeys({ ...foldBase, rightDockW: 30, totalW: 305 }).length,
+      }),
+    )
+    const topSrc = String(readFileSync('src/ui/TopBar.tsx', 'utf8'))
+    const topCode = topSrc.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
+    check(
+      'adj1295 顶栏那个按钮**常驻**：不在折叠链里（不进 `TOOL_PRIORITY`/`OVERFLOW_ORDER`），且有隐形测量副本',
+      /rightDockW: rightDockSlot/.test(topCode) &&
+        topCode.includes('rightDockMeasureRef') &&
+        !/TOOL_PRIORITY[\s\S]{0,400}'rightDock'/.test(topCode) &&
+        !/OVERFLOW_ORDER[\s\S]{0,120}'rightDock'/.test(topCode),
+      '',
+    )
+    check(
+      'adj1295 顶栏按钮在 `.topbar-toolbar` **之外**（那个容器对横向溢出做裁剪，常驻按钮放进去会被裁）+ 位置在「支持」与「更多」之间',
+      (() => {
+        const iDonate = topCode.indexOf('className="topbar-btn topbar-donate"')
+        const iRight = topCode.indexOf('topbar-btn topbar-right-dock')
+        const iMore = topCode.indexOf('topbar-overflow-btn')
+        return iDonate > 0 && iRight > iDonate && iMore > iRight
+      })(),
+      '',
+    )
+  }
+
+  // ================= ⑦ 设置里的「操作方式」 =================
+  {
+    const pcd = String(readFileSync('src/dialogs/PageConfigDialog.tsx', 'utf8'))
+    const pcdCode = pcd.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
+    check(
+      'adj1294 「版面」页签里有**操作方式**下拉（三项 = 底栏 / 右侧栏 / 右侧浮动栏）',
+      pcdCode.includes('<Row label={dockRightCopy.settingLabel}>') &&
+        pcdCode.includes("{dockRightCopy.modeOption.bottom}") &&
+        pcdCode.includes("{dockRightCopy.modeOption.insert}") &&
+        pcdCode.includes("{dockRightCopy.modeOption.float}") &&
+        pcdCode.includes('setDockMode('),
+      '',
+    )
+    check(
+      'adj1294 **手机上不渲染「右侧栏」**（`isCoarsePointerDevice()` 守着中间那项）——不是点了报错，是根本不给入口',
+      /!isCoarsePointerDevice\(\) && \(\s*<option value="insert">/.test(pcdCode),
+      '',
+    )
+  }
+
+  // ================= ⑧ CSS：布局三件套 =================
+  {
+    const cssAll = String(readFileSync('src/index.css', 'utf8'))
+    // 断言只看"规则存在"，不比对排版；注释剥掉免得被说明文字撞上
+    const cssCode = cssAll.replace(/\/\*[\s\S]*?\*\//g, '')
+    check(
+      'adj1295 CSS：`.app-body` 是横向容器 + 定位上下文（浮动右栏贴它）',
+      /\.app-body \{[\s\S]{0,300}?display: flex;[\s\S]{0,120}?flex-direction: row;[\s\S]{0,120}?position: relative;/.test(
+        cssCode,
+      ),
+      '',
+    )
+    check(
+      'adj1295 CSS：`.right-dock` 宽度取 `--jp-right-dock-w`、**不吃底栏那条高度上限**；浮动档 `position: absolute` 贴右通高',
+      /\.right-dock \{[\s\S]{0,400}?width: var\(--jp-right-dock-w, 320px\);[\s\S]{0,300}?max-height: none;/.test(cssCode) &&
+        /\.right-dock\.is-float \{[\s\S]{0,300}?position: absolute;/.test(cssCode),
+      '',
+    )
+    check(
+      'adj1295 CSS：竖排页签（`writing-mode: vertical-rl` + 纵向滚动 + 上下箭头）；横排/竖排两处页签条都在',
+      /\.right-dock-tabstrip\.is-vert \{[\s\S]{0,300}?overflow-y: auto;/.test(cssCode) &&
+        /writing-mode: vertical-rl;/.test(cssCode) &&
+        /\.right-dock-main > \.right-dock-tabs \{/.test(cssCode),
+      '',
+    )
+    check(
+      'adj1295 CSS：右上角的提示（Toast / 更新提示）按右栏宽度**让位**（否则被右栏压住）',
+      /\.toast \{[\s\S]{0,120}?right: calc\(20px \+ var\(--jp-right-dock-w, 0px\)\)/.test(cssCode) &&
+        /\.update-prompt \{[\s\S]{0,120}?right: calc\(20px \+ var\(--jp-right-dock-w, 0px\)\)/.test(cssCode),
+      '',
+    )
+  }
 }
 
 /**
