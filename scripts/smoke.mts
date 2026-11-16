@@ -27677,22 +27677,32 @@ function runAdj966Tests() {
     shouldOpenWorkspaceDock(hostProfile(mobileWeb, true), true) &&
       shouldOpenWorkspaceDock(hostProfile(mobileWeb, true), false) === false &&
       shouldOpenWorkspaceDock(lim, false) === false, '')
-  check('adj1289 网页版默认试听：桌面 Web / PWA 与带 ?src= 的线上谱优先试听；手机普通打开仍留工作区；桌面壳/插件不变',
-    shouldOpenTryoutDock(web, false) &&
-      shouldOpenTryoutDock(web, true) &&
-      shouldOpenTryoutDock(pwa, true) &&
-      shouldOpenTryoutDock(mobileWeb, true) &&
-      shouldOpenTryoutDock(mobileWeb, false) === false &&
+  check(
+    'adj1297 首次默认**收起**（用户 2026-11-16 拍板）：桌面网页版（含已装 PWA / 桌面壳 / 插件）**不再**自动展开试听——把空间留给预览/编辑',
+    shouldOpenTryoutDock(web, false) === false &&
+      shouldOpenTryoutDock(web, true) === false &&
+      shouldOpenTryoutDock(pwa, true) === false &&
       shouldOpenTryoutDock(tauri, true) === false &&
-      shouldOpenTryoutDock(host, true) === false,
+      shouldOpenTryoutDock(host, true) === false &&
+      // 两条"首次展开"的判据同时为假 ⇒ `initialDock()` 落到 `{ open: false }`（首次收起）
+      shouldOpenWorkspaceDock(hostProfile(web, true), true) === false,
     JSON.stringify({
       桌面Web: shouldOpenTryoutDock(web, false),
       桌面Web_线上谱: shouldOpenTryoutDock(web, true),
-      手机Web_普通: shouldOpenTryoutDock(mobileWeb, false),
-      手机Web_线上谱: shouldOpenTryoutDock(mobileWeb, true),
+      已装PWA_线上谱: shouldOpenTryoutDock(pwa, true),
       桌面壳: shouldOpenTryoutDock(tauri, true),
       插件: shouldOpenTryoutDock(host, true),
-    }))
+      桌面Web_工作区判据: shouldOpenWorkspaceDock(hostProfile(web, true), true),
+    }),
+  )
+  check(
+    'adj1297 **只收窄不删**（adj1289 唯一保留的那一支）：手机网页版从乐谱站打开线上谱（`?src=`）仍默认展开试听；手机普通打开仍留给工作区',
+    shouldOpenTryoutDock(mobileWeb, true) && shouldOpenTryoutDock(mobileWeb, false) === false,
+    JSON.stringify({
+      手机Web_线上谱: shouldOpenTryoutDock(mobileWeb, true),
+      手机Web_普通: shouldOpenTryoutDock(mobileWeb, false),
+    }),
+  )
   {
     const uiSrc = String(readFileSync('src/store/uiStore.ts', 'utf8'))
     const topSrc = String(readFileSync('src/ui/TopBar.tsx', 'utf8'))
@@ -28094,6 +28104,31 @@ function runAdj1294Tests() {
       'adj1295 CSS：右上角的提示（Toast / 更新提示）按右栏宽度**让位**（否则被右栏压住）',
       /\.toast \{[\s\S]{0,120}?right: calc\(20px \+ var\(--jp-right-dock-w, 0px\)\)/.test(cssCode) &&
         /\.update-prompt \{[\s\S]{0,120}?right: calc\(20px \+ var\(--jp-right-dock-w, 0px\)\)/.test(cssCode),
+      '',
+    )
+    // adj1297（阶段 C）：右栏里三处「左右排列」改成**上下排列**（用户 2026-11-16 拍板）
+    check(
+      'adj1297 CSS：右栏里三处**上下排列**（工作区 `.ws-body` / 试听 `.dock-split` / 全局谱面 `.pcfg-root` 单列 + 页签行在上）',
+      /\.right-dock \.ws-body \{[\s\S]{0,160}?flex-direction: column;/.test(cssCode) &&
+        /\.right-dock \.playback-panel \.dock-split \{[\s\S]{0,160}?flex-direction: column;/.test(cssCode) &&
+        /\.right-dock \.pcfg-root \{[\s\S]{0,200}?grid-template-columns: minmax\(0, 1fr\);/.test(cssCode) &&
+        /\.right-dock \.jp-tabs \{[\s\S]{0,200}?flex-direction: row;/.test(cssCode) &&
+        /\.right-dock \.pcfg-foot \{[\s\S]{0,160}?flex-direction: row;/.test(cssCode),
+      '',
+    )
+    check(
+      'adj1297 CSS **负向**：阶段 C 的覆盖只写在 `.right-dock` 之下——底栏（矮而宽）仍是原来的左右两栏',
+      // 底栏这一档没有"改成竖排"的规则（`adj471/adj545/adj549` 是按底栏校准的）
+      !/\.tool-dock \.ws-body \{[\s\S]{0,120}?flex-direction: column/.test(cssCode) &&
+        !/\.tool-dock \.playback-panel \.dock-split \{[\s\S]{0,120}?flex-direction: column/.test(cssCode) &&
+        !/\.tool-dock \.pcfg-root \{[\s\S]{0,120}?grid-template-columns: minmax\(0, 1fr\);\s*\n\s*grid-template-rows: auto/.test(
+          cssCode,
+        ),
+      '',
+    )
+    check(
+      'adj1297 CSS：窄栏里 `select` / `input` 允许收缩到可用宽（阶段 B 实测「编辑器字体」下拉右端被裁的根因）',
+      /\.right-dock \.pcfg-fields \.pcfg-row-ctl > select,[\s\S]{0,160}?max-width: 100%;/.test(cssCode),
       '',
     )
   }

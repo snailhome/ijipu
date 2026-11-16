@@ -7236,3 +7236,142 @@ span.ws-check {
   }
 }
 
+/* ==========================================================================
+ * adj1297：**面板窄栏适配**（方案 `docs/DOCK-LAYOUT-PLAN.md` §六·阶段 C）
+ *
+ * ## 口径（用户 2026-11-16 拍板）
+ *
+ * 面板里有三处原本是**左右两栏**，在"高而窄"的右栏里左右挤在一起就必然出问题
+ * （阶段 B 收尾实测：设置面板 320px 下标签与控件压在一起、字体下拉右端被裁；
+ *  工作区面板 195px 下空态文字被压成一字一行、还与右侧按钮列重叠）。
+ * 所以**右栏里这三处改成上下排列**：
+ *
+ * | 面板 | 左右排列（底栏/弹窗里照旧） | 右栏里改成 |
+ * |---|---|---|
+ * | 工作区 | `.ws-body`：左列表 ⇄ 右操作列（112px 固定宽） | 列表在上、操作区在下（整宽） |
+ * | 试听 | `.dock-split`：信息区 ⇄ 104px 按钮列 | 信息区在上、按钮行在下（整宽、可折行） |
+ * | 全局 / 谱面 | `.pcfg-root`：左子页签 ⇄ 内容 ⇄ 右按钮列 | 子页签在上（横排）、内容居中、按钮在下 |
+ *
+ * ## 三条不能越的线
+ *
+ * 1. **只作用在 `.right-dock` 之下**：底栏是"矮而宽"，那套左右排列本来就是按它校准的
+ *    （`adj471/adj545/adj549`），这里一条都不许改——负向判据"底栏行为与改造前一致"。
+ * 2. **不删功能**：只换方向与宽度，不减按钮/子页签；`.ws-side` 的四个控件、试听的
+ *    播放/停止/速度/音色、设置的子页签都还在（`verify:app-ui` 有"控件个数不变"的断言）。
+ * 3. **不裁内容**：右栏里凡是原来靠"固定宽列"占位的，这里一律改成**按容器宽**；
+ *    `select` 这类"宽度由最长选项撑开"的控件补一道 `max-width: 100%`（被裁的根因）。
+ * ========================================================================== */
+
+/* ---------------- ① 工作区：列表在上、操作区在下 ---------------- */
+/* pane 按**内容取高**：右栏体（`.right-dock-body`）是唯一滚动容器，让 pane 自己
+ * 收成一整列内容高度 ⇒ 列表 + 操作区不会被"填满高度"的 flex 链压到互相盖住。 */
+.right-dock .tool-dock-pane.pane-workspace {
+  flex: 0 0 auto;
+}
+
+.right-dock .ws-body {
+  flex-direction: column;
+}
+
+/* 操作列不再是 112px（窄屏 100px）的固定窄列——改成整宽的一列，排在列表下方 */
+.right-dock .ws-side {
+  width: auto;
+  flex: 0 0 auto;
+  overflow: visible;
+  padding-top: 6px;
+  border-top: 1px solid var(--jp-border);
+}
+
+/* ---------------- ② 试听：信息区在上、操作按钮在下 ---------------- */
+.right-dock .playback-panel .dock-split {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: stretch;
+}
+
+.right-dock .playback-panel .dock-split-main {
+  width: 100%;
+}
+
+/* 按钮列取消固定宽（`--dock-side-w` 是 `adj471/adj472` 给底栏那条"右侧窄栏"的旋钮），
+ * 改成整宽的一行、按内容宽排列、放不下就折行 */
+.right-dock .playback-actions {
+  --dock-side-w: auto;
+  flex: 0 0 auto;
+  width: 100%;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+}
+
+.right-dock .playback-actions > button {
+  width: auto;
+  flex: 0 1 auto;
+}
+
+/* ---------------- ③ 全局 / 谱面：子页签在上、内容居中、按钮在下 ---------------- */
+/* 底栏那套是 `页签 | 内容 | 按钮` 的三列网格（`adj476`）。右栏改成**一列三行**：
+ * 页签行（auto）→ 内容（吃掉剩余高、自己滚）→ 按钮行（auto）。 */
+.right-dock .pcfg-root {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 6px 0;
+}
+
+.right-dock .jp-tabs {
+  grid-area: 1 / 1 / 2 / 2;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 0 0 4px;
+  margin-bottom: 0;
+  border-right: 0;
+  border-bottom: 1px solid var(--jp-border);
+  overflow: visible;
+}
+
+/* 横排页签按内容宽（底栏那条竖轨是 `flex: 0 0 36px`，横过来会把文字夹成省略号） */
+.right-dock .jp-tab {
+  flex: 0 0 auto;
+  height: 30px;
+  padding: 0 10px;
+}
+
+/* 文字**留着**：右栏是"高而窄"，横向一排子页签放不下就折行（底栏那档 560px 以下
+ * 隐藏文字是为了省高度，右栏不缺高度）。 */
+.right-dock .jp-tab-label {
+  display: inline;
+}
+
+.right-dock .pcfg-panel {
+  grid-area: 2 / 1 / 3 / 2;
+}
+
+.right-dock .pcfg-foot {
+  grid-area: 3 / 1 / 4 / 2;
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  padding: 6px 0 0;
+}
+
+/* ---------------- ④ 窄栏里的控件兜底（阶段 B 实测的两处"被裁"根因） ---------------- */
+/* `<select>` 的默认宽 = 最长选项的 `max-content`，在 320 栏里会直接顶出去、被
+ * `.pcfg-panel` 的 `overflow-x: hidden` 裁掉一截（实测：「编辑器字体」那一行）。
+ * 这里一律允许它收缩到可用宽。 */
+.right-dock .pcfg-fields .pcfg-row-ctl > select,
+.right-dock .pcfg-fields .pcfg-row-ctl > input {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* 导出动作按钮：底栏里是"一行多个等宽格"（`--dock-btn` 约 132px），窄栏里格子只有 86px，
+ * 而按钮文字（如「导出 PDF（每页一张）」）自然宽 133px ⇒ 会被 `.export-btn-text` 的
+ * `text-overflow: ellipsis` 截成「导出 PDF（每…」。改成**一个按钮占一整行**，文字就放得下。 */
+.right-dock .export-actions > button {
+  flex: 1 1 100%;
+}
+

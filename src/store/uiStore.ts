@@ -412,7 +412,8 @@ function initialDock(): { open: boolean; panel: DockPanelKey } {
   try {
     const env = getRuntimeEnv()
     const onlineScore = new URLSearchParams(window.location.search).has('src')
-    // adj1289：网页版默认展开试听（线上谱打开即听）；手机端普通打开仍交给工作区判据
+    // adj1289/adj1297：只有**手机网页版打开线上谱**才默认展开试听（桌面网页版首次收起，
+    // 把空间留给预览/编辑——用户 2026-11-16 拍板）；其它端交给下面的工作区判据
     if (shouldOpenTryoutDock(env, onlineScore)) return { open: true, panel: 'tryout' }
     const w = window as unknown as { showOpenFilePicker?: unknown; showDirectoryPicker?: unknown }
     const profile = hostProfile(env, typeof w.showOpenFilePicker === 'function')

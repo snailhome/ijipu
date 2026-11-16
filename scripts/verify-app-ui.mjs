@@ -1871,6 +1871,28 @@ async function main() {
       await waitFor(c, `!!document.querySelector('.editor-main textarea')`, '三壳用例：应用首屏')
       await sleep(500)
 
+      /**
+       * adj1297（用户 2026-11-16 拍板）：桌面网页版首次打开**默认收起**底栏/右栏
+       * ——把空间留给预览/编辑。`adj1289` 那条"桌面 Web 一进来就展开试听"已经下线
+       * （`shouldOpenTryoutDock` 只留"手机 Web + 线上谱"一种自动展开）。
+       * 所以这里先钉"两块壳都不在、但顶栏开关在"（入口不能一起消失），再手工点开继续量。
+       */
+      const firstOpen = await evalJs(
+        c,
+        `({
+           right: !!document.querySelector('.right-dock'),
+           bottom: !!document.querySelector('.tool-dock:not(.right-dock)'),
+           topbarBtn: !!document.querySelector('.topbar-right-dock'),
+         })`,
+      )
+      check(
+        'adj1297 PC 首次（无存档）**默认收起**底栏/右栏（空间留给预览/编辑），但顶栏那个常驻开关在',
+        firstOpen.right === false && firstOpen.bottom === false && firstOpen.topbarBtn === true,
+        JSON.stringify(firstOpen),
+      )
+      await realClickOn('.topbar-right-dock')
+      await sleep(300)
+
       const rd0 = await boxOf('.right-dock')
       check(
         'adj1295 PC 首次（无存档）默认**右侧浮动栏**：右栏在、`position: absolute`、宽度 320',
@@ -2128,6 +2150,31 @@ async function main() {
         bottomSweep.length === 0,
         JSON.stringify(bottomSweep),
       )
+      /**
+       * adj1297 **负向判据（底栏不许跟着变）**：阶段 C 只把**右栏**里的三处"左右排列"改成
+       * 上下排列，底栏（矮而宽）必须仍是原来的左右两栏——`adj471/adj545/adj549` 那一套
+       * 是按底栏校准的，动了就是"顺手改坏了没要求改的地方"。
+       */
+      await evalJs(c, `document.querySelector('.tool-dock:not(.right-dock) [data-key="workspace"]').click(), true`)
+      await waitFor(
+        c,
+        `!!document.querySelector('.tool-dock:not(.right-dock) .pane-workspace:not([hidden]) .ws-body')`,
+        '底栏里打开工作区',
+      )
+      const bottomLayout = await evalJs(
+        c,
+        `(() => {
+           const b = document.querySelector('.tool-dock:not(.right-dock) .ws-body')
+           const a = document.querySelector('.tool-dock:not(.right-dock) .ws-side')
+           if (!b || !a) return null
+           return { dir: getComputedStyle(b).flexDirection, sideW: Math.round(a.getBoundingClientRect().width) }
+         })()`,
+      )
+      check(
+        'adj1297 **负向**：底栏里工作区仍是**左右两栏**（`.ws-body` 横排 + 操作列固定 112px）——阶段 C 只改右栏',
+        bottomLayout !== null && bottomLayout.dir === 'row' && bottomLayout.sideW === 112,
+        JSON.stringify(bottomLayout),
+      )
 
       // ---- ⑫ 宽屏左右拆分：底栏那条 `adj552` 不变、抽屉仍**贯穿整幅**、右栏仍**整幅高度** ----
       //
@@ -2217,6 +2264,187 @@ async function main() {
         JSON.stringify({ 选项: toFloat, 右栏: rdSplit }),
       )
 
+      // ---- ⑭ 阶段 C：**面板窄栏适配**（adj1297）----
+      //
+      // 用户 2026-11-16 拍板：右栏（高而窄）里原本"左右排列"的三处改成**上下排列**——
+      //   ① 工作区的列表 ⇄ 操作区；② 试听的信息区 ⇄ 操作区；③ 全局/谱面的子页签 ⇄ 内容。
+      // 阶段 B 收尾时肉眼看到的两处真问题也在这里钉住：
+      //   · 设置面板 @320 标签与控件压在一起、字体下拉右端被裁；
+      //   · 工作区面板 @195（手机 1/2 屏宽）空态文字被压成一字一行、与按钮列重叠。
+      // 判据分三层：**不裁内容**（容器 scrollWidth 不许超过 clientWidth）、**上下排列**（算出来的
+      // `flex-direction` / `grid-template-columns`）、**功能一个不少**（按钮/子页签个数）。
+      await c.send('Page.reload')
+      await sleep(900)
+      await waitFor(c, `!!document.querySelector('.editor-main textarea')`, '阶段 C：重载后首屏')
+      // adj1297：重载后底栏/右栏是**收起**的（新默认）；宽度档与页签位置是 L1 存档，上次停在别的档，
+      // 所以这里显式点回「窄档 + 页签在底部」再开量。
+      await realClickOn('.topbar-right-dock')
+      await sleep(300)
+      const dockBarState = () =>
+        evalJs(
+          c,
+          `(() => {
+             const d = document.querySelector('.right-dock')
+             return d ? { w: d.dataset.dockWidth, t: d.dataset.dockTabs } : null
+           })()`,
+        )
+      const setDockBar = async (width, tabs) => {
+        for (let i = 0; i < 5; i++) {
+          const st = await dockBarState()
+          if (!st) return null
+          if (st.w === width && st.t === tabs) return st
+          if (st.w !== width) {
+            await realClickOn('.right-dock-bar button[data-right-dock-width]')
+            await sleep(220)
+          }
+          if (st.t !== tabs) {
+            await realClickOn('.right-dock-bar button[data-right-dock-tabs]')
+            await sleep(220)
+          }
+        }
+        return await dockBarState()
+      }
+      /** 量一块面板：不裁清单 + 三处排列 + 控件个数 */
+      const scanPaneC = async (k) =>
+        evalJs(
+          c,
+          `(() => {
+             const pane = document.querySelector('.right-dock .pane-${k}')
+             if (!pane) return { pane: false }
+             // "被裁"的判据：**自己会裁/会滚**的容器里，内容比可视宽还宽 ⇒ 一定有东西露不出来。
+             // 只看 overflowX !== visible 的元素（overflow visible 的溢出会撑出滚动条，不是裁）。
+             const clipped = []
+             for (const el of pane.querySelectorAll('*')) {
+               const cs = getComputedStyle(el)
+               if (cs.overflowX === 'visible') continue
+               if (el.clientWidth <= 0) continue
+               if (el.scrollWidth > el.clientWidth + 2) {
+                 clipped.push({
+                   cls: typeof el.className === 'string' ? el.className.slice(0, 60) : el.tagName,
+                   sw: el.scrollWidth,
+                   cw: el.clientWidth,
+                 })
+               }
+             }
+             const q = (s) => pane.querySelector(s)
+             const csOf = (s) => { const e = q(s); return e ? getComputedStyle(e) : null }
+             const box = (s) => { const e = q(s); return e ? e.getBoundingClientRect() : null }
+             const tabsBox = box('.jp-tabs')
+             const panelBox = box('.pcfg-panel')
+             return {
+               pane: true,
+               w: Math.round(pane.getBoundingClientRect().width),
+               clipped: clipped.slice(0, 6),
+               wsBodyDir: csOf('.ws-body') ? csOf('.ws-body').flexDirection : null,
+               wsSideW: box('.ws-side') ? Math.round(box('.ws-side').width) : null,
+               wsSideTop: box('.ws-side') ? Math.round(box('.ws-side').top) : null,
+               wsLeftBottom: box('.ws-left') ? Math.round(box('.ws-left').bottom) : null,
+               wsBtns: pane.querySelectorAll('.ws-side-btn').length,
+               splitDir: csOf('.playback-panel .dock-split') ? csOf('.playback-panel .dock-split').flexDirection : null,
+               actionsW: box('.playback-actions') ? Math.round(box('.playback-actions').width) : null,
+               playBtns: pane.querySelectorAll('.playback-actions > button').length,
+               pcfgCols: csOf('.pcfg-root') ? csOf('.pcfg-root').gridTemplateColumns : null,
+               tabsAboveContent: tabsBox && panelBox ? Math.round(tabsBox.bottom) <= Math.round(panelBox.top) + 1 : null,
+               jpTabs: pane.querySelectorAll('.jp-tab').length,
+             }
+           })()`,
+        )
+
+      /** 两档宽度下逐个面板扫一遍 */
+      const stageC = { 320: {}, 480: {} }
+      for (const [slot, width] of [
+        ['320', 'narrow'],
+        ['480', 'wide'],
+      ]) {
+        await setDockBar(width, 'bottom')
+        stageC[slot].__w = await evalJs(
+          c,
+          `Math.round(document.querySelector('.right-dock').getBoundingClientRect().width)`,
+        )
+        for (const k of TAB_KEYS) {
+          await evalJs(c, `document.querySelector('.right-dock [data-key="${k}"]').click(), true`)
+          await sleep(420)
+          stageC[slot][k] = await scanPaneC(k)
+        }
+      }
+      const clippedOf = (slot) =>
+        TAB_KEYS.filter((k) => !stageC[slot][k]?.pane || (stageC[slot][k].clipped ?? [1]).length > 0).map((k) => ({
+          k,
+          ...stageC[slot][k],
+        }))
+      check(
+        'adj1297 右栏窄档（PC 320）**8 个面板都不裁内容**：没有"内容比可视宽、被 overflow 剪掉"的容器',
+        stageC[320].__w === 320 && clippedOf('320').length === 0,
+        JSON.stringify({ 宽: stageC[320].__w, 问题: clippedOf('320') }),
+      )
+      check(
+        'adj1297 右栏宽档（PC 480）**8 个面板也都不裁**（换档不许把内容挤出可视区）',
+        stageC[480].__w === 480 && clippedOf('480').length === 0,
+        JSON.stringify({ 宽: stageC[480].__w, 问题: clippedOf('480') }),
+      )
+      {
+        // ① 工作区：列表与操作区上下排（`.ws-body` 竖排 + 操作区占整宽、**落在列表下方**）
+        const ws = stageC[320].workspace
+        check(
+          'adj1297 右栏 @320 **工作区：列表在上、操作区在下**（`.ws-body` 竖排、操作列占整宽且在列表下方）+ 操作按钮还在',
+          !!ws &&
+            ws.wsBodyDir === 'column' &&
+            ws.wsSideW !== null &&
+            ws.wsSideW >= 320 * 0.8 &&
+            ws.wsSideTop !== null &&
+            ws.wsLeftBottom !== null &&
+            ws.wsSideTop >= ws.wsLeftBottom - 1 &&
+            ws.wsBtns >= 1,
+          JSON.stringify(ws),
+        )
+        // ② 试听：信息区与操作区上下排，播放/停止按钮一个不少
+        const pb = stageC[320].tryout
+        check(
+          'adj1297 右栏 @320 **试听：信息区在上、操作按钮在下**（`.dock-split` 竖排、按钮行占整宽）+ 播放/停止还在',
+          !!pb &&
+            pb.splitDir === 'column' &&
+            pb.actionsW !== null &&
+            pb.actionsW >= 320 * 0.8 &&
+            pb.playBtns >= 2,
+          JSON.stringify(pb),
+        )
+        // ③ 全局 / 谱面：子页签在上、内容在下（单列网格），子页签一个不少
+        //    网页版两半各 4 个（settings = 版面/主题/音色库/本机；score = 布局/字体/水印/背景；
+        //    「命令行」在非桌面端整条隐藏，见 `adj955`）
+        const st = stageC[320].settings
+        const sc = stageC[320].score
+        check(
+          'adj1297 右栏 @320 **全局/谱面的子页签与内容上下排**（`.pcfg-root` 变单列、页签行在内容之上）+ 两半各 4 个子页签都在',
+          !!st &&
+            !!sc &&
+            typeof st.pcfgCols === 'string' &&
+            !st.pcfgCols.includes(' ') &&
+            st.tabsAboveContent === true &&
+            st.jpTabs === 4 &&
+            typeof sc.pcfgCols === 'string' &&
+            !sc.pcfgCols.includes(' ') &&
+            sc.tabsAboveContent === true &&
+            sc.jpTabs === 4,
+          JSON.stringify({ 全局: st, 谱面: sc }),
+        )
+        // 宽档 @480 同样要上下排（不是只在小屏成立）
+        const ws4 = stageC[480].workspace
+        const pb4 = stageC[480].tryout
+        const st4 = stageC[480].settings
+        check(
+          'adj1297 右栏 @480（宽档）三处**同样是上下排列**（工作区竖排 / 试听竖排 / 设置单列）',
+          !!ws4 &&
+            !!pb4 &&
+            !!st4 &&
+            ws4.wsBodyDir === 'column' &&
+            pb4.splitDir === 'column' &&
+            typeof st4.pcfgCols === 'string' &&
+            !st4.pcfgCols.includes(' ') &&
+            st4.tabsAboveContent === true,
+          JSON.stringify({ 工作区: ws4, 试听: pb4, 全局: st4 }),
+        )
+      }
+
       // ---- ⑩ 手机档：默认底栏 + 设置里**没有「右侧栏」** ----
       const DESKTOP_UA2 = await evalJs(c, 'navigator.userAgent')
       const MOBILE_UA2 =
@@ -2252,6 +2480,65 @@ async function main() {
         'adj1294 **负向④**：手机设置里**没有「右侧栏」**（只剩底栏 / 右侧浮动栏两项）',
         mobileOpts !== null && mobileOpts.join(',') === 'bottom,float',
         JSON.stringify(mobileOpts),
+      )
+      /**
+       * adj1297：补上方案 §十 遗留的那一条——手机上右栏宽度**以前只有纯函数断言**
+       * （`dockWidthPx(…, true)`），没在真手机视口下量过像素宽。这里真切到「右侧浮动栏」量：
+       * 390 宽的屏 ⇒ 窄档 **195**（1/2）、宽档 **260**（2/3）。
+       * 同时这也是阶段 C 的"最窄一档"（195px），下面顺带确认工作区在那里也是上下排。
+       */
+      await evalJs(
+        c,
+        `(() => {
+           const row = [...document.querySelectorAll('.pcfg-row')].find((r) => r.textContent.includes('操作方式'))
+           const s = row && row.querySelector('select')
+           if (!s) return 'no-select'
+           Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(s, 'float')
+           s.dispatchEvent(new Event('change', { bubbles: true }))
+           return true
+         })()`,
+      )
+      await sleep(600)
+      const mNarrow = await evalJs(
+        c,
+        `Math.round(document.querySelector('.right-dock')?.getBoundingClientRect().width ?? 0)`,
+      )
+      await realClickOn('.right-dock-bar button[data-right-dock-width]')
+      await sleep(300)
+      const mWide = await evalJs(
+        c,
+        `Math.round(document.querySelector('.right-dock')?.getBoundingClientRect().width ?? 0)`,
+      )
+      check(
+        'adj1297 手机（390 宽）右栏宽度**真的按屏宽比例**：窄档 1/2 = 195、宽档 2/3 = 260（不再是纯函数断言）',
+        mNarrow === 195 && mWide === 260,
+        JSON.stringify({ 窄档: mNarrow, 宽档: mWide }),
+      )
+      // 最窄一档（195px）下工作区也得是上下排（阶段 B 收尾肉眼看到的那处"一字一行"就出在这一档）
+      await evalJs(c, `document.querySelector('.right-dock [data-key="workspace"]').click(), true`)
+      await waitFor(c, `!!document.querySelector('.right-dock .pane-workspace:not([hidden]) .ws-body')`, '手机上右栏打开工作区')
+      const mWs = await evalJs(
+        c,
+        `(() => {
+           const b = document.querySelector('.right-dock .ws-body')
+           const pane = document.querySelector('.right-dock .pane-workspace')
+           if (!b || !pane) return null
+           const clipped = [...pane.querySelectorAll('*')].filter((el) => {
+             const cs = getComputedStyle(el)
+             return cs.overflowX !== 'visible' && el.clientWidth > 0 && el.scrollWidth > el.clientWidth + 2
+           }).length
+           return {
+             dir: getComputedStyle(b).flexDirection,
+             sideW: Math.round(document.querySelector('.right-dock .ws-side').getBoundingClientRect().width),
+             paneW: Math.round(pane.getBoundingClientRect().width),
+             clipped,
+           }
+         })()`,
+      )
+      check(
+        'adj1297 手机右栏最窄档（195px）**工作区仍是上下排、且不裁**（操作列占整宽、没有溢出被剪的元素）',
+        mWs !== null && mWs.dir === 'column' && mWs.sideW >= mWs.paneW * 0.6 && mWs.clipped === 0,
+        JSON.stringify(mWs),
       )
       // 收尾：恢复桌面视口与 UA（这段是本脚本最后一段，但保持"跑完不留脏环境"的习惯）
       await c.send('Emulation.setDeviceMetricsOverride', {

@@ -208,16 +208,22 @@ export function shouldOpenWorkspaceDock(p: FileHostProfile, canPickDir: boolean)
 }
 
 /**
- * adj1289：网页版默认展开「试听」底栏。
+ * `adj1289` 立、`adj1297` **收窄**：网页版什么时候一打开就把「试听」展开。
  *
- * 网页版最常见的用途是从乐谱站打开线上 `.jps`（`?src=`）直接试听；桌面浏览器没有
- * "先选文件"的需求，把试听放出来比让用户自己找底栏更顺手。
- * 手机端普通打开仍保留「工作区」默认（受限档需要授权文件夹）；但带 `?src=` 的线上谱
- * 优先试听。桌面壳 / 插件不变（沿用各自的文件习惯）。
+ * **新口径（用户 2026-11-16 拍板）**：桌面网页版首次打开**默认收起**底栏/右栏，
+ * 把空间留给预览/编辑——`adj1289` 当时"桌面浏览器一进来就展开试听"的默认值因此下线。
+ * 现在只剩一种情况会自动展开：**手机网页版从乐谱站打开线上谱（`?src=`）**——
+ * 那一档的用途就是"点开就听"，而且手机上底栏默认展开本来就是各自的文件习惯（见
+ * `shouldOpenWorkspaceDock`）。桌面壳 / 插件 / 已装 PWA 一律不自动展开。
+ *
+ * ⚠ 这只是"首次没有存档时"的默认值；用户自己按开过底栏/右栏后 `dockOpen` 由 `uiStore` 记忆
+ * （L3 会话态，不落盘 ⇒ 下次重开还是按本函数给默认）。
  */
 export function shouldOpenTryoutDock(env: RuntimeEnv, onlineScore: boolean): boolean {
   if (env.shell !== 'web') return false
-  return onlineScore || env.device === 'desktop'
+  // adj1297：桌面网页版首次收起（用户拍板：把空间还给预览/编辑）；手机网页版保持 adj1289 的线上谱优先试听
+  if (env.device !== 'mobile') return false
+  return onlineScore
 }
 
 /* =====================================================================================
