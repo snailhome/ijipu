@@ -11,7 +11,7 @@ import { DEFAULT_THEME, DEFAULT_THEME_MODE, type ThemeMode } from '../brand/them
 // adj954：运行环境/设备判据统一走品牌层唯一出处（原先本文件自己写了一份 matchMedia）
 import { getRuntimeEnv, isCoarsePointerDevice } from '../brand/env'
 // adj966g：底栏默认页按**本端能力档**决定（要权限的那一档展开在工作区，PC/插件收起）
-import { defaultDockMode, hostProfile, shouldOpenTryoutDock, shouldOpenWorkspaceDock } from './fileHost'
+import { defaultDockMode, defaultDockWidth, hostProfile, shouldOpenWorkspaceDock } from './fileHost'
 // adj1294：底栏 / 右侧栏「壳」的类型与按端默认判据（纯函数，smoke 有闸门）
 import type { DockSide, DockTabsPos, DockWidth } from './fileHost'
 export type { DockSide, DockTabsPos, DockWidth } from './fileHost'
@@ -183,9 +183,9 @@ const EXPORT_BG_IMAGE_KEY = 'ijipu.exportBgImage'
  *
  * | 键 | 取值 | 默认 | 说明 |
  * |---|---|---|---|
- * | `ijipu.dockSide` | `bottom` / `right` | **按端算** | 操作方式：底栏 / 右侧栏 |
- * | `ijipu.dockFloat` | `0` / `1` | **按端算** | 右栏是否浮动（PC 默认浮动） |
- * | `ijipu.dockWidth` | `narrow` / `wide` | `narrow` | 右栏宽度档 |
+ * | `ijipu.dockSide` | `bottom` / `right` | **按端算**（`adj1301` 起所有端默认 `right`） | 操作方式：底栏 / 右侧栏 |
+ * | `ijipu.dockFloat` | `0` / `1` | **按端算**（`adj1301` 起所有端默认浮动） | 右栏是否浮动 |
+ * | `ijipu.dockWidth` | `narrow` / `wide` | **按端算**（`adj1301`：窄屏 `wide`、其它 `narrow`） | 右栏宽度档 |
  * | `ijipu.dockTabsPos` | `bottom` / `right` | `bottom` | 右栏页签组位置 |
  *
  * 为什么都属于 **L1**（`docs/SETTINGS-AUDIT.md` 分层）：它们只决定"这个人怎么用"，与具体谱无关，
@@ -352,9 +352,15 @@ function loadDockFloat(def: boolean): boolean {
   }
 }
 
+/**
+ * adj1301（用户 2026-11-16 拍板）：宽度档默认值也**按端算**——窄屏（手机/平板）默认 **wide**（2/3 屏宽），
+ * 其它端默认 **narrow**（320）。没存过才用默认；存过（哪怕存的是 'narrow'）一律以存档为准。
+ */
 function loadDockWidth(): DockWidth {
   try {
-    return localStorage.getItem(DOCK_WIDTH_KEY) === 'wide' ? 'wide' : 'narrow'
+    const v = localStorage.getItem(DOCK_WIDTH_KEY)
+    if (v === 'wide' || v === 'narrow') return v
+    return defaultDockWidth(getRuntimeEnv())
   } catch {
     return 'narrow'
   }
@@ -408,23 +414,30 @@ function detectSystemLight(): boolean {
  * 判据在 `store/fileHost.ts` 的 `shouldOpenWorkspaceDock`（纯函数、有闸门断言），本文件只负责接线。
  * 只在**模块初始化时算一次**（面板不持久化 ⇒ 每次会话按本端能力给默认值）。
  */
+/**
+ * adj1302（用户 2026-11-16 拍板）：**直接打开应用一律不展开操作栏**（所有端）。
+ *
+ * 原来这里的两条自动展开——"手机受限档 ⇒ 工作区"（`adj575/adj577`）与
+ * "手机网页版线上谱 ⇒ 试听"（`adj1289`）——**全部下线**：用户实测后要求"直接打开不打开右栏"，
+ * 只有**带谱进来**（`?jps=` / `?src=`、拖放 `.jps`、双击 `.jps`）才展开，且落在**试听**
+ * （`openDockForIncomingFile()`，三个入口共用一处）。
+ *
+ * 面板的**默认值**仍按端算（用户手点顶栏开关时落到哪儿）：
+ * 手机受限档且能选文件夹 ⇒「工作区」（文件管理器习惯），其它 ⇒「试听」。
+ *
+ * 只在**模块初始化时算一次**（面板不持久化 ⇒ 每次会话按本端能力给默认值）。
+ */
 function initialDock(): { open: boolean; panel: DockPanelKey } {
   try {
     const env = getRuntimeEnv()
-    const onlineScore = new URLSearchParams(window.location.search).has('src')
-    // adj1289/adj1297：只有**手机网页版打开线上谱**才默认展开试听（桌面网页版首次收起，
-    // 把空间留给预览/编辑——用户 2026-11-16 拍板）；其它端交给下面的工作区判据
-    if (shouldOpenTryoutDock(env, onlineScore)) return { open: true, panel: 'tryout' }
     const w = window as unknown as { showOpenFilePicker?: unknown; showDirectoryPicker?: unknown }
     const profile = hostProfile(env, typeof w.showOpenFilePicker === 'function')
     const canPickDir = typeof w.showDirectoryPicker === 'function'
-    if (shouldOpenWorkspaceDock(profile, canPickDir)) return { open: true, panel: 'workspace' }
+    return { open: false, panel: shouldOpenWorkspaceDock(profile, canPickDir) ? 'workspace' : 'tryout' }
   } catch {
-    /* 环境探测失败 ⇒ 退回"收起 + 试听"（最保守的观感） */
+    /* 环境探测失败 ⇒ 收起 + 试听（最保守的观感） */
+    return { open: false, panel: 'tryout' }
   }
-  // adj1290：兜底面板由 'problems' 改为 'tryout'——告警已移出页签集合，
-  // 若仍指向 'problems' 会得到一个不存在的面板（首次展开时会落到空白）。
-  return { open: false, panel: 'tryout' }
 }
 
 /** adj322：宽/窄屏分界（≤1024px = 窄屏）。matchMedia 支持时用 mq，否则读 innerWidth。
@@ -560,6 +573,14 @@ interface UiState {
   toggleDock: (panel: DockPanelKey) => void
   /** dock 内部 tab 切换（保持展开）；dock 已关时同时展开 */
   setDockPanel: (panel: DockPanelKey) => void
+  /**
+   * adj1302（用户 2026-11-16 拍板）：**带谱进来**时（`?jps=` / `?src=`、拖放 `.jps`、双击 `.jps` 关联）
+   * 展开操作栏并落在**试听**面板。
+   *
+   * 口径：**直接打开应用一律不展开**（所有端）；只有"用户是带着一份谱来的"才展开——
+   * 那时他下一步多半是试听。三个入口都调这一处（URL 导入 / 拖放 / 桌面双击），不各写一遍。
+   */
+  openDockForIncomingFile: () => void
   /**
    * adj610：**展开底栏**（已展开时是幂等的无操作）。
    *
@@ -1271,6 +1292,8 @@ export const useUiStore = create<UiState>()((set) => ({
       return { dockPanel: panel }
     }),
   setDockPanel: (panel) => set({ dockOpen: true, dockPanel: panel }),
+  // adj1302：带谱进来（URL / 拖放 / 双击）⇒ 展开并落在试听
+  openDockForIncomingFile: () => set({ dockOpen: true, dockPanel: 'tryout' }),
   // adj610/adj1290：展开底栏的唯一实现（告警抽屉已独立，不再顺带切告警）
   expandDock: () => set({ dockOpen: true }),
   closeDock: () => set({ dockOpen: false }),

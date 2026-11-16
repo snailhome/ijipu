@@ -1837,6 +1837,12 @@ async function main() {
         await c.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount: 1 })
         await sleep(250)
       }
+      /**
+       * adj1301：右栏关闭后**仍留在 DOM 里**（关而不卸，为了播放不中断）⇒ 判断"开没开"
+       * 不能再写 `!!querySelector('.right-dock')`，要看 `hidden`。
+       */
+      const dockVisible = async () =>
+        await evalJs(c, `(() => { const d = document.querySelector('.right-dock'); return !!d && !d.hidden })()`)
       /** 点某元素的正中（先按它自己的 rect 算坐标） */
       const realClickOn = async (sel) => {
         const b = await boxOf(sel)
@@ -1872,9 +1878,9 @@ async function main() {
       await sleep(500)
 
       /**
-       * adj1297（用户 2026-11-16 拍板）：桌面网页版首次打开**默认收起**底栏/右栏
-       * ——把空间留给预览/编辑。`adj1289` 那条"桌面 Web 一进来就展开试听"已经下线
-       * （`shouldOpenTryoutDock` 只留"手机 Web + 线上谱"一种自动展开）。
+       * adj1302（用户 2026-11-16 拍板）：**直接打开应用一律不展开**操作栏（所有端）；
+       * `adj1297` 的"桌面首次收起"是这条的前身，`adj1289` 的"手机 Web + 线上谱"自动展开也已删除。
+       * 带谱进来（`?jps=` / 拖放 / 双击）才展开到试听（阶段 F 有专门用例）。
        * 所以这里先钉"两块壳都不在、但顶栏开关在"（入口不能一起消失），再手工点开继续量。
        */
       const firstOpen = await evalJs(
@@ -1919,14 +1925,15 @@ async function main() {
       // ---- ② 顶栏那个**常驻**按钮能开合（且它自己不被"点栏外关闭"误伤）----
       await realClickOn('.topbar-right-dock')
       check(
-        'adj1295 顶栏常驻按钮能**关**右栏（点它不会被"点栏外关闭"抢跑成"关了又开"）',
-        (await evalJs(c, `!!document.querySelector('.right-dock')`)) === false,
+        'adj1301 顶栏常驻按钮能**关**右栏（点它不会被"点栏外关闭"抢跑成"关了又开"；关=hidden，不卸载）',
+        (await dockVisible()) === false &&
+          (await evalJs(c, `!!document.querySelector('.right-dock[hidden]')`)) === true,
         '',
       )
       await realClickOn('.topbar-right-dock')
       check(
         'adj1295 再点一次能**开**',
-        (await evalJs(c, `!!document.querySelector('.right-dock')`)) === true,
+        (await dockVisible()) === true,
         '',
       )
 
@@ -2031,8 +2038,8 @@ async function main() {
       await evalJs(c, `window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })), true`)
       await sleep(250)
       check(
-        'adj1295 **负向②**：**插入模式**下 ESC **不关**右栏（它是布局的一部分）',
-        (await evalJs(c, `!!document.querySelector('.right-dock')`)) === true,
+        'adj1301 **负向②**：**插入模式**下 ESC **不关**右栏（它是布局的一部分）',
+        (await dockVisible()) === true,
         '',
       )
       await realClickOn('.right-dock-bar button[data-right-dock-mode]') // 插回浮动
@@ -2040,15 +2047,16 @@ async function main() {
       await evalJs(c, `window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })), true`)
       await sleep(250)
       check(
-        'adj1295 **负向②**：**浮动模式**下 ESC 关右栏',
-        (await evalJs(c, `!!document.querySelector('.right-dock')`)) === false,
+        'adj1301 **负向②**：**浮动模式**下 ESC 关右栏（关=hidden，面板树仍挂着）',
+        (await dockVisible()) === false &&
+          (await evalJs(c, `!!document.querySelector('.right-dock[hidden]')`)) === true,
         '',
       )
 
       // ---- ⑦ 点栏外关闭（浮动模式）----
       await realClickOn('.topbar-right-dock') // 重新打开（浮动档是记着的）
       await sleep(200)
-      const beforeOutside = await evalJs(c, `!!document.querySelector('.right-dock')`)
+      const beforeOutside = await dockVisible()
       /**
        * 点哪儿才算"栏外"：**内容区里、且不在右栏下面的那一点**。
        * 不能直接拿 `.editor-main textarea` 的中心——右栏是浮在上面的，中心点很可能正好落在
@@ -2068,7 +2076,7 @@ async function main() {
       await realClickAt(clickPt.x, clickPt.y)
       check(
         'adj1295 浮动栏**点栏外关闭**（在内容区左半边点一下 ⇒ 右栏收起来）',
-        beforeOutside === true && (await evalJs(c, `!!document.querySelector('.right-dock')`)) === false,
+        beforeOutside === true && (await dockVisible()) === false,
         JSON.stringify({ 点之前: beforeOutside, 点击点: clickPt }),
       )
 
@@ -2101,7 +2109,7 @@ async function main() {
         'adj1295 **负向①**：点工作区那种 **portal 到 body 的菜单**（`.ws-menu`）**不关**浮动栏',
         menuPlaced.portal === true &&
           menuPlaced.insideDock === false &&
-          (await evalJs(c, `!!document.querySelector('.right-dock')`)) === true,
+          (await dockVisible()) === true,
         JSON.stringify(menuPlaced),
       )
       await evalJs(c, `document.getElementById('adj1295-ws-menu')?.remove(), true`)
@@ -2925,7 +2933,7 @@ async function main() {
         )
       }
 
-      // ---- ⑩ 手机档：默认底栏 + 设置里**没有「右侧栏」** ----
+      // ---- ⑩ 手机档：默认**右侧浮动栏 + 宽档** + 设置里没有「右侧栏」 ----
       const DESKTOP_UA2 = await evalJs(c, 'navigator.userAgent')
       const MOBILE_UA2 =
         'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
@@ -2942,8 +2950,8 @@ async function main() {
             w: window.innerWidth, coarse: window.matchMedia('(pointer: coarse)').matches })`,
       )
       check(
-        'adj1294 手机（粗指针 + 移动 UA）首次默认**底栏**：右栏不存在、底栏在',
-        mobileShell.right === false && mobileShell.bottom === true && mobileShell.coarse === true,
+        'adj1302 手机直接打开**不展开**操作栏（用户拍板：所有端一致；底栏/右栏都不在）',
+        mobileShell.right === false && mobileShell.bottom === false && mobileShell.coarse === true,
         JSON.stringify(mobileShell),
       )
       await openGlobalSettings()
@@ -2962,37 +2970,34 @@ async function main() {
         JSON.stringify(mobileOpts),
       )
       /**
-       * adj1297：补上方案 §十 遗留的那一条——手机上右栏宽度**以前只有纯函数断言**
-       * （`dockWidthPx(…, true)`），没在真手机视口下量过像素宽。这里真切到「右侧浮动栏」量：
-       * 390 宽的屏 ⇒ 窄档 **195**（1/2）、宽档 **260**（2/3）。
-       * 同时这也是阶段 C 的"最窄一档"（195px），下面顺带确认工作区在那里也是上下排。
+       * adj1301（用户 2026-11-16 拍板）：手机默认 **右侧浮动栏 + 宽档**——
+       * 390 宽的屏 ⇒ 宽档 = 2/3 = **260px**（浮动，absolute）。
+       * 上面的「全局设置」入口已经把 dock 展开（浮动着、落在全局面板），这里直接量默认档；
+       * 再点一次宽度档切到窄档 **195**（1/2 屏宽），后半段"最窄一档"的用例继续用 195。
        */
-      await evalJs(
+      const mDefault = await evalJs(
         c,
         `(() => {
-           const row = [...document.querySelectorAll('.pcfg-row')].find((r) => r.textContent.includes('操作方式'))
-           const s = row && row.querySelector('select')
-           if (!s) return 'no-select'
-           Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(s, 'float')
-           s.dispatchEvent(new Event('change', { bubbles: true }))
-           return true
+           const d = document.querySelector('.right-dock:not([hidden])')
+           if (!d) return null
+           return { w: Math.round(d.getBoundingClientRect().width), float: d.dataset.dockFloat, width: d.dataset.dockWidth, pos: getComputedStyle(d).position }
          })()`,
       )
-      await sleep(600)
-      const mNarrow = await evalJs(
-        c,
-        `Math.round(document.querySelector('.right-dock')?.getBoundingClientRect().width ?? 0)`,
+      check(
+        'adj1301 手机（390 宽）默认**右侧浮动栏 + 宽档**：260px（2/3 屏宽）、position absolute',
+        !!mDefault && mDefault.float === '1' && mDefault.width === 'wide' && mDefault.w === 260 && mDefault.pos === 'absolute',
+        JSON.stringify(mDefault),
       )
       await realClickOn('.right-dock-bar button[data-right-dock-width]')
-      await sleep(300)
-      const mWide = await evalJs(
+      await sleep(350)
+      const mNarrow = await evalJs(
         c,
-        `Math.round(document.querySelector('.right-dock')?.getBoundingClientRect().width ?? 0)`,
+        `Math.round(document.querySelector('.right-dock:not([hidden])')?.getBoundingClientRect().width ?? 0)`,
       )
       check(
-        'adj1297 手机（390 宽）右栏宽度**真的按屏宽比例**：窄档 1/2 = 195、宽档 2/3 = 260（不再是纯函数断言）',
-        mNarrow === 195 && mWide === 260,
-        JSON.stringify({ 窄档: mNarrow, 宽档: mWide }),
+        'adj1301 手机切窄档 ⇒ 195px（1/2 屏宽，与 `dockWidthPx` 纯函数一致）',
+        mNarrow === 195,
+        JSON.stringify({ 窄档: mNarrow }),
       )
       // 最窄一档（195px）下工作区也得是上下排（阶段 B 收尾肉眼看到的那处"一字一行"就出在这一档）
       await evalJs(c, `document.querySelector('.right-dock [data-key="workspace"]').click(), true`)
@@ -3144,10 +3149,10 @@ async function main() {
         await waitFor(c, `location.search.includes('m=${stamp}')`, '阶段 E 新文档', 80)
         await waitFor(c, `!!document.querySelector('.topbar-right-dock')`, '阶段 E 顶栏', 80)
         await sleep(300)
-        // 手机档首次可能已自动展开（shouldOpenWorkspaceDock）⇒ 只在没开时点
-        if ((await evalJs(c, `!!document.querySelector('.right-dock')`)) === false) {
+        // 手机档首次可能已自动展开（shouldOpenWorkspaceDock）⇒ 只在没开时点（adj1301：关着时元素仍在，看 hidden）
+        if ((await evalJs(c, `(() => { const d = document.querySelector('.right-dock'); return !d || d.hidden })()`)) === true) {
           await evalJs(c, `document.querySelector('.topbar-right-dock').click(), true`)
-          await waitFor(c, `!!document.querySelector('.right-dock')`, '阶段 E 右栏', 80)
+          await waitFor(c, `!!document.querySelector('.right-dock:not([hidden])')`, '阶段 E 右栏', 80)
         }
         await sleep(300)
       }
@@ -3349,6 +3354,154 @@ async function main() {
       await c.send('Emulation.setTouchEmulationEnabled', { enabled: false })
       await c.send('Emulation.setUserAgentOverride', { userAgent: DESKTOP_UA5 })
       await evalJs(c, `localStorage.clear(), true`)
+
+      // ---- ⑰ 阶段 F（adj1301）：关栏不停播 + 顶栏试听按钮下方的小工具条 ----
+      {
+        // headless 里不真下 30MB 音源：只把 `.sf2` 的 fetch 拦成快速失败（其余请求照常），
+        // 播放会走"无声降级"（色块/时钟照常走），正好用来验"关栏不停播"。
+        await c.send('Page.addScriptToEvaluateOnNewDocument', {
+          source: `(() => {
+            // headless 没有音频输出：AudioContext.resume() 会永远悬着，backend.ready() 因此卡住
+            // ⇒ 这里只把 resume 改成立即成功（状态仍是"无声"），让播放走"无声降级"的视觉路径。
+            try { if (window.AudioContext) window.AudioContext.prototype.resume = () => Promise.resolve() } catch (e) {}
+            const orig = window.fetch
+            window.fetch = function (input, init) {
+              const url = typeof input === 'string' ? input : (input && input.url) || ''
+              if (/\\.sf2(\\?|$)/i.test(url)) return Promise.reject(new Error('stage F: 跳过音源下载'))
+              return orig.call(this, input, init)
+            }
+          })()`,
+        })
+        await evalJs(c, `localStorage.clear(), true`)
+        // adj1302：**带谱进来**才展开——链接带谱（`?jps=`）⇒ 自动展开右栏并落在试听
+        await c.send('Page.navigate', { url: `${origin}/app/?jps=${encodeURIComponent('1 2 3 | 4 5 6')}` })
+        await waitFor(
+          c,
+          `!!document.querySelector('.right-dock:not([hidden]) .pane-tryout:not([hidden])')`,
+          '阶段 F 链接带谱自动展开试听',
+          100,
+        )
+        check('adj1302 链接带谱（`?jps=`）打开应用 ⇒ **自动展开右栏并落在试听**（直接打开则不展开）', true)
+        // 回到"直接打开"：默认不展开（两块壳都不在）
+        await evalJs(c, `localStorage.clear(), true`)
+        await c.send('Page.navigate', { url: `${origin}/app/?m=stageF` })
+        await waitFor(c, `location.search.includes('m=stageF')`, '阶段 F 新文档', 80)
+        await waitFor(c, `!!document.querySelector('.topbar-right-dock')`, '阶段 F 顶栏', 80)
+        await sleep(400)
+        const directOpen = await evalJs(
+          c,
+          `({ right: !!document.querySelector('.right-dock:not([hidden])'), bottom: !!document.querySelector('.tool-dock:not(.right-dock)') })`,
+        )
+        check(
+          'adj1302 **直接打开**应用（无 `?jps=` / 拖放 / 双击）⇒ 操作栏不展开（底栏与右栏都不在）',
+          directOpen.right === false && directOpen.bottom === false,
+          JSON.stringify(directOpen),
+        )
+        // 默认壳 = 右浮动栏 + 窄档（320）
+        await evalJs(c, `document.querySelector('.topbar-right-dock').click(), true`)
+        await waitFor(c, `!!document.querySelector('.right-dock:not([hidden])')`, '阶段 F 右栏')
+        const shellF = await evalJs(
+          c,
+          `(() => {
+             const d = document.querySelector('.right-dock:not([hidden])')
+             if (!d) return null
+             return { float: d.dataset.dockFloat, width: d.dataset.dockWidth, w: Math.round(d.getBoundingClientRect().width) }
+           })()`,
+        )
+        check(
+          'adj1301 桌面默认壳：**右侧浮动栏 + 窄档 320**（打开后；"首屏两块壳都不在"由前面的用例守着）',
+          !!shellF && shellF.float === '1' && shellF.width === 'narrow' && shellF.w === 320,
+          JSON.stringify(shellF),
+        )
+        // 打开试听并开始播放
+        await evalJs(c, `document.querySelector('.right-dock [data-key="tryout"]').click(), true`)
+        await waitFor(
+          c,
+          `!!document.querySelector('.right-dock .pane-tryout:not([hidden]) .playback-actions .playback-btn')`,
+          '阶段 F 试听面板',
+          80,
+        )
+        await evalJs(
+          c,
+          `document.querySelector('.right-dock .pane-tryout .playback-actions .playback-btn').click(), true`,
+        )
+        await waitFor(
+          c,
+          `(() => { const b = document.querySelector('.right-dock .pane-tryout .playback-actions .playback-btn'); return !!b && /暂停\\(A\\)/.test(b.textContent || '') })()`,
+          '阶段 F 进入播放态',
+          120,
+        )
+        // 关栏 ⇒ 面板树仍在（hidden）、小工具条出现
+        await evalJs(c, `document.querySelector('.topbar-right-dock').click(), true`)
+        await waitFor(c, `!!document.querySelector('.right-dock[hidden]')`, '阶段 F 关栏后元素仍在')
+        await waitFor(c, `!!document.querySelector('.playback-mini')`, '阶段 F 小工具条')
+        const mini = await evalJs(
+          c,
+          `(() => {
+             const bar = document.querySelector('.playback-mini')
+             const topbar = document.querySelector('.topbar')
+             const btn = document.querySelector('.topbar-toolbar button[data-tool-key="playback"]')
+             if (!bar || !topbar || !btn) return null
+             const br = bar.getBoundingClientRect(), tr = topbar.getBoundingClientRect(), kr = btn.getBoundingClientRect()
+             const btns = [...bar.querySelectorAll('.playback-mini-btn')]
+             return {
+               n: btns.length,
+               gapBelowTopbar: Math.round(br.top - tr.bottom),
+               centerDelta: Math.round(Math.abs((br.left + br.right) / 2 - (kr.left + kr.right) / 2)),
+               icons: bar.querySelectorAll('.tool-icon').length,
+               titles: btns.map((b) => b.getAttribute('title') || ''),
+             }
+           })()`,
+        )
+        check(
+          'adj1301 关栏后小工具条出现：**三个按钮**（播放·暂停 / 停止 / 设置）、图标齐全、位置在顶栏「试听」按钮正下方',
+          !!mini &&
+            mini.n === 3 &&
+            mini.icons === 3 &&
+            mini.gapBelowTopbar >= 4 &&
+            mini.gapBelowTopbar <= 12 &&
+            mini.centerDelta <= 2,
+          JSON.stringify(mini),
+        )
+        // 播放·暂停（第一个按钮）
+        await evalJs(c, `document.querySelectorAll('.playback-mini-btn')[0].click(), true`)
+        await waitFor(
+          c,
+          `(document.querySelectorAll('.playback-mini-btn')[0]?.getAttribute('title') || '').includes('继续播放')`,
+          '阶段 F 工具条暂停',
+        )
+        await evalJs(c, `document.querySelectorAll('.playback-mini-btn')[0].click(), true`)
+        await waitFor(
+          c,
+          `(document.querySelectorAll('.playback-mini-btn')[0]?.getAttribute('title') || '').includes('暂停')`,
+          '阶段 F 工具条继续',
+        )
+        // 设置（第三个按钮）⇒ 重新展开右栏、落在试听面板；仍是播放态 ⇒ 证明关栏期间会话没断
+        await evalJs(c, `document.querySelectorAll('.playback-mini-btn')[2].click(), true`)
+        await waitFor(
+          c,
+          `!!document.querySelector('.right-dock:not([hidden]) .pane-tryout:not([hidden])')`,
+          '阶段 F 设置打开试听面板',
+        )
+        const stillPlaying = await evalJs(
+          c,
+          `(() => { const b = document.querySelector('.right-dock .pane-tryout .playback-actions .playback-btn'); return !!b && /暂停\\(A\\)/.test(b.textContent || '') })()`,
+        )
+        check(
+          'adj1301 关栏期间**播放会话没断**：经小工具条「设置」重新展开，试听按钮仍是「暂停(A)」（没有被卸载重置）',
+          stillPlaying === true,
+        )
+        // 再关栏，点停止 ⇒ 工具条自动消失、面板回到播放态
+        await evalJs(c, `document.querySelector('.topbar-right-dock').click(), true`)
+        await waitFor(c, `!!document.querySelector('.playback-mini')`, '阶段 F 第二次关栏工具条')
+        await evalJs(c, `document.querySelectorAll('.playback-mini-btn')[1].click(), true`)
+        await waitFor(c, `!document.querySelector('.playback-mini')`, '阶段 F 停止后工具条消失')
+        const stoppedF = await evalJs(
+          c,
+          `(() => { const b = document.querySelector('.right-dock[hidden] .pane-tryout .playback-actions .playback-btn'); return !!b && /播放\\(A\\)/.test(b.textContent || '') })()`,
+        )
+        check('adj1301 小工具条「停止」生效：工具条消失、试听按钮回到「播放(A)」', stoppedF === true)
+      }
 
     c.close()
   } catch (e) {

@@ -7,6 +7,8 @@
  */
 import { Suspense, lazy, useEffect, useRef, useSyncExternalStore } from 'react'
 import { TopBar } from './ui/TopBar'
+// adj1301：浮动右栏收起后、试听还在播时的「三个按钮」小工具条（挂在顶栏试听按钮下方）
+import { PlaybackMiniBar } from './ui/PlaybackMiniBar'
 import { EditorFootBar } from './ui/EditorFootBar'
 import { ToolDock } from './ui/ToolDock'
 // adj1295：右侧操作栏（底栏的另一种壳：插入挤窄内容 / 浮动盖住内容）
@@ -112,6 +114,8 @@ function App() {
     }
     if (incoming !== null) {
       useDocStore.getState().importSource(incoming)
+      // adj1302（用户 2026-11-16 拍板）：带谱进来才展开操作栏，且落在**试听**
+      useUiStore.getState().openDockForIncomingFile()
       strip()
       return
     }
@@ -126,6 +130,8 @@ function App() {
       .then((code) => {
         if (!alive) return
         useDocStore.getState().importSource(code)
+        // adj1302：链接带谱（`?src=` 线上谱）同样展开到试听
+        useUiStore.getState().openDockForIncomingFile()
         strip()
       })
       .catch((e: unknown) => {
@@ -150,7 +156,10 @@ function App() {
     if (!hasShell()) return
     const load = () => {
       void drainExternalFiles().then((files) => {
-        if (files.length > 0) useDocStore.getState().openExternalFiles(files)
+        if (files.length > 0 && useDocStore.getState().openExternalFiles(files)) {
+          // adj1302：双击 `.jps`（冷启动/热启动）打开成功 ⇒ 展开到试听
+          useUiStore.getState().openDockForIncomingFile()
+        }
       })
     }
     load() // ① 冷启动：处理启动参数带来的文件
@@ -659,6 +668,8 @@ function App() {
   return (
     <div className="app" data-theme={theme} data-mode={effectiveMode} data-soften={previewSoften}>
       <TopBar />
+      {/* adj1301：右栏浮动且收起、试听还在跑时，这条小工具条才出现（位置跟着顶栏「试听」按钮） */}
+      <PlaybackMiniBar />
       {/* adj1295（方案 §五）：`.app-body` = 横向容器，编辑/预览在左、右栏在右。
           · **插入模式**：右栏是 flex 子项，真的把编辑/预览挤窄；
           · **浮动模式**：右栏绝对定位贴右、通高，不改变内容宽度。

@@ -12203,6 +12203,19 @@ smoke 五条含"来源切换成对"结构断言与负对照） |
   ② `verify:app-ui` 留**正反两向**：96px 必须一行，**临时压回 76px 必须两行**（负对照）——
   只判"一行"的话，把列宽写成 200 也会绿；③ 这类真值只有真浏览器量得出（`smoke` 只能钉 CSS 写法）。
 
+### E-2026-586 headless 里 `AudioContext.resume()` 永远不 resolve ⇒ 试听卡在「准备中…」（`adj1301` 验证时踩到）
+
+- **现象**：给"关栏不停播"写 `verify:app-ui` 用例时，点「播放」后按钮一直显示「准备中…」，
+  20 秒也不进入播放态（真机上同一个按钮立刻变「暂停(A)」）。
+- **根因**：headless Chrome **没有音频输出设备**——`new AudioContext()` 的 state 是 `suspended`，
+  `resume()` 返回的 Promise **永远 pending**；而 `SpessaSynthBackend.ready()` 里 `ensureCtx()` 会
+  `await this.ctx.resume()` ⇒ 整条播放链卡在第一步。真机有输出设备（且按钮点击本身是用户手势），不会卡。
+- **解决**：测试注入里把 `AudioContext.prototype.resume` 改成立即 resolve（音频仍不可用，走"无声降级"：
+  序列/色块/时钟照常），并把 `.sf2` 的 fetch 拦成快速失败（避免真下 30MB）。
+- **预防**：① 用 headless 验"播放状态机"时，**音频三件套都要先打桩**（AudioContext / 音源文件 / 手势），
+  否则卡在「准备中…」会被误判成产品 bug（本轮就是这样绕了一圈）；② 这类用例只验"状态与 UI 联动"，
+  **不验真的出声**——出声必须真机/手动验，别在文档里写成"已验"。
+
 
 
 

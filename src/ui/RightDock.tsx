@@ -90,6 +90,13 @@ export function RightDock() {
   const [vw, setVw] = useState(() => (typeof window === 'undefined' ? 1440 : window.innerWidth))
   /** 首次激活才挂载（与底栏同一口径，见文件头"面板状态"） */
   const [everActive, setEverActive] = useState<readonly DockPanelKey[]>([panel])
+  /**
+   * adj1301（用户要求「浮动栏隐藏时播放不停止」）：**关而不卸**。
+   * 第一次真正显示过之后，即便 `dockOpen` 变 false 也继续挂着整棵面板树（用 `hidden` 藏起来），
+   * 这样试听的音源/时钟不会被卸载清理掉；小工具条（`PlaybackMiniBar`）才接得上。
+   * 没开过时**不挂**——免得一进应用就预取音色库、跑无关面板的副作用。
+   */
+  const [everShown, setEverShown] = useState(false)
   /** 页签条溢出状态：`start`/`end` = 两端还能不能滚；`overflowing` = 是否真的溢出（决定箭头占不占位） */
   const [ov, setOv] = useState({ start: false, end: false, overflowing: false })
 
@@ -132,6 +139,11 @@ export function RightDock() {
   useEffect(() => {
     setEverActive((prev) => (prev.includes(panel) ? prev : [...prev, panel]))
   }, [panel])
+
+  // adj1301：只要真正显示过一次，就记住"本会话已挂载过"（关掉时只隐藏、不卸载）
+  useEffect(() => {
+    if (active) setEverShown(true)
+  }, [active])
 
   /**
    * adj1295：**ESC 只在浮动模式关闭右栏**（验收负向②：插入模式的右栏是布局的一部分，
@@ -283,8 +295,10 @@ export function RightDock() {
     el.scrollBy(vertical ? { top: delta, behavior: 'smooth' } : { left: delta, behavior: 'smooth' })
   }
 
-  // 只有"右侧栏 + 已展开"才渲染（底栏模式下整块不存在，`ToolDock` 同理自锁）
-  if (!active) return null
+  // 只有"右侧栏"这一种壳才归本组件；底栏模式整块不渲染。
+  // adj1301：本会话显示过之后，`dockOpen=false` 只**隐藏**（`hidden`）而不卸载——
+  // 试听播放中关栏时音源/时钟继续跑（用户要求"播放不停止"）。
+  if (side !== 'right' || !(active || everShown)) return null
 
   // adj1293：可见页签判据共用（嵌入版过滤「工作区」；右栏同源）
   const visibleTabs = dockVisibleTabs()
@@ -364,12 +378,15 @@ export function RightDock() {
       // 复用 `tool-dock` 是为了让 8 个面板的既有 CSS（`.tool-dock .pcfg-*` 等）继续生效——
       // 右栏与底栏装的**是同一批组件**，样式不该有两套。`.right-dock` 只覆盖"壳"的几项
       // （宽度/高度上限/边框/浮动定位），见 index.css 末尾那一节。
-      className={`tool-dock right-dock is-${float ? 'float' : 'insert'}${vertical ? ' tabs-vert' : ''}`}
+      className={`tool-dock right-dock is-${float ? 'float' : 'insert'}${vertical ? ' tabs-vert' : ''}${active ? '' : ' is-hidden'}`}
       aria-label={dockRightCopy.wrapLabel}
+      // adj1301：关栏只隐藏（面板树继续挂载 ⇒ 试听不中断）；CSS `.right-dock[hidden]{display:none}` 覆盖 `.tool-dock` 的 flex
+      hidden={!active}
       data-dock-side="right"
       data-dock-float={float ? '1' : '0'}
       data-dock-tabs={tabsPos}
       data-dock-width={width}
+      data-dock-open={active ? '1' : '0'}
     >
       {/* 顶部工具条：三个按钮（宽度档 / 页签位置 / 插入⇄浮动）——
           全部**显示当前状态**，提示里写"点击 → 下一档"（与底栏那个"显示下一步"的档位按钮不同：

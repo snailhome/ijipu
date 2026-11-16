@@ -207,29 +207,10 @@ export function shouldOpenWorkspaceDock(p: FileHostProfile, canPickDir: boolean)
   return p.id === 'limited' && canPickDir
 }
 
-/**
- * `adj1289` 立、`adj1297` **收窄**：网页版什么时候一打开就把「试听」展开。
- *
- * **新口径（用户 2026-11-16 拍板）**：桌面网页版首次打开**默认收起**底栏/右栏，
- * 把空间留给预览/编辑——`adj1289` 当时"桌面浏览器一进来就展开试听"的默认值因此下线。
- * 现在只剩一种情况会自动展开：**手机网页版从乐谱站打开线上谱（`?src=`）**——
- * 那一档的用途就是"点开就听"，而且手机上底栏默认展开本来就是各自的文件习惯（见
- * `shouldOpenWorkspaceDock`）。桌面壳 / 插件 / 已装 PWA 一律不自动展开。
- *
- * ⚠ 这只是"首次没有存档时"的默认值；用户自己按开过底栏/右栏后 `dockOpen` 由 `uiStore` 记忆
- * （L3 会话态，不落盘 ⇒ 下次重开还是按本函数给默认）。
- */
-export function shouldOpenTryoutDock(env: RuntimeEnv, onlineScore: boolean): boolean {
-  if (env.shell !== 'web') return false
-  // adj1297：桌面网页版首次收起（用户拍板：把空间还给预览/编辑）；手机网页版保持 adj1289 的线上谱优先试听
-  if (env.device !== 'mobile') return false
-  return onlineScore
-}
-
 /* =====================================================================================
  * adj1294：**操作栏「壳」的按端默认与宽度换算**（底栏 / 右侧栏 / 右侧浮动栏）
  *
- * 为什么放在这个文件：它和上面的 `shouldOpenWorkspaceDock` / `shouldOpenTryoutDock` 是同一族判据——
+ * 为什么放在这个文件：它和上面的 `shouldOpenWorkspaceDock` 是同一族判据——
  * 「**这台设备该默认怎么摆**」，而且都必须能在 Node 里逐端断言（smoke 有闸门）。
  * 一旦写进组件里，三端就只能靠真机一个个试，且"手机默认底栏"这条规则会散成好几处 if。
  *
@@ -256,19 +237,28 @@ export interface DockModeDefault {
 /**
  * adj1294：**按端算默认壳**（纯函数，只在"没有存档"时用；用户改过设置就以存档为准）。
  *
- * | 端 | 默认 | 为什么 |
- * |---|---|---|
- * | 手机 / 平板（粗指针）| 底栏 | 屏宽不够，320 的右栏在 375 宽上几乎全屏 |
- * | 插件嵌入版（`shell === 'host'`）| 底栏 | 它通常挂在 Obsidian 的侧栏/窄面板里，右栏会把可用宽吃掉 |
- * | 桌面壳 / 桌面浏览器 / 已装 PWA | **右侧浮动栏** | 桌面宽度富余；浮动不挤占编辑/预览，点栏外即收 |
+ * adj1301（用户 2026-11-16，手机实测后拍板）：**所有端默认「右侧浮动栏」**——
+ * 手机上原来默认底栏，用户实机试过"右浮动栏效果也可以"，于是统一成浮动栏（不挤占内容、
+ * 点栏外即收）。原来的「手机 ⇒ 底栏」「插件嵌入版 ⇒ 底栏」两条特例**一并下线**。
+ * 宽度档的默认值另见 `defaultDockWidth`（窄屏默认宽档）。
  *
- * ⚠ 与 `shouldOpenTryoutDock`（adj1289，管"打开时展开哪个面板"）**互不影响**——
- * 那个说"先看哪块面板"，这个说"壳摆在哪一边"。
+ * ⚠ 与**首次开不开**互不影响（`adj1302`：直接打开一律收起；只有带谱进来才由
+ * `openDockForIncomingFile()` 展开到试听）——那个说"开不开"，这个说"壳摆在哪一边"。
  */
-export function defaultDockMode(env: RuntimeEnv): DockModeDefault {
-  if (env.device === 'mobile') return { side: 'bottom', float: false }
-  if (env.shell === 'host') return { side: 'bottom', float: false }
+export function defaultDockMode(_env: RuntimeEnv): DockModeDefault {
   return { side: 'right', float: true }
+}
+
+/**
+ * adj1301：**按端算默认宽度档**（只在"没有存档"时用）。
+ *
+ * 用户 2026-11-16 拍板：「窄屏模式下为右栏宽栏，其它模式为窄栏」——
+ * 窄屏（粗指针：手机/平板）默认 **wide**（2/3 屏宽；390 屏 = 260px），
+ * 其它（桌面壳 / 桌面浏览器 / PWA）默认 **narrow**（320px，45vw 夹紧）。
+ * 用户手切过档位就以存档（`ijipu.dockWidth`）为准，不受这里影响。
+ */
+export function defaultDockWidth(env: RuntimeEnv): DockWidth {
+  return env.device === 'mobile' ? 'wide' : 'narrow'
 }
 
 /**

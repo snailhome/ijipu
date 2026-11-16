@@ -41,6 +41,8 @@ import { Modal } from '../ui/Modal'
 import { ToolIcon } from '../ui/ToolIcon'
 import { useDocStore } from '../store/docStore'
 import { useUiStore, enabledVoicesOf } from '../store/uiStore'
+// adj1301：把播放控制登记给「顶栏下方的小工具条」（栏关着时只有它在）
+import { setPlaybackBridge } from '../store/playbackBridge'
 // adj729：嵌入版里音源优先取**插件目录**那份（宿主给的 URL；随文库一起走）
 import { hostBankUrl } from '../store/hostBridge'
 import { playbackCopy } from '../brand/copy'
@@ -475,6 +477,28 @@ export function PlaybackDialog({ inline = false }: { inline?: boolean } = {}) {
     if (paused) resume()
     else pause()
   }
+
+  /**
+   * adj1301（用户要求）：把播放控制登记到 `store/playbackBridge`，
+   * 供**顶栏下方的小工具条**（`ui/PlaybackMiniBar.tsx`）使用。
+   *
+   * 关键：右栏关掉时**本组件不再卸载**（见 `ui/RightDock.tsx` 的"关而不卸"），
+   * 所以音频/时钟继续跑；小工具条只负责显示状态与转发两个动作，不持有播放状态。
+   * 动作经 ref 取最新闭包（effect 依赖只写 `playing/paused/starting`，避免每次渲染重登记）。
+   */
+  const bridgeActionsRef = useRef({ toggle: onPlayToggle, stop })
+  bridgeActionsRef.current = { toggle: onPlayToggle, stop }
+  useEffect(() => {
+    setPlaybackBridge({
+      playing,
+      paused,
+      starting,
+      toggle: () => bridgeActionsRef.current.toggle(),
+      stop: () => bridgeActionsRef.current.stop(),
+    })
+  }, [playing, paused, starting])
+  // 卸载（切回底栏壳 / 关页面）时清空登记，免得小工具条对着已死的会话发命令
+  useEffect(() => () => setPlaybackBridge(null), [])
 
   const play = async () => {
     stop()

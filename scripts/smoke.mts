@@ -294,7 +294,7 @@ import { foldKeys, TOPBAR_DONATE_KEY, TOPBAR_FIXED_KIDS } from '../src/ui/topbar
 // adj538：桌面壳「外部打开」——多文件取舍是纯逻辑，可在 Node 里直接断言（模块不碰 window 顶层）
 import { pickPrimary, hasShell, type ExternalFile } from '../src/store/externalOpen.ts'
 // adj966：文件宿主能力与降级决策（纯函数 ⇒ 逐端逐档断言，不必真跑三端；口径见 docs/FILE-MODEL.md）
-import { defaultDockMode, dockWidthPx, hostIdOf, hostProfile, decideWriteMode, decideWatch, decideWriteGate, shouldGuidePersistPermission, shouldOpenWorkspaceDock, shouldOpenTryoutDock, docStateOf } from '../src/store/fileHost.ts'
+import { defaultDockMode, defaultDockWidth, dockWidthPx, hostIdOf, hostProfile, decideWriteMode, decideWatch, decideWriteGate, shouldGuidePersistPermission, shouldOpenWorkspaceDock, docStateOf } from '../src/store/fileHost.ts'
 // adj1294：设置里那个「操作方式」三选一是 dockSide/dockFloat 的合成视图（纯函数）
 import { dockModeOf } from '../src/store/uiStore.ts'
 import type { FileHostProfile } from '../src/store/fileHost.ts'
@@ -27699,58 +27699,54 @@ function runAdj966Tests() {
     shouldOpenWorkspaceDock(hostProfile(mobileWeb, true), true) &&
       shouldOpenWorkspaceDock(hostProfile(mobileWeb, true), false) === false &&
       shouldOpenWorkspaceDock(lim, false) === false, '')
-  check(
-    'adj1297 首次默认**收起**（用户 2026-11-16 拍板）：桌面网页版（含已装 PWA / 桌面壳 / 插件）**不再**自动展开试听——把空间留给预览/编辑',
-    shouldOpenTryoutDock(web, false) === false &&
-      shouldOpenTryoutDock(web, true) === false &&
-      shouldOpenTryoutDock(pwa, true) === false &&
-      shouldOpenTryoutDock(tauri, true) === false &&
-      shouldOpenTryoutDock(host, true) === false &&
-      // 两条"首次展开"的判据同时为假 ⇒ `initialDock()` 落到 `{ open: false }`（首次收起）
-      shouldOpenWorkspaceDock(hostProfile(web, true), true) === false,
-    JSON.stringify({
-      桌面Web: shouldOpenTryoutDock(web, false),
-      桌面Web_线上谱: shouldOpenTryoutDock(web, true),
-      已装PWA_线上谱: shouldOpenTryoutDock(pwa, true),
-      桌面壳: shouldOpenTryoutDock(tauri, true),
-      插件: shouldOpenTryoutDock(host, true),
-      桌面Web_工作区判据: shouldOpenWorkspaceDock(hostProfile(web, true), true),
-    }),
-  )
-  check(
-    'adj1297 **只收窄不删**（adj1289 唯一保留的那一支）：手机网页版从乐谱站打开线上谱（`?src=`）仍默认展开试听；手机普通打开仍留给工作区',
-    shouldOpenTryoutDock(mobileWeb, true) && shouldOpenTryoutDock(mobileWeb, false) === false,
-    JSON.stringify({
-      手机Web_线上谱: shouldOpenTryoutDock(mobileWeb, true),
-      手机Web_普通: shouldOpenTryoutDock(mobileWeb, false),
-    }),
-  )
+  /**
+   * adj1302（用户 2026-11-16 拍板）：**直接打开应用一律不展开**操作栏（所有端）；
+   * 只有"带谱进来"（`?jps=` / `?src=`、拖放 `.jps`、双击 `.jps`）才展开，并落在**试听**。
+   * 于是 `adj1289`（手机线上谱自动展开试听）与 `adj575`（手机受限档自动展开工作区）两条**下线**。
+   */
   {
-    const uiSrc = String(readFileSync('src/store/uiStore.ts', 'utf8'))
-    const topSrc = String(readFileSync('src/ui/TopBar.tsx', 'utf8'))
-    /** 接线判据（抽成函数是为了负对照：改一份源码文本进去，它必须判假） */
-    const wired = (u: string, t: string): boolean =>
-      u.includes('shouldOpenWorkspaceDock(profile, canPickDir)') &&
-      u.includes("return { open: true, panel: 'workspace' }") &&
-      u.includes('dockOpen: initialDock().open') &&
-      !t.includes('(await getWorkspace())')
-    check('adj966g 接线：底栏默认页走 `shouldOpenWorkspaceDock`；「打开…」里**不再**"设过工作区就走面板"',
-      wired(uiSrc, topSrc),
+    const uiSrc1302 = String(readFileSync('src/store/uiStore.ts', 'utf8'))
+    const appSrc1302 = String(readFileSync('src/App.tsx', 'utf8'))
+    const dropSrc1302 = String(readFileSync('src/store/dropOpen.ts', 'utf8'))
+    check(
+      'adj1302 首次**一律收起**：`initialDock()` 恒返回 `open: false`（面板默认值仍按端：手机受限档 → 工作区、其它 → 试听）',
+      uiSrc1302.includes(
+        "return { open: false, panel: shouldOpenWorkspaceDock(profile, canPickDir) ? 'workspace' : 'tryout' }",
+      ) &&
+        uiSrc1302.includes('dockOpen: initialDock().open') &&
+        !uiSrc1302.includes('return { open: true') &&
+        !uiSrc1302.includes('shouldOpenTryoutDock'),
       JSON.stringify({
-        uiStore接线: uiSrc.includes('shouldOpenWorkspaceDock(profile, canPickDir)'),
-        TopBar已去掉工作区那一支: !topSrc.includes('(await getWorkspace())'),
-      }))
-    check('adj966g **负对照**：① 把底栏判据换成恒假；② 把 `(await getWorkspace())` 那一支塞回 TopBar ⇒ 两条都判假',
-      !wired(uiSrc.replace('shouldOpenWorkspaceDock(profile, canPickDir)', 'false'), topSrc) &&
-        !wired(
-          uiSrc,
-          topSrc.replace(
-            'await openFile()',
-            "if (await getWorkspace()) { toggleDock('workspace'); return }\n    await openFile()",
-          ),
-        ),
-      '')
+        恒收起: uiSrc1302.includes("return { open: false, panel:"),
+        仍在自动展开: uiSrc1302.includes('return { open: true'),
+        旧判据已删: !uiSrc1302.includes('shouldOpenTryoutDock'),
+      }),
+    )
+    check(
+      'adj1302 **带谱进来才展开到试听**：动作定义一处（`openDockForIncomingFile`），URL / 拖放 / 双击三个入口都调它',
+      uiSrc1302.includes("openDockForIncomingFile: () => set({ dockOpen: true, dockPanel: 'tryout' })") &&
+        (appSrc1302.match(/openDockForIncomingFile\(\)/g) ?? []).length >= 2 &&
+        dropSrc1302.includes('useUiStore.getState().openDockForIncomingFile()'),
+      JSON.stringify({
+        App调用: (appSrc1302.match(/openDockForIncomingFile\(\)/g) ?? []).length,
+        拖放调用: dropSrc1302.includes('openDockForIncomingFile()'),
+      }),
+    )
+    check(
+      'adj1302 **负对照**：拖放入口不调那个动作 ⇒ 判据判红（它真的在数三个入口的接线，不是看名字）',
+      !(
+        uiSrc1302.includes("openDockForIncomingFile: () => set({ dockOpen: true, dockPanel: 'tryout' })") &&
+        (appSrc1302.match(/openDockForIncomingFile\(\)/g) ?? []).length >= 2 &&
+        dropSrc1302.replace('useUiStore.getState().openDockForIncomingFile()', '').includes('openDockForIncomingFile()')
+      ),
+      '',
+    )
   }
+  check(
+    'adj966g **负向**：「打开…」里不按"设过工作区"走面板（`(await getWorkspace())` 那一支不在 TopBar）',
+    !String(readFileSync('src/ui/TopBar.tsx', 'utf8')).includes('(await getWorkspace())'),
+    '',
+  )
 
   /**
    * adj966：桌面壳"不再自动接管工作区"必须**明确告知一次**（用户不该以为文件丢了）——
@@ -27841,15 +27837,8 @@ function runAdj1294Tests() {
   const hostD: RuntimeEnv = { shell: 'host', host: 'obsidian', device: 'desktop', installed: false }
   const mobileDefault = defaultDockMode(webM)
   check(
-    'adj1294 默认壳：手机/平板 ⇒ 底栏；插件嵌入版 ⇒ 底栏；桌面壳/桌面浏览器/已装 PWA ⇒ **右侧浮动栏**',
-    mobileDefault.side === 'bottom' &&
-      mobileDefault.float === false &&
-      defaultDockMode(hostD).side === 'bottom' &&
-      defaultDockMode(tauriD).side === 'right' &&
-      defaultDockMode(tauriD).float === true &&
-      defaultDockMode(webD).side === 'right' &&
-      defaultDockMode(webD).float === true &&
-      defaultDockMode(pwaD).side === 'right',
+    'adj1301 默认壳：**所有端**（手机/平板、插件嵌入版、桌面壳 / 桌面浏览器 / 已装 PWA）一律 **右侧浮动栏**',
+    [webM, webD, pwaD, tauriD, hostD].every((e) => defaultDockMode(e).side === 'right' && defaultDockMode(e).float === true),
     JSON.stringify({
       手机: mobileDefault,
       插件: defaultDockMode(hostD),
@@ -27859,9 +27848,20 @@ function runAdj1294Tests() {
     }),
   )
   check(
-    'adj1294 **负对照**：同一个前端只把 `device` 改成 `mobile` ⇒ 默认值必须翻成底栏（证明判据真的读设备，不是写死 PC）',
-    defaultDockMode(webD).side === 'right' && defaultDockMode({ ...webD, device: 'mobile' }).side === 'bottom',
-    JSON.stringify({ 桌面: defaultDockMode(webD), 手机: defaultDockMode({ ...webD, device: 'mobile' }) }),
+    'adj1301 默认宽度档：**窄屏（粗指针）⇒ wide**（2/3 屏宽）、其它 ⇒ narrow（320）',
+    defaultDockWidth(webM) === 'wide' &&
+      defaultDockWidth(webD) === 'narrow' &&
+      defaultDockWidth(tauriD) === 'narrow' &&
+      defaultDockWidth(hostD) === 'narrow',
+    JSON.stringify({ 手机: defaultDockWidth(webM), 桌面: defaultDockWidth(webD), 插件: defaultDockWidth(hostD) }),
+  )
+  check(
+    'adj1301 **负对照**：同一个前端只把 `device` 改成 `mobile` ⇒ 壳不变（都右浮动）、宽度档翻成 wide（证明宽度判据真的读设备）',
+    defaultDockMode(webD).side === 'right' &&
+      defaultDockMode({ ...webD, device: 'mobile' }).side === 'right' &&
+      defaultDockWidth(webD) === 'narrow' &&
+      defaultDockWidth({ ...webD, device: 'mobile' }) === 'wide',
+    JSON.stringify({ 桌面: defaultDockWidth(webD), 手机: defaultDockWidth({ ...webD, device: 'mobile' }) }),
   )
 
   // ================= ② 宽度换算（纯函数） =================
@@ -27930,6 +27930,12 @@ function runAdj1294Tests() {
       /getItem\(DOCK_TABS_POS_KEY\) === 'right' \? 'right' : 'bottom'/.test(uiCode),
     '',
   )
+  check(
+    'adj1301 宽度档默认值也按端算：没存过 ⇒ `defaultDockWidth(getRuntimeEnv())`（窄屏 wide / 其它 narrow），存过就照存档',
+    uiCode.includes('defaultDockWidth(getRuntimeEnv())') &&
+      /if \(v === 'wide' \|\| v === 'narrow'\) return v/.test(uiCode),
+    '',
+  )
   const modeOf = (s: 'bottom' | 'right', f: boolean): string => dockModeOf({ dockSide: s, dockFloat: f })
   check(
     'adj1294 设置里那个「操作方式」是**合成视图**（不是第三个存储键）：底栏 / 右侧栏(插入) / 右侧浮动栏',
@@ -27983,12 +27989,69 @@ function runAdj1294Tests() {
     '',
   )
   check(
-    'adj1295 右栏**自锁**（不是右侧栏模式就整块不渲染）+ 宽度写成 CSS 变量（Toast 让位共用同一个值）',
+    'adj1301 右栏**自锁**（不是右侧栏模式就整块不渲染）+ **关而不卸**（关栏只 `hidden`，试听不中断）+ 宽度写成 CSS 变量',
     rdCode.includes("const active = open && side === 'right'") &&
-      rdCode.includes('if (!active) return null') &&
+      rdCode.includes("if (side !== 'right' || !(active || everShown)) return null") &&
+      rdCode.includes('hidden={!active}') &&
+      !rdCode.includes('if (!active) return null') &&
       rdCode.includes("setProperty('--jp-right-dock-w'"),
     '',
   )
+
+  // ================= ④b adj1301：关栏不停播的控制桥 + 顶栏下方的小工具条 =================
+  {
+    const bridgeSrc = String(readFileSync('src/store/playbackBridge.ts', 'utf8'))
+    const pdSrc = String(readFileSync('src/dialogs/PlaybackDialog.tsx', 'utf8'))
+    const miniSrc = String(readFileSync('src/ui/PlaybackMiniBar.tsx', 'utf8'))
+    const topbarSrc = String(readFileSync('src/ui/TopBar.tsx', 'utf8'))
+    const cssCss = String(readFileSync('src/index.css', 'utf8'))
+    check(
+      'adj1301 播放控制桥：状态 + 两个动作（toggle/stop）都有 get/subscribe，`PlaybackDialog` 挂载登记、卸载清空',
+      ['export function setPlaybackBridge', 'export function getPlaybackBridge', 'export function subscribePlaybackBridge'].every(
+        (s) => bridgeSrc.includes(s),
+      ) &&
+        pdSrc.includes('setPlaybackBridge({') &&
+        pdSrc.includes('setPlaybackBridge(null)') &&
+        /useSyncExternalStore\(subscribePlaybackBridge, getPlaybackBridge/.test(miniSrc),
+      '',
+    )
+    check(
+      'adj1301 小工具条**只有三个按钮**（播放·暂停 / 停止 / 设置），图标分别是 play·pause / stop / settings',
+      (miniSrc.match(/className="playback-mini-btn"/g) ?? []).length === 3 &&
+        miniSrc.includes("name={bridge.playing && !bridge.paused ? 'pause' : 'play'}") &&
+        miniSrc.includes('name="stop"') &&
+        miniSrc.includes('name="settings"'),
+      JSON.stringify({ 按钮数: (miniSrc.match(/className="playback-mini-btn"/g) ?? []).length }),
+    )
+    check(
+      'adj1301 小工具条**只在"右栏 + 浮动 + 已收起 + 会话进行中"时出现**（底栏/插入/栏开着都不显示），宽高与右栏顶部按钮一致',
+      /side === 'right' && float && !open/.test(miniSrc) &&
+        miniSrc.includes('bridge.playing || bridge.starting') &&
+        /\.playback-mini \{[\s\S]{0,200}?position: fixed;/.test(cssCss) &&
+        /\.playback-mini-btn \{[\s\S]{0,200}?width: 28px;[\s\S]{0,80}?height: 28px;/.test(cssCss),
+      '',
+    )
+    check(
+      'adj1301 小工具条「设置」重新展开右栏并落在**试听面板**（`setDockPanel(\'tryout\')`），关闭后不残留',
+      miniSrc.includes("setDockPanel('tryout')") && /if \(!visible \|\| bridge === null \|\| pos === null\) return null/.test(miniSrc),
+      '',
+    )
+    check(
+      'adj1301 小工具条**锚在顶栏「试听」按钮正下方**：真实按钮带 `data-tool-key`，量不到（被折叠）时退化贴顶栏右下角',
+      topbarSrc.includes('data-tool-key={t.key}') &&
+        miniSrc.includes('.topbar-toolbar button[data-tool-key="playback"]') &&
+        miniSrc.includes("anchor: 'center'") &&
+        miniSrc.includes("anchor: 'right'"),
+      '',
+    )
+    check(
+      'adj1301 App 渲染了 `<PlaybackMiniBar />`；右栏关闭时用 `hidden` 隐藏但**不卸载**（播放会话继续）',
+      String(readFileSync('src/App.tsx', 'utf8')).includes('<PlaybackMiniBar />') &&
+        /\.right-dock\[hidden\] \{\s*display: none;/.test(cssCss) &&
+        /if \(active\) setEverShown\(true\)/.test(rdCode),
+      '',
+    )
+  }
 
   // ================= ⑤ App / 底栏：`.app-body` 与两壳自锁 =================
   const appSrc = String(readFileSync('src/App.tsx', 'utf8'))

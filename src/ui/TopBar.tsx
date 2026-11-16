@@ -882,6 +882,9 @@ export function TopBar() {
     return (
       <button
         key={t.key}
+        // adj1301：给真实按钮也打上 key（此前只有测量容器里的隐形副本有）——
+        // 「顶栏试听按钮下方」的小工具条要按 `[data-tool-key="playback"]` 找锚点
+        data-tool-key={t.key}
         className={`topbar-btn${t.active ? ' active-guide' : ''}`}
         onClick={t.onPick}
         title={t.title ?? t.label}

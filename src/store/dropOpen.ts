@@ -115,6 +115,8 @@ async function openDroppedItems(items: DataTransferItem[]): Promise<void> {
     return
   }
   const ok = await useDocStore.getState().openDropped({ handle, file })
+  // adj1302（用户 2026-11-16 拍板）：拖进来的谱打开成功 ⇒ 展开操作栏并落在**试听**
+  if (ok) useUiStore.getState().openDockForIncomingFile()
   if (ok && pick.extraCount > 0) ui.showNotice(dropOpenCopy.extraIgnored(pick.extraCount), 'ok')
 }
 
