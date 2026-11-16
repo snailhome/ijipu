@@ -14842,7 +14842,8 @@ function runAdj538ExternalOpenTests() {
   const conf = String(readFileSync('src-tauri/tauri.conf.json', 'utf8'))
   check('adj538 注册 .jps 关联（ext + name 即 ProgID + 描述 + mimeType）',
     /"fileAssociations"/.test(conf) &&
-      /"ext":\s*\["jps"\]/.test(conf) &&
+      // adj1300 起 `version:auto` 会用 `JSON.stringify` 重排配置 ⇒ 这里按 JSON 语义判（允许换行/缩进）
+      /"ext":\s*\[\s*"jps"\s*\]/.test(conf) &&
       /"name":\s*"iJipu\.jps"/.test(conf) &&
       /"description":\s*"[^"]*"/.test(conf) &&
       /"mimeType":\s*"application\/x-jps"/.test(conf),
