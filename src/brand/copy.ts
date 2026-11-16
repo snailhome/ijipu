@@ -267,6 +267,10 @@ export const workspaceCopy = {
       ——把"切换工作区"这个动作从路径面包屑里彻底分离出去，根目录名恢复成普通的面包屑段（点击=回工作区根）。
       adj569：图标由 `工作区.png` 换成专用的 `切换工作区.png`（页签那处仍是 `工作区.png`） */
   workspaceBtnTitle: '切换工作区目录',
+  /** adj1305（用户要求）：面包屑右侧的图标按钮——在系统文件管理器里打开**当前目录**
+      （只有桌面壳的路径后端有绝对路径；网页版 FSA / 插件宿主桥拿不到 ⇒ 不渲染这个按钮） */
+  openDirTitle: '在文件管理器打开当前目录',
+  openDirFailed: (reason: string): string => `打开文件夹失败：${reason}`,
   up: '上级目录',
   emptyDir: '这个文件夹里没有 .jps 文件',
   rootLabel: '工作区',

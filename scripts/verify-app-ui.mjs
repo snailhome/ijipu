@@ -3311,6 +3311,10 @@ async function main() {
         !!wsRow && wsRow.clearIcon === true && wsRow.clearText === '' && wsRow.clearMask.length > 0,
         JSON.stringify(wsRow && { clearIcon: wsRow.clearIcon, clearText: wsRow.clearText }),
       )
+      check(
+        'adj1305 网页版工作区（假 FSA 句柄）**不显示**「在文件管理器打开当前目录」按钮（没有绝对路径 ⇒ 不给入口）',
+        (await evalJs(c, `!!document.querySelector('.right-dock .pane-workspace .ws-open-dir-btn')`)) === false,
+      )
       // 260 档（手机宽档）：单列门槛 280 ⇒ 标签一行、控件一行、控件拿整宽（不再 76 + 146）
       const DESKTOP_UA5 = await evalJs(c, 'navigator.userAgent')
       const MOBILE_UA5 =

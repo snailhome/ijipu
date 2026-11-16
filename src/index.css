@@ -4469,6 +4469,8 @@ textarea.score-pkg-input { min-height: 64px; resize: vertical; }
   display: flex;
   align-items: center;
   gap: 2px;
+  /* adj1305：面包屑吃掉中间剩余宽 ⇒ 右侧那个「在文件管理器打开」按钮贴到行尾 */
+  flex: 1 1 auto;
   min-width: 0;
   overflow-x: auto;
   white-space: nowrap;
@@ -4661,7 +4663,10 @@ textarea.score-pkg-input { min-height: 64px; resize: vertical; }
 /* adj544（用户要求）：左侧"切换工作区"图标按钮——**与底栏"收起底栏"按钮同款样式**
  * （`.tool-dock-collapse`：1px 边框 + 7px 圆角 + 主文字色 + hover 三联动），
  * 让"图标 + 边框按钮"在底栏与面板里观感一致；图标经 `ToolIcon`（CSS mask 跟主题色）。 */
-.ws-workspace-btn {
+/* adj1305（用户要求）：面包屑右侧的「在文件管理器打开当前目录」按钮——
+ * 与左侧「切换工作区」同一个外观（1px 边框 + 7px 圆角 + 28×28），视觉上一对。 */
+.ws-workspace-btn,
+.ws-open-dir-btn {
   flex: none;
   display: inline-flex;
   align-items: center;
@@ -4676,16 +4681,19 @@ textarea.score-pkg-input { min-height: 64px; resize: vertical; }
   cursor: pointer;
   transition: all 0.15s;
 }
-.ws-workspace-btn:hover:not(:disabled) {
+.ws-workspace-btn:hover:not(:disabled),
+.ws-open-dir-btn:hover:not(:disabled) {
   border-color: var(--jp-accent);
   color: var(--jp-accent);
   background: var(--jp-bg-panel-hover);
 }
-.ws-workspace-btn:focus-visible {
+.ws-workspace-btn:focus-visible,
+.ws-open-dir-btn:focus-visible {
   outline: 2px solid var(--jp-accent);
   outline-offset: -2px;
 }
-.ws-workspace-btn:disabled {
+.ws-workspace-btn:disabled,
+.ws-open-dir-btn:disabled {
   opacity: 0.5;
   cursor: default;
 }

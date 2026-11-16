@@ -128,6 +128,12 @@ export const ICON_FILES = {
    */
   reset: '恢复默认',
   save: '保存',
+  /**
+   * adj1305（用户要求）：工作区面包屑右侧的「**在文件管理器打开当前目录**」按钮。
+   * 图形：文件夹 + 指向右上的外链箭头（"把当前目录交给系统文件管理器"）。
+   * 只在桌面壳的路径后端渲染（网页版 FSA / 插件宿主桥没有绝对路径）。
+   */
+  openFolder: '打开目录',
 } as const
 
 export type ToolIconName = keyof typeof ICON_FILES

@@ -329,6 +329,8 @@ import {
 } from '../packages/ijipu-cli/src/envPath'
 // adj540：工作区（Android/移动端"文件夹当工作区"）——纯逻辑部分在 Node 里直接断言
 import {
+  // adj1305：桌面路径后端"当前目录"的绝对路径（面包屑右侧按钮用它）
+  absoluteDirOf,
   isHiddenName,
   isJpsName,
   isValidEntryName,
@@ -15603,8 +15605,8 @@ async function runAdj540WorkspaceTests() {
   check('adj540 面包屑**左对齐**（去掉 .ws-head 里的 space-between）+ 切换按钮**与底栏收起按钮同款样式**（1px 边框 + 7px 圆角 + 主文字色）',
     !/\.ws-head \{[\s\S]{0,400}?justify-content: space-between/.test(cssAll) &&
       // adj543（用户要求）：切换工作区按钮改成与 `.tool-dock-collapse` 一致（不是无底色圆形了）
-      /\.ws-workspace-btn \{[\s\S]{0,300}?border: 1px solid var\(--jp-border\)[\s\S]{0,120}?border-radius: 7px/.test(cssAll) &&
-      /\.ws-workspace-btn \{[\s\S]{0,400}?color: var\(--jp-text-primary\)/.test(cssAll) &&
+      /\.ws-workspace-btn,\s*\.ws-open-dir-btn \{[\s\S]{0,300}?border: 1px solid var\(--jp-border\)[\s\S]{0,120}?border-radius: 7px/.test(cssAll) &&
+      /\.ws-workspace-btn,\s*\.ws-open-dir-btn \{[\s\S]{0,400}?color: var\(--jp-text-primary\)/.test(cssAll) &&
       /\.tool-dock-collapse \{[\s\S]{0,300}?border: 1px solid var\(--jp-border\)/.test(cssAll) &&
       /white-space: nowrap/.test(cssAll) &&
       !/\.ws-crumb-root \{[\s\S]{0,200}?text-overflow: ellipsis/.test(cssAll),
@@ -15677,6 +15679,34 @@ async function runAdj540WorkspaceTests() {
       // adj544：删除当前打开的谱 ⇒ 解绑并清掉持久化的来源（否则重启后又"以为"绑定在已删文件上）
       /set\(\{ binding: null, pendingBinding: null \}\)/.test(store),
     '')
+
+  // ---- adj1305（用户要求）：工作区面包屑右侧「在文件管理器打开当前目录」----
+  check(
+    'adj1305 当前目录绝对路径：路径后端按 `根\\段` 拼；根目录 = 根；无 `dir`（网页 FSA / 宿主桥）⇒ null',
+    absoluteDirOf({ dir: 'D:\\谱' }, ['A', 'B']) === 'D:\\谱\\A\\B' &&
+      absoluteDirOf({ dir: 'D:\\谱' }, []) === 'D:\\谱' &&
+      absoluteDirOf({}, ['A']) === null &&
+      absoluteDirOf(null, []) === null &&
+      absoluteDirOf({ dir: 'D:\\谱' }, ['A', '.', '..', '']) === 'D:\\谱\\A',
+    JSON.stringify({
+      普通: absoluteDirOf({ dir: 'D:\\谱' }, ['A', 'B']),
+      根: absoluteDirOf({ dir: 'D:\\谱' }, []),
+      无dir: absoluteDirOf({}, ['A']),
+    }),
+  )
+  {
+    const uiCss1305 = String(readFileSync('src/index.css', 'utf8'))
+    check(
+      'adj1305 面包屑右侧按钮：**只在路径后端**渲染、点它用 `open_local_path` 打开当前目录；图标/文案/CSS 齐',
+      /isPathWorkspace\(ws\)[\s\S]{0,120}?ws-open-dir-btn/.test(panelSrc) &&
+        /absoluteDirOf\(ws, path\)[\s\S]{0,260}?openLocalPath\(abs, false\)/.test(panelSrc) &&
+        /openDirTitle: '在文件管理器打开当前目录'/.test(copySrc) &&
+        ICON_FILES.openFolder === '打开目录' &&
+        existsSync(join(root, 'public', ICON_DIR, '打开目录.png')) &&
+        /\.ws-workspace-btn,\s*\.ws-open-dir-btn \{[\s\S]{0,220}?width: 28px;[\s\S]{0,80}?height: 28px;/.test(uiCss1305),
+      JSON.stringify({ icon: ICON_FILES.openFolder, file: existsSync(join(root, 'public', ICON_DIR, '打开目录.png')) }),
+    )
+  }
 
   // ---- adj558（v0.28.2）：工作区"新建目录"——文案 + 行为两件事一起修 ----
   // ① 文案："新建夹" → "新建目录"；notice 里"已新建文件夹" → "已新建目录"
@@ -18359,7 +18389,8 @@ async function runAdj541DockToggleTests() {
   }
   check('adj545/adj549（用户要求）面板**上面包屑整行 + 下分左右两栏**：左=列表；右=过滤三件套 / 操作▾ / 匹配提示',
     // 上：ws-head（切换工作区按钮 + 面包屑）在 ws-body **之前**，独占一行
-    /<div className="ws-panel">[\s\S]{0,600}?<div className="ws-head">[\s\S]{0,1400}?className="ws-workspace-btn"[\s\S]{0,2000}?className="ws-crumb"[\s\S]{0,4000}?<div className="ws-body">[\s\S]{0,400}?<div className="ws-left">[\s\S]{0,800}?className=\{`ws-list[\s\S]{0,7000}?<div className="ws-side">/.test(
+    // adj1305：面包屑右侧多了「在文件管理器打开」按钮（约 1.1k 字符注释+JSX）⇒ crumb→body 的距离上限 4000 → 7000
+    /<div className="ws-panel">[\s\S]{0,600}?<div className="ws-head">[\s\S]{0,1400}?className="ws-workspace-btn"[\s\S]{0,2000}?className="ws-crumb"[\s\S]{0,7000}?<div className="ws-body">[\s\S]{0,400}?<div className="ws-left">[\s\S]{0,800}?className=\{`ws-list[\s\S]{0,7000}?<div className="ws-side">/.test(
       wsPanelSrc,
     ) &&
       // adj1298（用户第五轮）：右栏里三块**都在**（顺序 = 提示信息 → 搜索行 → 操作按钮）。

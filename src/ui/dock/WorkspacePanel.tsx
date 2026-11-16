@@ -41,6 +41,7 @@ import { ToolIcon } from '../ToolIcon'
 // adj585（用户要求）：长说明收进可点击展开的 `?` 徽标（触屏也能看），不再常驻占高度
 import { HelpBadge } from '../HelpBadge'
 import {
+  absoluteDirOf,
   activateWorkspace,
   dedupeWorkspaceRecord,
   filterHitsInScope,
@@ -70,6 +71,8 @@ import {
   type SearchResult,
 } from '../../store/workspace'
 import { isHostEmbedded } from '../../store/hostBridge'
+// adj1305：桌面壳"在文件管理器打开当前目录"（Tauri 命令 open_local_path）
+import { openLocalPath } from '../../store/externalOpen'
 import { loadWorkspaceIndex, saveWorkspaceIndex } from '../../store/fileHandleDb'
 import { INDEX_STALE_MS, getInflightWarmScan, markWorkspaceDataChanged } from '../../store/workspaceIndexWarm'
 
@@ -790,6 +793,24 @@ export function WorkspacePanel() {
     }
   }
 
+  /**
+   * adj1305（用户要求）：**在文件管理器打开当前目录**（面包屑右侧的图标按钮）。
+   *
+   * 只有桌面壳的**路径后端**有绝对路径（`absoluteDirOf` 返回 null ⇒ 按钮根本不渲染）；
+   * 网页版 FSA 句柄与插件宿主桥都给不出系统路径，按口径"非适用端不给入口"。
+   * 打开动作复用 `adj1183` 的 `open_local_path`（`reveal=false` = 用系统默认方式打开该路径；
+   * 传目录时 Windows 就是资源管理器）。失败如实提示，不静默。
+   */
+  const openCurrentDir = async () => {
+    const abs = absoluteDirOf(ws, path)
+    if (abs === null) return
+    try {
+      await openLocalPath(abs, false)
+    } catch (e) {
+      showNotice(workspaceCopy.openDirFailed(e instanceof Error ? e.message : String(e)), 'error')
+    }
+  }
+
   /** 补授权（用户点了按钮 ⇒ 手势成立）；adj544：授权成功后顺便尝试"恢复绑定到原文件" */
 
   /** 补授权（用户点了按钮 ⇒ 手势成立）；授权成功 = 满足前置条件 ⇒ 走同一条"定位到最新位置" */
@@ -1282,6 +1303,19 @@ export function WorkspacePanel() {
             </span>
           ))}
         </div>
+        {/* adj1305（用户要求）：面包屑**右侧**——在系统文件管理器打开当前目录。
+            只有桌面壳的路径后端有绝对路径（`isPathWorkspace` + `ws.dir`），网页版/嵌入版不渲染。 */}
+        {ws !== null && isPathWorkspace(ws) && ws.dir ? (
+          <button
+            type="button"
+            className="ws-open-dir-btn"
+            onClick={() => void openCurrentDir()}
+            title={workspaceCopy.openDirTitle}
+            aria-label={workspaceCopy.openDirTitle}
+          >
+            <ToolIcon name="openFolder" />
+          </button>
+        ) : null}
         {/* 「移动到…」模式下头部显示目标提示 */}
         {moving && (
           <span className="ws-move-hint">

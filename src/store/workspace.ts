@@ -161,6 +161,19 @@ export function joinPath(segs: readonly string[]): string {
 }
 
 /**
+ * adj1305（用户要求）：**路径后端工作区"当前目录"的绝对路径**（给"在文件管理器打开"用）。
+ *
+ * · 只有桌面壳的路径后端（记录里有 `dir`）才有绝对路径；网页版 FSA 与插件宿主桥都拿不到 ⇒ 返回 `null`
+ *   （调用方据此**不渲染**那个按钮——按口径"非适用端不给入口"）。
+ * · 段一律先过 `normalizeRelPath`（丢掉空段/`.`/`..`），再按 Windows 分隔符 `\` 接在根目录后面。
+ */
+export function absoluteDirOf(rec: { dir?: string } | null, segs: readonly string[]): string | null {
+  if (!rec || typeof rec.dir !== 'string' || rec.dir === '') return null
+  const parts = normalizeRelPath(segs)
+  return parts.length === 0 ? rec.dir : `${rec.dir}\\${parts.join('\\')}`
+}
+
+/**
  * adj580/adj588：过滤/索引的**作用域键**。
  *
  * adj580 时它是「工作区身份 + 起始目录」——索引按目录分开存，为的是"在子目录里过滤只看这一层子树"。
