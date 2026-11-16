@@ -25,14 +25,12 @@
  * `max-height` —— 这样"各栏独立滚动"是**算出来的确定值**，不依赖 flex 链的隐式收窄
  * （此前依赖 flex 链，在部分情况下栏不会收窄 → 内容溢出被 overflow:hidden 裁掉、无法操作）。
  */
-import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import type { ComponentType } from 'react'
+import { Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useUiStore, type DockPanelKey } from '../store/uiStore'
-// adj724b：嵌入版里隐藏「工作区」页签（文件操作交给 Obsidian）
-import { isHostEmbedded } from '../store/hostBridge'
 import { dockCopy } from '../brand/copy'
 import { ToolIcon } from './ToolIcon'
-import type { ToolIconName } from './toolIcons'
+// adj1293：页签定义 / 面板懒加载映射 / 可见页签判据搬到共用模块（右栏用的是同一份）
+import { PANELS, dockVisibleTabs } from './dock/dockPanels'
 import { beginDrag } from './dragGesture'
 // adj609：ESC 最小化底栏后把焦点交回编辑区（选择器留在编辑层，见该模块说明）
 import { focusEditorTextarea } from '../editor/editorFocus'
@@ -40,47 +38,21 @@ import { focusEditorTextarea } from '../editor/editorFocus'
 import { KBD, withKbd } from '../brand/shortcuts'
 
 /**
- * adj497（用户要求"各页签做成懒加载、首次打开才加载，以加快启动"）：**五个面板全部走 `React.lazy`**。
+ * adj497（用户要求"各页签做成懒加载、首次打开才加载，以加快启动"）：**全部面板走 `React.lazy`**。
  *
- * 此前只有试听/设置/关于是 lazy，**告警与导出是静态 import** ⇒ 它们的代码（以及导出侧那串重依赖：
+ * 此前只有试听/设置/关于是 lazy，导出是静态 import ⇒ 它的代码（以及导出侧那串重依赖：
  * `export/export` 的 PDF 链、`export/audio` 的 WAV/MP3 编码、`playback/spessaCache` 等）
  * 会**在启动时就进主包并被加载**，白白拖慢首屏。
  *
  * 懒加载只在**首次渲染到该面板**时触发（`PANELS.filter(p => everActive.includes(p.key))` 保证
  * 只有"被打开过"的面板才渲染）⇒ 没点开过的页签，其 chunk 永远不会被下载。
  * `Suspense` 的 fallback（`.dock-empty`「加载中…」）只会在首次打开的那一瞬出现。
+ *
+ * adj1293：这些 lazy 组件、`PANELS`、`TABS` 与可见页签判据都已搬到 `./dock/dockPanels`
+ * （右栏共用同一份；两壳只在布局上不同，不在内容上）。
  */
-const TryoutPanel = lazy(() => import('../dialogs/PlaybackDialog').then((m) => ({ default: () => <m.PlaybackDialog inline /> })))
-// adj603（用户要求）：原「设置」一个页签拆成两个——「全局」（视图/主题/音色库）与「谱面」（布局/字体）。
-// 同一个 PageConfigDialog 渲染**两份**（各带 section），子页签状态因此各自独立。
-const SettingsPanel = lazy(() => import('../dialogs/PageConfigDialog').then((m) => ({ default: () => <m.PageConfigDialog inline section="global" /> })))
-const ScoreSettingsPanel = lazy(() => import('../dialogs/PageConfigDialog').then((m) => ({ default: () => <m.PageConfigDialog inline section="score" /> })))
-// adj492：「关于」从弹窗迁入 dock（与原「试听/导出/设置」同一套路）
-const AboutPanel = lazy(() => import('../dialogs/AboutDialog').then((m) => ({ default: () => <m.AboutDialog inline /> })))
-// adj497：导出改为懒加载（原为静态 import）
-// adj1290：告警面板已移出页签集合（独立成 `ui/ProblemsDrawer.tsx`），不再是这里的懒加载项
-const ExportPanel = lazy(() => import('./dock/ExportPanel').then((m) => ({ default: m.ExportPanel })))
-// adj540：工作区（移动端的"文件管理器"：选文件夹当工作区 + 子目录 + 打开/新建/重命名/移动/删除）
-const WorkspacePanel = lazy(() => import('./dock/WorkspacePanel').then((m) => ({ default: m.WorkspacePanel })))
-// adj562：「粘贴源码导入」迁入底栏（页签排在工作区之后）——原弹窗入口下线，与 adj492「关于」同套路
-const ImportPanel = lazy(() => import('../dialogs/PasteImportDialog').then((m) => ({ default: () => <m.PasteImportDialog inline /> })))
-// adj641（用户要求）：查找替换（编辑区 Ctrl+F 的落点；查找与替换整合在一个页签里）
-const FindPanel = lazy(() => import('./dock/FindPanel').then((m) => ({ default: m.FindPanel })))
 
-/** 面板（顺序即标签栏顺序）；adj540：工作区**排第一**（手机端文件操作主入口，用户要求）；
- *  adj562：导入**紧跟在它后面**（用户要求"就在工作区后面加一个「导入」页签"）；
- *  adj641：查找替换**再紧跟导入**（同属"改内容"的动作，且它与导入一样是编辑期的操作面板）；
- *  adj603：「谱面」紧跟在「全局」（原「设置」）后面（用户要求拆分后再成对出现） */
-const PANELS: readonly { key: DockPanelKey; render: ComponentType }[] = [
-  { key: 'workspace', render: WorkspacePanel },
-  { key: 'import', render: ImportPanel },
-  { key: 'find', render: FindPanel },
-  { key: 'tryout', render: TryoutPanel },
-  { key: 'export', render: ExportPanel },
-  { key: 'settings', render: SettingsPanel },
-  { key: 'score', render: ScoreSettingsPanel },
-  { key: 'about', render: AboutPanel },
-]
+// adj1293：`PANELS` 已搬到 `./dock/dockPanels`（右栏共用同一份面板集合与顺序）。
 
 /**
  * dock 高度 = 外壳（抓手 + 页签栏）+ 内容区（上下内边距 + 内容本身）。
@@ -240,37 +212,9 @@ const clampH = (v: number, chromeH: number) => {
 }
 
 /**
- * 底栏面板页签（adj486：图标改用**顶栏同一套矢量图标**；adj492：新增「关于」；adj562：新增「导入」）。
- *
- * 由来（用户报）：这几个页签此前用的是 **Unicode 字符**（`⚠ ▶ ⬇ ⚙`）当图标——与顶栏按钮那套
- * "用户设计的线稿图标"不是一路货：字形粗细/留白/基线各不相同，与面板里的其它图标摆在一起显得杂，
- * 而同一个"试听/导出/设置"在顶栏是设计图标、在底栏却是个字符。现统一为 `ToolIcon`（同一套 PNG + mask 上色）。
- *
- * adj565（用户要求）：**最后一个字符兜底也没了**——告警用 `public/icons/告警.png`、关于用
- * `public/icons/关于.png`。至此 7 个页签**全部**是设计图标，于是把 `glyph` 字段与
- * `t.icon ? <ToolIcon/> : t.glyph` 那个分支一并删掉（类型上 `icon` 变为**必填**），
- * 从结构上杜绝"再借某个字符当图标"（与 adj458 删掉 `rotate` 复用同一思路）。
+ * adj1293：页签定义（`TABS`）已搬到 `./dock/dockPanels`——右栏用**同一份**页签与顺序。
+ * 图标口径（一律设计图标、`icon` 必填、不再有字符兜底）的说明也随定义一起搬过去了。
  */
-const TABS: { key: DockPanelKey; label: string; icon: ToolIconName; kbd?: string }[] = [
-  // adj540：工作区排第一（手机端文件操作主入口，用户要求）；图标用 `public/icons/工作区.png`
-  // adj617（用户要求）：页签的提示文本后面带上快捷键（键名来自 `brand/shortcuts.ts` 一处定义）
-  //
-  // adj724b（用户实测反馈 #2）：**嵌入版里不显示"工作区"页签**。
-  // 理由（用户原话）：「工作区已没有存在的意义，除了保存，所有与文件相关的操作都可以由 ob 代劳」。
-  // 实现：`visibleTabs` 过滤掉它（见下方），其它形态（网页版 / 桌面版）保持原样。
-  { key: 'workspace', label: dockCopy.tabWorkspace, icon: 'workspace', kbd: KBD.workspace },
-  // adj562：导入紧跟工作区（用户要求）；adj564：图标用设计图 `public/icons/导入.png`
-  { key: 'import', label: dockCopy.tabImport, icon: 'import', kbd: KBD.import },
-  // adj641（用户要求）：查找替换紧跟导入（同属"改内容"的动作）；图标是本次新画的放大镜（`public/icons/查找.png`）
-  { key: 'find', label: dockCopy.tabFind, icon: 'find', kbd: KBD.find },
-  { key: 'tryout', label: dockCopy.tabTryout, icon: 'play', kbd: KBD.tryout },
-  { key: 'export', label: dockCopy.tabExport, icon: 'export', kbd: KBD.export },
-  // adj603：原「设置」页签改名为「全局」（本机偏好），紧跟其后新增「谱面」（谱面设置）
-  { key: 'settings', label: dockCopy.tabSettings, icon: 'settings' },
-  { key: 'score', label: dockCopy.tabScore, icon: 'scoreSettings' },
-  // adj565：关于图标由 `ⓘ` 字符换成设计图 `public/icons/关于.png`
-  { key: 'about', label: dockCopy.tabAbout, icon: 'about' },
-]
 
 /**
  * adj469：**内容较少的面板默认高度 = "能显示全内容的最小高度"**。
@@ -976,7 +920,8 @@ export function ToolDock() {
    * 用户原话：「嵌入版 iJipu 工作区已没有存在的意义，除了保存，所有与文件相关的操作都可以由 ob 代劳，
    * 因此工作区可以取消」。范围经用户确认为**仅嵌入版**——网页版 / 桌面版仍以工作区做文件管理。
    */
-  const visibleTabs = isHostEmbedded() ? TABS.filter((t) => t.key !== 'workspace') : TABS
+  // adj1293：可见页签判据收进共用模块（嵌入版过滤「工作区」，右栏同源）
+  const visibleTabs = dockVisibleTabs()
 
   return (    <section
       ref={dockRef}

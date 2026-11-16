@@ -398,6 +398,15 @@ const GRACE_SLOT_W_MULTI = defaultPageConfig.note_size * GRACE_SLOT_RATIO_MULTI 
 const root = process.cwd()
 
 let failed = 0
+/**
+ * adj1293：底栏实现的"源码"现在分两个文件——壳（`ui/ToolDock.tsx`）与**共用的**页签/面板集合
+ * （`ui/dock/dockPanels.tsx`，右栏也用它）。凡是"页签有哪些 / 面板映射成什么"的断言必须**两份都读**，
+ * 否则搬家一次就集体误报（本轮实测：抽文件后 12 条断言同时变红）。
+ */
+function readDockSrc(): string {
+  return String(readFileSync('src/ui/ToolDock.tsx', 'utf8')) + String(readFileSync('src/ui/dock/dockPanels.tsx', 'utf8'))
+}
+
 function check(name: string, cond: boolean, detail?: string) {
   if (cond) {
     console.log(`  ✓ ${name}`)
@@ -15095,7 +15104,7 @@ async function runAdj540WorkspaceTests() {
   const ui = String(readFileSync('src/store/uiStore.ts', 'utf8'))
   const appSrc = String(readFileSync('src/App.tsx', 'utf8'))
   const topSrc = String(readFileSync('src/ui/TopBar.tsx', 'utf8'))
-  const dockSrc = String(readFileSync('src/ui/ToolDock.tsx', 'utf8'))
+  const dockSrc = readDockSrc()
   const panelSrc = String(readFileSync('src/ui/dock/WorkspacePanel.tsx', 'utf8'))
   // adj590：索引的落盘格式（按工作区各存一份）也在这个作用域里断言
   const fhSrc = String(readFileSync('src/store/fileHandleDb.ts', 'utf8'))
@@ -15861,7 +15870,7 @@ async function runAdj540WorkspaceTests() {
 
   // ---- adj562：粘贴源码导入迁入底栏「导入」页签（用户要求"就在工作区后面"） ----
   check('adj562 「导入」面板接线：懒加载 + `inline` 模式 + 排在 workspace 之后 + 文案 `tabImport`',
-    /const ImportPanel = lazy\(\(\) => import\('\.\.\/dialogs\/PasteImportDialog'\)\.then\(\(m\) => \(\{ default: \(\) => <m\.PasteImportDialog inline \/> \}\)\)\)/.test(dockSrc) &&
+    /export const ImportPanel = lazy\(\(\) =>\s*import\('\.\.\/\.\.\/dialogs\/PasteImportDialog'\)\.then\(\(m\) => \(\{ default: \(\) => <m\.PasteImportDialog inline \/> \}\)\)/.test(dockSrc) &&
       /tabImport: '导入'/.test(copySrc) &&
       /export function PasteImportDialog\(\{ inline = false \}: \{ inline\?: boolean \} = \{\}\)/.test(
         String(readFileSync('src/dialogs/PasteImportDialog.tsx', 'utf8')),
@@ -16512,7 +16521,7 @@ function runAdj607Tests() {
  */
 function runAdj608Tests() {
   console.log('[136] 焦点在底栏里按 ESC ⇒ 最小化底栏 + 档位状态同步（adj608）')
-  const dockSrc = String(readFileSync('src/ui/ToolDock.tsx', 'utf8'))
+  const dockSrc = readDockSrc()
   const wsPanel = String(readFileSync('src/ui/dock/WorkspacePanel.tsx', 'utf8'))
   const cfgSrc = String(readFileSync('src/dialogs/PageConfigDialog.tsx', 'utf8'))
   const scSrc = String(readFileSync('src/dialogs/ShortcutsDialog.tsx', 'utf8'))
@@ -16611,7 +16620,7 @@ function runAdj608Tests() {
  */
 function runAdj609610Tests() {
   console.log('[137] 底栏键盘操作补全：ESC 焦点归编辑区 + Ctrl+D / Ctrl+H（adj609/adj610）')
-  const dockSrc = String(readFileSync('src/ui/ToolDock.tsx', 'utf8'))
+  const dockSrc = readDockSrc()
   const appSrc = String(readFileSync('src/App.tsx', 'utf8'))
   const uiSrc = String(readFileSync('src/store/uiStore.ts', 'utf8'))
   const edSrc = String(readFileSync('src/editor/EditorPane.tsx', 'utf8'))
@@ -16708,7 +16717,7 @@ function runAdj609610Tests() {
  */
 function runAdj611Tests() {
   console.log('[138] 底栏最小化时点页签：切页签 + 回建议高度 + 档位状态同步（adj611）')
-  const dockSrc = String(readFileSync('src/ui/ToolDock.tsx', 'utf8'))
+  const dockSrc = readDockSrc()
 
   check(
     'adj611 「最小化」是**状态**（不是某面板记住的高度）：`dockH = minimized ? 外壳高 : clamp(...)`',
@@ -16777,7 +16786,7 @@ function runAdj611Tests() {
  */
 function runAdj612613Tests() {
   console.log('[139] ESC 判据放宽（焦点不必在底栏里）+ 输入框里"两次 ESC"（adj612/adj613）')
-  const dockSrc = String(readFileSync('src/ui/ToolDock.tsx', 'utf8'))
+  const dockSrc = readDockSrc()
   const appSrc = String(readFileSync('src/App.tsx', 'utf8'))
   const wsPanel = String(readFileSync('src/ui/dock/WorkspacePanel.tsx', 'utf8'))
 
@@ -17117,7 +17126,7 @@ function runAdj615Tests() {
 function runAdj617Tests() {
   console.log('[142] 快捷键提示落到菜单项 / 顶栏 / 底栏 / 浮动栏（adj617）')
   const topSrc = String(readFileSync('src/ui/TopBar.tsx', 'utf8'))
-  const dockSrc = String(readFileSync('src/ui/ToolDock.tsx', 'utf8'))
+  const dockSrc = readDockSrc()
   const edSrc = String(readFileSync('src/editor/EditorPane.tsx', 'utf8'))
   const scSrc = String(readFileSync('src/dialogs/ShortcutsDialog.tsx', 'utf8'))
 
@@ -17181,7 +17190,7 @@ function runAdj617Tests() {
 function runAdj618Tests() {
   console.log('[143] Ctrl+` 告警开关 + 补上菜单里写着却没绑的 Ctrl+~ 速查（adj618）')
   const appSrc = String(readFileSync('src/App.tsx', 'utf8'))
-  const dockSrc = String(readFileSync('src/ui/ToolDock.tsx', 'utf8'))
+  const dockSrc = readDockSrc()
   const footSrc = String(readFileSync('src/ui/EditorFootBar.tsx', 'utf8'))
   const scSrc = String(readFileSync('src/dialogs/ShortcutsDialog.tsx', 'utf8'))
   const kbdSrc = String(readFileSync('src/brand/shortcuts.ts', 'utf8'))
@@ -17232,7 +17241,7 @@ function runAdj619Tests() {
   console.log('[144] 底栏入口快捷键：最小化时先展开到建议高度（adj619）')
   const appSrc = String(readFileSync('src/App.tsx', 'utf8'))
   const uiSrc = String(readFileSync('src/store/uiStore.ts', 'utf8'))
-  const dockSrc = String(readFileSync('src/ui/ToolDock.tsx', 'utf8'))
+  const dockSrc = readDockSrc()
 
   check(
     'adj619/adj1290 四条底栏入口快捷键都走 `requestDockPanel`（试听/导出/工作区/导入），告警改走抽屉',
@@ -17796,7 +17805,7 @@ function runAdj601BlockBarAlignTests() {
 
 function runAdj603Tests() {
   console.log('[131] settings split into 全局 / 谱面 dock tabs (adj603)')
-  const dockSrc = String(readFileSync('src/ui/ToolDock.tsx', 'utf8'))
+  const dockSrc = readDockSrc()
   const cfgSrc = String(readFileSync('src/dialogs/PageConfigDialog.tsx', 'utf8'))
   const topSrc = String(readFileSync('src/ui/TopBar.tsx', 'utf8'))
   const copySrc = String(readFileSync('src/brand/copy.ts', 'utf8'))
@@ -18075,7 +18084,7 @@ function runAdj604Tests() {
 async function runAdj541DockToggleTests() {
   console.log('[123] dock expand/collapse entries (adj541)')
   const editorSrc = String(readFileSync('src/editor/EditorPane.tsx', 'utf8'))
-  const dockSrc = String(readFileSync('src/ui/ToolDock.tsx', 'utf8'))
+  const dockSrc = readDockSrc()
   const cssSrc = String(readFileSync('src/index.css', 'utf8')).replace(/\/\*[\s\S]*?\*\//g, '')
   const copySrc2 = String(readFileSync('src/brand/copy.ts', 'utf8'))
   const iconSrc = String(readFileSync('src/ui/toolIcons.ts', 'utf8'))
@@ -18611,7 +18620,7 @@ console.log('[111] theme attrs on <html> so inherited colors match the palette (
 // ---- 112. 底栏页签图标改用设计图标 + 浅深模式按钮对齐（adj486/adj484）----
 console.log('[112] dock tab icons & theme-mode buttons (adj486/adj484)')
 {
-  const dockSrc = String(readFileSync('src/ui/ToolDock.tsx', 'utf8'))
+  const dockSrc = readDockSrc()
   const css2 = String(readFileSync('src/index.css', 'utf8')).replace(/\/\*[\s\S]*?\*\//g, '')
   // adj556：本块也用到文案键（tabsLeftTitle / tabsRightTitle），局部读一次
   const copySrc = String(readFileSync('src/brand/copy.ts', 'utf8'))
@@ -18804,7 +18813,7 @@ console.log('[112] dock tab icons & theme-mode buttons (adj486/adj484)')
 console.log('[113] touch-friendly drag handles (adj487)')
 {
   const css = String(readFileSync('src/index.css', 'utf8')).replace(/\/\*[\s\S]*?\*\//g, '')
-  const dockSrc = String(readFileSync('src/ui/ToolDock.tsx', 'utf8'))
+  const dockSrc = readDockSrc()
   const appSrc = String(readFileSync('src/App.tsx', 'utf8'))
   const prevSrc = String(readFileSync('src/preview/PreviewPane.tsx', 'utf8'))
   const dragSrc = String(readFileSync('src/ui/dragGesture.ts', 'utf8'))
@@ -18893,7 +18902,7 @@ console.log('[114] preview click semantics: single = cursor only; play on double
 // ---- 115. dock 关闭：`!dockOpen` 早退守卫 + 关闭按钮必须留在可视区（adj491）----
 console.log('[115] dock close: early-return guard & close button inside dock (adj491)')
 {
-  const dockSrc = String(readFileSync('src/ui/ToolDock.tsx', 'utf8'))
+  const dockSrc = readDockSrc()
   const css = String(readFileSync('src/index.css', 'utf8')).replace(/\/\*[\s\S]*?\*\//g, '')
   // 回归护栏：adj487 把拖拽从 mouse 改 Pointer Events 时**连带删掉了 `if (!dockOpen) return null`**，
   // 后果是「点 ✕ 后 dockOpen 已置 false，但组件照样渲染」⇒ 关闭按钮看着失灵（用户报 E-2026-211）。
@@ -18978,7 +18987,7 @@ console.log('[115] dock close: early-return guard & close button inside dock (ad
 // ---- 116. 设置默认 6 行 + 「关于」迁入 dock（adj492）+ 分隔条手指命中区（adj493）----
 console.log('[116] settings 6 rows, About in dock, divider touch hit-area (adj492/adj493)')
 {
-  const dockSrc = String(readFileSync('src/ui/ToolDock.tsx', 'utf8'))
+  const dockSrc = readDockSrc()
   const css = String(readFileSync('src/index.css', 'utf8')).replace(/\/\*[\s\S]*?\*\//g, '')
   const aboutSrc = String(readFileSync('src/dialogs/AboutDialog.tsx', 'utf8'))
   const appSrc = String(readFileSync('src/App.tsx', 'utf8'))
@@ -19170,16 +19179,19 @@ console.log('[117] dock handle matches split divider (adj495) & bc = tenuto (adj
 // ---- 118. dock 五页签全懒加载（adj497）+ 页签栏移到底部（adj498）+ 两条调整线统一（adj499）----
 console.log('[118] lazy dock panels, tabs at bottom, unified resize lines (adj497-adj499)')
 {
-  const dockSrc = String(readFileSync('src/ui/ToolDock.tsx', 'utf8'))
+  const dockSrc = readDockSrc()
   const css = String(readFileSync('src/index.css', 'utf8')).replace(/\/\*[\s\S]*?\*\//g, '')
   const theme = String(readFileSync('src/styles/theme.css', 'utf8')).replace(/\/\*[\s\S]*?\*\//g, '')
 
   // adj497：五个面板全部 lazy（此前告警/导出是静态 import ⇒ 拖着一串重依赖进主包）
   // adj497/adj1290：dock 面板全部走 React.lazy（adj1290：告警移出页签，它那一项 lazy 一并删除）
   check('adj497 dock 面板全部走 React.lazy（告警已移出，不再有它的 lazy 项）',
-    ['../dialogs/PlaybackDialog', '../dialogs/PageConfigDialog', '../dialogs/AboutDialog', './dock/ExportPanel', './dock/WorkspacePanel', './dock/FindPanel'].every(
-      (p) => dockSrc.includes(`lazy(() => import('${p}')`),
-    ) && !/dock\/ProblemPanel/.test(dockSrc),
+    // 注意：`dockPanels.tsx` 里长行被拆成了 `lazy(() =>\n  import(...)`，所以别用整段字面量匹配
+    /lazy\(\(\) =>/.test(dockSrc) &&
+      ['../../dialogs/PlaybackDialog', '../../dialogs/PageConfigDialog', '../../dialogs/AboutDialog', './ExportPanel', './WorkspacePanel', './FindPanel'].every(
+        (p) => dockSrc.includes(`import('${p}')`),
+      ) &&
+      !/dock\/ProblemPanel/.test(dockSrc),
     '')
   check('adj497 不再静态 import 任何 dock 面板（ToolDock 顶部无 import { ProblemPanel/ExportPanel }）',
     !/^import \{ (ProblemPanel|ExportPanel) \} from/m.test(dockSrc),
@@ -26066,7 +26078,8 @@ console.log('[121] find & replace (adj641)')
 
   // ④ 接线：页签 / 面板 / 快捷键 / 图标（"用户点得到"的结构性保证）
   const uiSrc641 = String(readFileSync('src/store/uiStore.ts', 'utf8'))
-  const dockSrc641 = String(readFileSync('src/ui/ToolDock.tsx', 'utf8'))
+  // adj1293：页签/面板映射已搬到 `ui/dock/dockPanels.tsx`（右栏共用），这里同样读两份。
+  const dockSrc641 = readDockSrc()
   const appSrc641 = String(readFileSync('src/App.tsx', 'utf8'))
   const findSrc641 = String(readFileSync('src/ui/dock/FindPanel.tsx', 'utf8'))
   check('adj641 uiStore：DockPanelKey 含 find + requestFind（Ctrl+F 的落点，非开关语义）',

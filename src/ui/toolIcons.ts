@@ -91,6 +91,12 @@ export const ICON_FILES = {
    * 页签图标口径见 `ToolDock` 的 TABS 说明：**一律设计图标，不用字符兜底**。
    */
   find: '查找',
+  /**
+   * adj1293（用户要求）：顶栏「右侧栏开关」——图标从 `ijipu-cp/public/icons/右侧边栏.svg`
+   * 转成 32×32 透明 PNG（`public/icons/右侧边栏.png`，形状在 alpha 通道），用 Chrome headless
+   * 栅格化，**没有新增任何依赖**。常驻顶栏（见 `TopBar` 的 `rightDock` 槽位）。
+   */
+  rightDock: '右侧边栏',
 } as const
 
 export type ToolIconName = keyof typeof ICON_FILES
