@@ -733,3 +733,29 @@ pm run probe 26/26；
 - `绘制模式下新音落在光标所在的那一格`（点在 1.7 拍处 → 新音 `startMs` 必须是 1.0 拍，`midi` 必须是 60）
 
 **没验的**：压暗的浓度（0.55）只在截图里目测；用户看真曲再定。
+## 二十四、P0.15 —— bp 自己一个 dev 端口；打开音频就一屏 20 秒（2026-11-18 深夜）
+
+**① dev 端口分开（用户 m04130）**
+`ijipu-cp`（爱出片）占着 5174，`ijipu-bp` 之前也用 5174，两个同时开就撞端口（早先那个
+`Port 5174 is already in use` 就是它）。现在三端各一个：
+
+| 应用 | dev 端口 | 出处 |
+|---|---|---|
+| iJipu（应用） | 5173 | `ijipu/vite.config.ts` + `tauri.conf.json` 的 `devUrl` |
+| 爱出片（ijipu-cp） | 5174 | `ijipu-cp/vite.config.ts`（`strictPort: true`） |
+| 爱扒谱（ijipu-bp） | **5175** | `ijipu-bp/vite.config.ts` + `tauri.conf.json` + `scripts/ui-probe.mjs` 默认 URL + `tauri-dev.bat` 清端口那段 |
+
+`AGENTS.md` 里也写了一句，免得以后又改回去。
+
+**② 打开音频就一屏 20 秒（用户 m04107）**
+之前"一屏 20 秒"写在**自动翻页**那个 effect 里，而那个 effect 的第一行是
+`if (!playing || !autoPage || !durationMs) return` —— 也就是**只有开始播放才会缩到 20 秒**，
+刚打开文件时其实还是整曲铺满（用户看到的正是这个）。
+
+修法：把初始视野算在 `store.setLoaded()` 里，装载时直接
+`zoom = max(1, duration / min(duration, PAGE_MS))`、`panMs = 0`；`PAGE_MS` 仍是 20000。
+比 20 秒短的曲子 `zoom` 落在 1，仍然整首显示。自动翻页那个 effect 保留（播放中贴边推一屏）。
+
+**验证**：typecheck 通过；smoke **55/55**（新增两条：60 秒的歌 `zoom === 3`、10 秒的曲子 `zoom === 1`）；
+`npm run probe` **47/47**（默认 URL 已改成 5175）；桌面壳用 287.4 秒的《成都-陶笛》实测：
+打开后时间尺是 0s–18s、横向滚动条拇指在最左边（就是前 20 秒）。
