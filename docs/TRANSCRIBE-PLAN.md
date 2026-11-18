@@ -359,19 +359,36 @@ Krumhansl 轮廓给 12 个主音的百分比 → 手选/自动定调 → 量化�
 
 **验证**（本机实测）：
 - `npm run typecheck` 通过；
-- `npm run smoke` → **19/19 通过**（FFT 440Hz 峰值、汉宁窗、88 bin、音名/简谱、
+- `npm run smoke` → **24/24 通过**（FFT 440Hz 峰值、汉宁窗、88 bin、音名/简谱、
   合成三音端到端、调性首选 C、BPM 区间、量化 tick、jps 文本逐字锁死、
   跨小节长音写成 `Q: 1-- ( 5 | 5 ) 0--`、`parseJps` 0 错误、排版出 SVG、
-  静音输入不炸、主界面 SSR 渲染）；
+  静音输入不炸、主界面 SSR 渲染、**帧时刻对准窗中心**、**端到端 `Q: 1 3 5 1'`**）；
 - `npm run build` 通过（`dist/` 含独立 worker chunk 5.5kB）；
-- 用 Chrome headless 打开 `http://localhost:5174` 实测 DOM：工具条、三个面板、调性面板、状态栏都在。
-- `npm run check:engine` 一致（77 个文件，哈希 `c132821a…`）。
+- 用 Chrome headless 打开 `http://localhost:5174` 实测 DOM：工具条、三个面板、调性面板、状态栏都在；
+- `npm run check:engine` 一致（77 个文件，哈希 `c132821a…`）；
+- **桌面壳编译通过**（2026-11-18）：本机没 MSVC，用工作区里的 GNU 工具链
+  （`stable-x86_64-pc-windows-gnu` + winlibs MinGW64），`scripts/tauri-env.ps1` dot-source 后
+  `npm run tauri:build -- --no-bundle` → 首次 2m15s、增量 24s，产物 `ijipu-bp.exe` 21.9MB；
+  只剩一条 MinGW 的 `.rsrc merge failure` 警告（不影响产物）。
+- **桌面端真机验证**：`ijipu-bp.exe 某段.wav` 启动 → 14 秒内出窗、频谱/卷帘/简谱全部画出来，
+  jps 面板显示 `Q: 1 3 5 1'`（合成 C4 E4 G4 C5，各 500ms，BPM 120 完全对上）。
+
+**桌面端踩到的两个真问题（已修）**：
+1. **帧时刻取错了起点**：原先按 FFT 窗口起点计时，8192 点窗 ≈186ms，500ms 处换音被记成 400ms，
+   于是首音量化成 0.75 拍、末音拉成 1.25 拍并多出一条连音线。现在 `computeSpectrum` 以帧时刻为
+   **窗口中心**采样，并给音尾加"按段内中位数音量掐边"；`scripts/smoke.ts` 加了两条断言守住。
+   诊断入口：`npm run inspect`（打印原始音符 / 量化 / jps / 逐帧峰值）。
+2. **Low 完整性级别**：工作区目录带 Low 标签，编出的 exe 继承 Low，启动即
+   `Failed to setup app: 拒绝访问。 (os error 5)`（WebView2 建不了用户数据目录）。
+   一次性修（管理员 PowerShell）：`icacls "D:\Coding\JianpuScript" /setintegritylevel M /T`；
+   不提权时可把 exe + `WebView2Loader.dll` 拷到 `%LOCALAPPDATA%` 下再跑（已实测可用）。
 
 **没验的（如实记）**：
-- 桌面壳的 Rust 代码**没编译**——这台机器没装 Rust 工具链（`cargo` 不在 PATH，也没找到 rustup）。
-  `src-tauri/` 三个命令（选文件 / 读字节 / 另存并回读）照 iJipu 的写法写好了，但**未过编译器**。
-- "打开音频"这条交互没在真浏览器里点过（headless 无法驱动文件选择框）；
-  解码与 DSP 的正确性靠 Node 合成信号夹具覆盖，真实 mp3 的听感还没试。
+- **安装包没出**：`tauri build` 带 bundle 会拉 NSIS/WiX，本机未试；且 exe 带 Low 时安装后同样起不来，
+  先把上面那条 `icacls` 修了再打包才有意义。
+- "打开音频"的系统对话框、**导出 .jps 的另存为对话框**没自动点过（headless/自动化驱动不了原生对话框）；
+  但"按路径读字节 + 解码 + 分析"这条路已由命令行带文件证通。
+- 真实 mp3 的听感与参数还没调：BPM/首拍/静音阈值目前是合成信号上的经验值。
 
 **下一步（P1）**：音符手动编辑（拖动/增删/吸附三档）、撤销 100 步、`.jps.sync.json` 边车导出、
 小节合并与拖小节线改 BPM、真实曲目回归（拿 3–5 首清唱/单旋律调参数）。
