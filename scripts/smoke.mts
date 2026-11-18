@@ -29937,6 +29937,30 @@ C2: 歌，@那么我@是想要画你的手。@ {tp 1// 2/.} 你看我多么 {tp 
     'adj1193 曲库页有深浅主题切换（按钮 + data-theme-key + .theme-toggle 样式）',
     readSrc('public/scores/scores.css').includes('.theme-toggle'),
   )
+  /* ---- adj1313：等时值连音组数字的「挖白框」不能被站点 CSS 重涂成墨色 ----
+     用户 2026-11-18 报：sm 与在线乐谱库的连音线正中，本该是数字「3」的位置成了一块实心黑框。
+     根因是消费端 CSS 把「所有非 page-bg/overlay 的 rect」重涂成主题墨色，
+     连引擎给数字挖的那块白窗（`fill="#ffffff"`）也被涂黑，再把墨色数字盖在上面。
+     闸门成对写：① 引擎的白窗必须仍是 `#ffffff`（CSS 靠这个属性放过它）；② 两份 CSS 的规则必须带着这个例外。 */
+  const tupletSvg1313 =
+    renderScoreToSvg(
+      layoutScore(parseJpsRaw('B: T\nD: C\nP: 4/4\nQ: 1 1 (y3/ 2/ 1/) 1 |\n'), defaultPageConfig),
+    )[0] ?? ''
+  const tupletLabel1313 = tupletSvg1313.match(/<rect[^>]*rx="2"[^>]*>/)?.[0] ?? ''
+  check(
+    'adj1313 连音组数字的挖白框仍是纸色 `fill="#ffffff"`（CSS 靠这个属性放过它）',
+    tupletLabel1313.includes('fill="#ffffff"'),
+    tupletLabel1313 || '渲染里没有带 rx="2" 的 rect',
+  )
+  const paperRectCssBad1313 = ['public/scores/scores.css', 'src/help/jpsPreview.css'].filter((rel) => {
+    const rule = (readSrc(rel).match(/svg rect:not\(\[data-page-bg\]\)[^{]*\{/) ?? [''])[0]
+    return !rule.includes(":not([fill='#ffffff'])")
+  })
+  check(
+    'adj1313 站点/帮助预览「重涂墨色」跳过白底 rect（漏了就把连音组数字涂成黑框）',
+    paperRectCssBad1313.length === 0,
+    paperRectCssBad1313.join('；'),
+  )
   check(
     'adj1195 应用可导出乐谱包（ScorePackageDialog + writeZip + package 模态 + 导出面板入口）',
     readSrc('src/dialogs/ScorePackageDialog.tsx').includes('writeZip') &&

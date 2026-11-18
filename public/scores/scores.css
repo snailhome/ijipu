@@ -317,7 +317,11 @@ h1 {
   fill: var(--paper-ink);
 }
 
-.paper svg rect:not([data-page-bg]):not([data-overlay]):not([fill='none']) {
+/* 白底开口（等时值连音组数字的挖白框，引擎里就画成 `fill="#ffffff"`）属于**纸色**，不是墨色：
+   跟着主题墨色重涂会把白窗涂成墨块、里面的数字（也是墨色）跟着一起看不见 —— 用户 2026-11-18 在 sm 与
+   在线乐谱库看到的「连音线上面的数字变黑框」就是这个。所以"重涂成墨色"只对**非白** rect 生效；
+   深色主题不需要在这里照顾（整层 filter 反相会把白窗变成暗纸色）。 */
+.paper svg rect:not([data-page-bg]):not([data-overlay]):not([fill='none']):not([fill='#ffffff']) {
   fill: var(--paper-ink);
 }
 

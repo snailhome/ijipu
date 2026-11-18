@@ -12333,6 +12333,28 @@ smoke 五条含"来源切换成对"结构断言与负对照） |
 - **预防**：smoke 钉住四处都带 `only`，不只钉 meta；verify 断言 `html` 与 `.app` 的 computed
   `color-scheme` 等于 `only light`/`only dark`（以前只断言等于 `light`/`dark`，把 `only` 丢了也测不出来）。
 
+### E-2026-595 等时值连音线上面的数字变成实心黑框（sm 与在线乐谱库，`adj1313`，用户实报）
+
+- **现象**：用户 2026-11-18 报「sm 乐谱预览，等时值连音线上面的数字变黑框了」，随后补充「sl 在线乐谱库
+  一样的情况」。谱面片段是 `3 2 232 1 · 1`，第二个「2 3 2」组上方有连音弧，弧顶正中是一块**实心黑圆角方块**，
+  本该显示连音组数字「3」。应用自己的主预览层没有这个问题。
+- **根因**：不在引擎，在**消费端 CSS**。引擎 `renderSlur` 的 `label()` 会给数字先画一块**挖白框**
+  （`<rect ... rx="2" fill="#ffffff"/>`，作用是压住弧线、给数字开白窗），再把墨色数字画在上面。
+  而站点/帮助预览的三份 CSS 都有同一条规则：
+  `.paper svg rect:not([data-page-bg]):not([data-overlay]):not([fill='none']) { fill: var(--paper-ink) }`
+  —— 它的本意是"把引擎画的墨色 rect（减时线、加时线）改成主题墨色"，却把**白窗 rect 也当成墨色**涂掉了：
+  白窗变墨块 + 墨色数字盖在上面，视觉上就是实心黑框。
+  定位方式：用引擎 dist 渲染一段 `Q: 1 1 (y3/ 2/ 1/) 1 |`，导出 HTML 套上 `scores.css` 截图，
+  旧规则下复现出与用户附图完全一致的黑色圆角块；去掉重涂后同一个 SVG 显示「3」。
+- **解决**：三份 CSS 的规则各加 `:not([fill='#ffffff'])`（`ijipu/public/scores/scores.css`、
+  `ijipu/src/help/jpsPreview.css`、`ijipu-sl/site/public/scores/scores.css`）——白底开口属于**纸色**、
+  不是墨色，不参与"重涂成主题墨色"。深色主题不用另处理：整层 `filter: invert(1)` 会把白窗反成暗纸色。
+  sm 不需要改代码（它直接读站点仓库的 `scores.css`，`cache-control: no-cache`，刷新即生效）。
+- **预防**：`npm run smoke` 新增 `adj1313` 两条成对断言 —— ① 引擎渲染出的连音组白窗必须仍是
+  `fill="#ffffff"`（CSS 靠这个属性放过它，引擎换色会红灯提醒两边一起改）；② 两份 CSS 的
+  `svg rect:not([data-page-bg])` 规则必须带 `:not([fill='#ffffff'])`。
+  教训：**重涂墨色的规则要按"这是墨还是纸"筛，不能按"是不是 rect"筛**。
+
 
 
 
