@@ -637,4 +637,49 @@ pm run probe 26/26；
 **没验的 / 已知限制**：headless 没有音频设备，"真播时线跟不跟"只能在桌面壳里看；
 循环跳回的空隙按用户口径保留。
 
+## 二十二、P0.13 —— 播放停不下来、时点线、默认数字、区间内点击、一屏 20 秒、键格（2026-11-18）
+
+用户六条（m03712）。前两条是同一个根因，值得单独记下来。
+
+**① 播放停不下来 / 播放按钮与空格都像"跳跃播放"**
+`audio/player.ts` 里 `play()` 与 `stop()` 共用模块级的 `raf` / `onTick` / `onEnd`：
+- `App.startPlay` 是 `await play(...)` **之后**才 `setPlaying(true)`。`play()` 里有
+  `await ctx.resume()` / `await synth.ready()`，在这几十毫秒里用户再按一次空格，
+  `playing` 还是 false ⇒ 又走"开始播放"分支，于是**两路 tick 同时存在**；
+- 旧那路的 rAF id 早被后一次 `play()` 覆盖，`stop()` 的 `cancelAnimationFrame(raf)` 只取消得掉最新那路，
+  旧的继续每帧回调 `onTick` ⇒ 时点被两路来回写，看起来像"跳跃播放"，也停不下来。
+
+修法：
+- `player.ts` 加 `let runId = 0`，`stop()` 与 `play()` 都 `++runId`，`play()` 在**每次 await 之后**
+  以及 tick 内部都拿自己的号比对（`if (my !== runId) return false`），`play()` 改成返回 `boolean`；
+- `App.startPlay` 改成**先** `setPlaying(true)` 再 await，`play()` 回 false 就不再动状态。
+
+**② 时点线不跟随** —— 其实是 ① 的连带：状态被两路写、`playing` 还会被顶回 false，
+桌面壳里看起来就是"线不动"。修完之后在 headless 用合成音模式实测（时点用 `performance.now()` 推，
+不依赖音频设备）：`838ms → 1554ms`、红线 `x 292 → 485`、再按空格 `playing=false`、时点停在 1554ms 不动。
+
+**③ 默认音名 → 数字**：`store.pitchMode` 默认值 `'name'` 改成 `'number'`。
+
+**④ 区间里点格子要能试听 + 定位**：`NoteRoll` 里原来 `if (lh === 'body' && !hit)` 会把
+"区间带内部点空白"当成拖动整段，把后面的 `onAudition` / `onSeek` 吞掉。现在**格子里不再拖整段**
+（想挪区间：拖两端握柄，或在时间尺上重新划一段），点哪儿都先试听该音高、再把播放头挪过去。
+
+**⑤ 默认视野一屏 20 秒**：`store.setLoaded` 里 `view.zoom = max(1, durationMs / min(durationMs, PAGE_MS))`，
+`PAGE_MS = 20000` 提到 store 里导出（App 的自动翻页也用同一个常量）。比 20 秒短的曲子仍整首显示。
+
+**⑥ 键格按参考图重画**：拿用户给的 187×498 参考图逐像素量了一遍 ——
+键列 x=10..169、黑键 x=71..169（**右侧贴边、占 62%**）、行高 30、黑键整行高、
+横向分隔线只在 `y≈黑键竖直中心`（且只画到黑键左缘），另外 E|F、B|C 处是通栏线。
+原实现是"每一行都通栏画线 + 黑键右侧留 5px + 宽 60%"，所以一直像梯子。
+现在：白底 → 黑键行画中线（只到黑键左缘）→ 黑键 `roundRect(kx, y, kw, ROW_H, [2,0,0,2])`
+（`kw = round(KEY_W*0.62)`、`kx = KEY_W - kw`，右侧不留白）→ E|F、B|C 通栏线。
+
+**验证**：typecheck 通过；smoke **53/53**；`npm run probe` **40/40**（新增"按空格能开始播放""播放时红线跟着走"
+"再按空格能停下来"，都在合成音模式下真播，不再靠直接写 currentMs）；`tauri:build --no-bundle` 通过；
+桌面壳截图确认键盘、默认数字、20 秒视野。
+
+**没验的 / 已知限制**：音频模式（原音频）的时点仍依赖音频时钟，headless 无设备测不了，
+只能在桌面壳目视；循环区间与"点远处"的交互还有个边角：区间开着时点到区间外，下一帧会被拉回区间内。
+
+
 
