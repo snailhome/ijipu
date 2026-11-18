@@ -683,3 +683,24 @@ pm run probe 26/26；
 
 
 
+
+**② 追加：一次空格切换两遍（2026-11-18 夜，桌面壳里才复现出来）**
+
+`player` 的 `runId` 修好之后，桌面壳里仍然"按一下空格 = 跳一下"。用 `keybd_event` 给窗口发真键盘事件、
+连拍两张截图才看清：**鼠标点过「播放」按钮之后按钮带着焦点**，这时按空格会走两条路 ——
+
+1. 我们挂在 `window` 上的 `keydown` 处理（`togglePlay`）；
+2. 按钮自己的空格激活（会再派发一次 `click`，又一次 `togglePlay`）。
+
+两条都执行 ⇒ 一次按键切换两遍：开始立刻停、或者停立刻又开始，看起来就是"跳跃播放"，播放按钮也像"无效"。
+
+修法：`App.tsx` 的热键监听从冒泡改成**捕获阶段**（`window.addEventListener('keydown', onKey, true)`），
+并在 Space 分支 `e.preventDefault()` 之外补 `e.stopPropagation()`，事件到不了按钮。
+配套加了 `scripts/probe-keys.cs`（`Keys.Focus` / `Keys.Space`，`keybd_event` 发真键），
+桌面壳实测：点「播放」→ 按空格 → 停（播放头 1.35s→1.5s 后冻住、按钮回「播放」）→ 再按 → 从 1.5s 继续放到结尾。
+
+`probe` 补了两条用例，防止以后再退化：
+- `焦点在播放按钮上时，一次空格只切换一次 —— playing=true→true`
+- `焦点在播放按钮上时，再按一次能停 —— false`
+
+修完 typecheck 通过、smoke **53/53**、probe **42/42**。
