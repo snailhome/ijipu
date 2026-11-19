@@ -1067,3 +1067,34 @@ m06417「绘制的音符应该使用更突出的颜色，目前这个颜色不�
 **没验 / 没做**：①`npm run probe` 覆盖不到（headless 浏览器里 `canSeparate()` 为假，入口不渲染），
 这一块的验证只能靠桌面壳 CDP，用例数字记在上面；②模型与 `onnxruntime.dll` 现在还是手工拷到
 `%APPDATA%\com.ijipu.bp\models\` 和 exe 旁边，**独立安装包还没做**（用户 m06681 第 2 条）。
+## 三十五、P3：模型包、首启提示、应用内下载、设置页（2026-11-19）
+
+用户三条拍板（m06811）：分离效果可以；**要 NSIS 独立模型包**，但应用里检测不到模型时也要能自己下；
+**在线版不显示分轨**。后续两条追加（m06888 / m06889）：下载器并进右栏、加设置页、右栏分组要能收起。
+
+### 做了什么
+
+- **模型包**：`sep-installer/model.nsi`（Unicode，装到 `%APPDATA%\com.ijipu.bp\models`，
+  连 `onnxruntime.dll` 一起，写 `model.version` 与 HKCU 卸载项）。`npm run build:model-installer`
+  调 makensis，产物 `dist-model/ijipu-bp-sep-model-setup.exe` **140.4 MB**（模型 301.8 MB +
+  dll 30.3 MB，solid LZMA 压下来）。坑：`makensis` 要求 `.nsi` 是 **UTF-8 带 BOM**，否则报
+  `Bad text encoding: model.nsi:1`。
+- **缺模型时的引导**：`bp_sep_ready` 返回 `(模型, dll)`；缺哪个就在设置页里写清缺什么、
+  目标路径、以及「下载模型 / 打开镜像网页 / 打开 HuggingFace / 重新检测」。
+- **应用内下载**（`bp_download_model`）：Rust 侧用 `ureq` 流式下载 hf-mirror 的
+  `resolve/main/htdemucs_ft_vocals.onnx`，1 MB 缓冲、每 8 MB 发 `bp-sep-download` 进度事件，
+  先写 `.part` 完成才改名；**小于 50 MB 判定为镜像返回的错误页**并删掉。
+  实测：点「下载模型（302 MB，hf-mirror）」→ 进度 3% → 93% → **65 秒完成**，
+  下到的文件与原有模型 **SHA256 完全一致**（316,446,953 字节）。
+- **设置页**：工具条加齿轮按钮，右栏切到「设置」视图（`sideView`）。目前收着
+  「分析 → 分析后自动填入音符」「分轨（实验）→ 模型安装/下载」「关于」。扒谱要用的
+  （调性、节奏与谐波、生成参数、显示、谱源码）仍在「编辑」视图。
+- **右栏分组**：新增 `SideGroup`（标题可点收起/展开、组间一条细线、标题加粗）。
+- **桌面闸门**（用户第 3 条）：分轨整组只在 `canSeparate()` 为真时渲染 —— 网页版/插件端
+  连入口都不出现，符合 AGENTS 第五节"非桌面端默认不渲染入口"。
+
+### 没验的 / 已知限制
+
+- `npm run probe` 覆盖不到设置页里的分轨块（headless 浏览器 `canSeparate()` 为假），
+  只能桌面壳 CDP 验；本轮把"设置能开、分组标题在"用 CDP 读过 DOM。
+- 下载中断（断网/关窗口）只会留下 `.part`，下次点下载会覆盖重来；没有断点续传。
