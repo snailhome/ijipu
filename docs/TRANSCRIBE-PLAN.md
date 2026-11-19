@@ -961,3 +961,28 @@ pm run probe 26/26；
 `.toolbar .side-toggle`。
 
 **没验的**：重做只测了按钮，`Ctrl+Shift+Z` / `Ctrl+Y` 没在桌面壳里手动按过（probe 走的是按钮路径）。
+
+## 三十一、P0.21 —— 顶栏图标化并分组、Ctrl+滚轮缩放、深色下拉（2026-11-19）
+
+用户 m06188「Ctrl+鼠标滚轮已经是波形缩放了，那可以取消 Shift+Alt+鼠标滚轮，帮助里替换为 Ctrl+鼠标滚轮」；
+m06232「顶栏按钮尽量图标化，可参考 Note Digger 图标绘制」；m06322「对顶栏按钮尽量分组，如撤销与重做 /
+如图吸附列表颜色不匹配深色主题」。
+
+**改了什么**
+- **缩放键统一成 Ctrl+滚轮**：`NoteRoll` 的 `wantZoom` 去掉 `shiftKey && altKey`；状态栏、帮助面板、
+  `copy.ts` 的 `hbarDisabledTip`、README 两处文案同步改。
+- **顶栏图标化**：`App.tsx` 加 `function Icon({ name })`，16×16 线描（`stroke=currentColor`、1.4px），
+  17 个图标：folder/play/pause/wave/note/pencil/cursor/magnet/loop/page/undo/redo/home/checkAll/checkNone/reset/export；
+  每个按钮都带 `title` + `aria-label`（图标没有文字，这两个就是可读名）。
+- **分组**：`.tgroup`（淡底圆角 + 1px 细边）把"打开/播放/原音合成""撤销/重做/回开头""全选/全不选/回初稿/导出"
+  各包成一组，组间用 `.tsep` 竖线；`.tgroup` 里按钮缩到 28×24。
+- **深色下拉**：`:root { color-scheme: dark }` 让原生弹出层走深色，`select/option` 再自绘底色，
+  解决"吸附列表白底浅字"。
+- **顺手**：右栏三条滑条改用自绘轨道 + `--fill` 百分比（用户 m05943 的"滑条到顶还有空白"）。
+
+**验证**：typecheck 通过；smoke **59/59**；`npm run probe` **77/77**（probe 的 `clickText`/`flagOn` 等查找改成
+"文字包含或 aria-label 全等"，因为按钮现在只有 SVG）；桌面壳实机截图确认整条顶栏只剩图标、分组框可见、
+`1=bB` 与键列数字正常。提交：`ijipu-bp e6137ba`。
+
+**没验的 / 已知限制**：原生下拉弹出层的深色只靠 `color-scheme`，WebView2 与 Chrome 渲染略有差异，
+真机只看过"关着"的状态；`音名/数字` 那两个仍是文字（改成 `A` / `1` 反而难认），要改随时说。
