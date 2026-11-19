@@ -1040,3 +1040,30 @@ m06417「绘制的音符应该使用更突出的颜色，目前这个颜色不�
    进度用分块回传（每段一次）。
 2. 右栏「分轨」组：分离按钮 + 进度 + 人声/伴奏两个复选框（勾谁画谁），音色/热力图按轨着色。
 3. 模型下载管理：302 MB 不能塞进安装包，首次使用时下载到 `%APPDATA%/iJipu BP/models/`。
+
+## 三十四、P2：桌面端人声/伴奏分离进界面（2026-11-19）
+
+用户 m06681 让用真曲试、并拍板"模型像 iJipu 音色库那样单独出安装包"。
+
+**模型**：`StemSplitio/htdemucs-ft-vocals-onnx`（MIT，302 MB，opset 17）。
+输入 `(1,2,343980)` 立体声 44.1 kHz × 7.8 s，输出 `(1,4,2,343980)`，第 4 行是 vocals。
+
+**链路**：前端 `decodeBytes` 拿到 PCM → 复制成左右两路交错 → `invoke('bp_separate')`
+→ Rust 里 Lanczos-3 重采样到 44.1k、按 7.8 s 分块 + 25% 升余弦交叠推理、写
+`<app_data>/stems/{vocals,instrumental}.wav` → 前端读回、各算一份 `computeSpectrum`
+→ 右栏「分轨（实验）」里切「混音 / 人声 / 伴奏」，只换热力图用的那份频谱，不动音符。
+
+**实测数字**：
+- 36 s 真人声（48 kHz 立体声）：推理 6 段 18.85 s（RTF 0.52×），总耗时 25.4 s；
+  `RMS 混音 0.1968 / 人声 0.1667 / 伴奏 0.0964`。
+- 2.6 s 合成旋律：分离 10.3 s（含模型首次加载 5–6 s）。
+- 热力图采样（canvas 一块区域的平均亮度）：人声 54 / 伴奏 68 / 混音 67 —— 纯器乐素材上
+  "伴奏≈混音、人声明显更暗"正是应有的关系，说明切轨真的换了频谱。
+
+**代码**：`src-tauri/src/sep.rs`（`bp_sep_model` / `bp_sep_model_target` / `bp_separate` +
+`bp-sep-progress` 事件）、`src/audio/separate.ts`、`src/App.tsx` 的 `handleSeparate()` 与
+`stemMode`、`src/brand/copy.ts` 的 `stems*` 文案。
+
+**没验 / 没做**：①`npm run probe` 覆盖不到（headless 浏览器里 `canSeparate()` 为假，入口不渲染），
+这一块的验证只能靠桌面壳 CDP，用例数字记在上面；②模型与 `onnxruntime.dll` 现在还是手工拷到
+`%APPDATA%\com.ijipu.bp\models\` 和 exe 旁边，**独立安装包还没做**（用户 m06681 第 2 条）。
