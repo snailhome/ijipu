@@ -43,6 +43,15 @@
  */
 !define IJIPU_JPS_EXT "jps"
 !define IJIPU_PROGID "iJipu.jps"
+; adj1315（用户 2026-11-18）：`.jps` 文件的**类型图标**不再是应用图标。
+; 用户口径：「jps 文件的关联图标用 Logo.png（通用 123 标记），应用图标用各自的 Logo-xx.png」。
+; 为什么不能只改 `bundle.icon`：那份图标同时是 exe 图标、安装包图标、快捷方式图标，
+; 换它等于把应用图标也换掉。文件类型图标另有其位 —— ProgID 的 `DefaultIcon`。
+; 模板（installer.nsi:652）写的是 `DefaultIcon = $INSTDIR\ijipu.exe,0`，等于"用应用图标当文件图标"；
+; 本宏在第 712 行**之后**执行，所以这里覆写就是最终生效值。
+; `jps.ico` 由 tauri.conf.json 的 `bundle.resources` 从 `icons/jps.ico` 拷到 `$INSTDIR\jps.ico`
+; （源图 = 仓库根 `矢量图/Logo.png`，256/128/64/48/32/24/16 七档）。
+!define IJIPU_JPS_ICON "jps.ico"
 ; 模板生成的主程序名与快捷方式名（对应 tauri.conf.json 的 productName / 打包出的 exe 名）
 !define IJIPU_EXE "ijipu.exe"
 !define IJIPU_LNK_OLD "iJipu.lnk"
@@ -173,6 +182,12 @@ FunctionEnd
 !macro NSIS_HOOK_POSTINSTALL
   ; ① 右键"打开方式"的动词文案：模板写的是英文 `Open with iJipu`，覆写成中文
   WriteRegStr HKCU "Software\Classes\${IJIPU_PROGID}\shell\open" "" "${IJIPU_OPEN_VERB}"
+  ; ①b adj1315：`.jps` 的类型图标用通用 Logo（不是应用图标）。模板写的是 `…\ijipu.exe,0`。
+  ;     `IfFileExists` 兜底：万一资源没装进安装目录，宁可留着模板写的 exe 图标，也不要留一个指向
+  ;     不存在文件的 DefaultIcon（那会让资源管理器显示成空白文件图标，比"图标不对"更难解释）。
+  IfFileExists "$INSTDIR\${IJIPU_JPS_ICON}" 0 ijipu_jps_icon_done
+    WriteRegStr HKCU "Software\Classes\${IJIPU_PROGID}\DefaultIcon" "" "$INSTDIR\${IJIPU_JPS_ICON},0"
+  ijipu_jps_icon_done:
   ; ② 登记进「打开方式」列表
   WriteRegStr HKCU "Software\Classes\.${IJIPU_JPS_EXT}\OpenWithProgids" "${IJIPU_PROGID}" ""
   ; ③ 快捷方式中文名 + 备注

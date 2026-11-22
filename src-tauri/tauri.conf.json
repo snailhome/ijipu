@@ -61,7 +61,8 @@
       "target/release/WebView2Loader.dll": "WebView2Loader.dll",
       "../LICENSE": "LICENSE",
       "../THIRD-PARTY.md": "THIRD-PARTY.md",
-      "../resources/bin/ijipu.cmd": "bin/ijipu.cmd"
+      "../resources/bin/ijipu.cmd": "bin/ijipu.cmd",
+      "icons/jps.ico": "jps.ico"
     }
   }
 }

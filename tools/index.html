@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/x-icon" href="/icons/Jianpu.ico" />
+    <link rel="icon" type="image/png" href="/icons/Jianpu.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>音视频工具 - 爱记谱 iJipu</title>
+    <meta
+      name="description"
+      content="爱记谱 iJipu 音视频工具：视频合并音频、有声视频拆分（无声视频 / 原样音频 / WAV）、音频片段截取导出。全部在本机浏览器里处理，不上传服务器。"
+    />
+    <meta name="theme-color" content="#0F1526" />
+    <!--
+      adj1316（用户 2026-11-18）：「将 cp 里的音视频拆合页签里的功能拆离出来，做为一个独立的音视频工具在线网页……
+      一个音视频合并，一个有声视频拆分，再加一个音频片段截取导出，放在 https://ijipu.pages.dev/tools/ 下」。
+
+      这一页**不引应用的样式与状态**（`src/app.css` 那套是给编辑器用的，几百 KB）：
+      自己一份 `src/tools/tools.css`，只靠 `mediabunny`（拆合）+ WebAudio（波形与播放）+ lamejs（MP3）。
+      数据全程留在浏览器里 —— 没有上传、没有后台。
+    -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <!-- adj878：主题在样式生效前定下来，避免浅色用户先看到一帧深色 -->
+    <script>
+      (function () {
+        var m
+        try { m = localStorage.getItem('ijipu.site.theme') } catch (e) {}
+        if (m !== 'light' && m !== 'dark') {
+          try { m = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark' } catch (e) { m = 'dark' }
+        }
+        document.documentElement.dataset.siteMode = m
+      })()
+    </script>
+    <style>
+      /* 防白闪：样式表到位前先把底色定住（与应用/文档页同一套底色） */
+      html[data-site-mode='dark'], html[data-site-mode='dark'] body { background: #0f1526; color-scheme: dark; }
+      html[data-site-mode='light'], html[data-site-mode='light'] body { background: #f2f5fb; color-scheme: light; }
+      html, body { margin: 0; }
+    </style>
+  </head>
+  <body>
+    <div id="tools-root"></div>
+    <noscript>
+      <p style="padding: 24px; font: 15px/1.7 system-ui, sans-serif">
+        这个工具要在浏览器里跑（读文件、画波形、编码），请打开 JavaScript 后再用。
+      </p>
+    </noscript>
+    <script type="module" src="/src/tools/main.tsx"></script>
+    <script defer src="/analytics.js"></script>
+  </body>
+</html>

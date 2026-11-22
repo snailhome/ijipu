@@ -19,6 +19,7 @@ import { spawnSync } from 'node:child_process'
  * | `dist/plugin/index.html` | `/plugin/` | **插件手册**（Obsidian 插件，adj905x 用户要求） | `src/docs/plugin.ts` |
  * | `dist/cli/index.html` | `/cli/` | **命令行手册**（adj948 用户要求；正文 = `docs/CLI-手册.md`） | `src/docs/cli.ts` |
  * | `dist/soundfonts/index.html` | `/soundfonts/` | **音色库推荐**（adj1026；正文 = `docs/SOUNDFONTS.md`） | `src/docs/soundfonts.ts` |
+ * | `dist/tools/index.html` | `/tools/` | **音视频工具**（adj1316；拆合 / 拆分 / 片段截取，独立 React 页） | `src/tools/main.tsx` |
  *
  * 注意几点：
  *  · 资源引用一律是绝对路径（Vite 默认 `base: '/'`）⇒ Cloudflare Pages、PWA、
@@ -126,6 +127,8 @@ export default defineConfig({
         cli: entry('./cli/index.html'),
         // adj1026：音色库推荐（用户要求不放首页；正文用分块，窄屏更好读）
         soundfonts: entry('./soundfonts/index.html'),
+        // adj1316：音视频工具（独立页，用户要求挂到 /tools/ 下）
+        tools: entry('./tools/index.html'),
       },
     },
   },

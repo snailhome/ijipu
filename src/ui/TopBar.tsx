@@ -15,7 +15,7 @@ import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } f
 import { useDocStore, type ViewType } from '../store/docStore'
 import { useUiStore, PREVIEW_ZOOM_RANGE, PREVIEW_ZOOM_STEP, PREVIEW_ZOOM_LIMITS } from '../store/uiStore'
 import { clampEditorFontSize, EDITOR_FONT_OPTIONS, EDITOR_FONT_SIZE_RANGE } from '@ijipu/engine'
-import { pasteImportCopy, numCopy, workspaceCopy } from '../brand/copy'
+import { pasteImportCopy, numCopy, workspaceCopy, playbackMiniCopy } from '../brand/copy'
 // adj614：深浅模式的循环表（顶栏「深浅模式」按钮与 `Ctrl+T` 共用一份，见 `nextThemeMode`）
 import { nextThemeMode } from '../brand/themes'
 // adj617（用户要求）：快捷键提示的唯一出处——菜单 kbd 角标与顶栏/底栏/浮动栏的 title 都引它
@@ -288,6 +288,12 @@ export function TopBar() {
   const dockOpen = useUiStore((s) => s.dockOpen)
   const dockPanel = useUiStore((s) => s.dockPanel)
   /**
+   * adj1320（用户 2026-11-22 要求）：顶栏「试听」按钮改成**试听小播放条的开关键**——
+   * 不再用它打开试听页签（那条路改成小工具条上的「设置」）。
+   */
+  const miniBarOpen = useUiStore((s) => s.miniBarOpen)
+  const toggleTryoutBar = useUiStore((s) => s.toggleTryoutBar)
+  /**
    * adj1295（用户拍板）：顶栏「支持」右侧那个**常驻**的「右侧栏开关」。
    * · `dockSide === 'right'` 才是"右栏模式"，此时按钮高亮跟随 `dockOpen`；
    * · 底栏模式下点它 = 切到右侧栏并展开（语义在 `uiStore.toggleRightDock`，不在这里猜）。
@@ -397,13 +403,20 @@ export function TopBar() {
     // adj462：试听/导出/设置三个按钮改为**底部 dock 的入口（开关）**——不再打开对话框：
     //   dock 关 → 展开并切到该面板；已开且正是该面板 → 收起 dock；已开但不是该面板 → 只切面板。
     //   面板本体的状态（播放进度/导出选项/设置页签）由 dock 保持挂载而保留。
+    /**
+     * adj1320（用户 2026-11-22 要求）：**「试听」不再是 dock 入口，而是小播放条的开关键**——
+     * 点它只开关顶栏下方那条三按钮小工具条，不打开试听页签；页签改由小工具条的「设置」打开。
+     * adj1321：**底栏壳也一样**（用户拍板「底栏模式下类似」），两种壳都由各自的隐藏宿主
+     * 承载播放会话，不再退回"开关试听页签"。
+     */
     playback: {
       key: 'playback',
       label: '试听',
-      title: withKbd('试听播放', KBD.tryout),
+      title: withKbd(playbackMiniCopy.toggleTitle, KBD.tryout),
       kind: 'btn',
-      active: dockOpen && dockPanel === 'tryout',
-      onPick: () => toggleDock('tryout'),
+      // 高亮 = 小工具条开关开着（页签开着时也会置开）
+      active: miniBarOpen || (dockOpen && dockPanel === 'tryout'),
+      onPick: toggleTryoutBar,
     },
     // adj415：功能组内「导出」与「设置」位置对调（导出在前、设置在后）——显示顺序见 FN_ORDER
     export: {
@@ -1262,7 +1275,8 @@ export function TopBar() {
     // adj724b：嵌入版里没有"工作区"这个概念（文件操作交给 Obsidian）⇒ 菜单项不显示
     hidden: isHostEmbedded(),
   }
-  const entryTryout: MenuEntry = { label: '试听播放(&P)', kbd: KBD.tryout, hotkey: 'p', onPick: () => toggleDock('tryout') }
+  // adj1320：「试听播放」菜单项与顶栏按钮同一语义——开关小工具条（底栏壳里退回开关试听页签）
+  const entryTryout: MenuEntry = { label: '试听播放(&P)', kbd: KBD.tryout, hotkey: 'p', onPick: toggleTryoutBar }
   /**
    * adj615（用户要求）：`Ctrl+O` 从「打开文件」改挂**导出开关**（用户口径"让 Ctrl+O 响应导出开关操作"）
    * ⇒ `entryOpen` 不再显示 `Ctrl+O` 这个 kbd（否则菜单在说谎）；打开文件仍可用菜单项 / 顶栏按钮。

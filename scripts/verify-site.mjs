@@ -901,6 +901,8 @@ async function main() {
             navDocs: qa('.nav a').find((a) => (a.textContent || '').trim() === '文档')?.getAttribute('href') ?? '',
             /* adj948：入口卡里也要有一条（用户口径"首页底部「从哪儿开始」也加一张卡"） */
             cardCli: qa('.link-grid .link-card').find((a) => (a.textContent || '').includes('命令行手册'))?.getAttribute('href') ?? '',
+            /* adj1322：首页入口卡挂爱扒谱 */
+            cardBp: qa('.link-grid .link-card').find((a) => (a.textContent || '').includes('爱扒谱'))?.getAttribute('href') ?? '',
           }
         })()`,
       )
@@ -922,7 +924,7 @@ async function main() {
        * 这条**在手机视口下量真实几何**（用户说的正是那个场景），桌面也量一遍（是统一改的）。
        *
        * ⚠ adj948（**用户反馈**）：「首页那些卡片的图标怎么不见了？是不要了吗？」
-       *   —— 那排 emoji 图标**已逐字恢复**（8 张功能卡 + 7 张入口卡，含新增的命令行卡 ⌨️）。
+       *   —— 那排 emoji 图标**已逐字恢复**（8 张功能卡 + 9 张入口卡，含新增的命令行卡 ⌨️、音视频工具卡 🎬、爱扒谱卡 🎙️）。
        *   本段判据因此**保持 adj897 的原口径**（图标在、与标题同一行、内容落下一行），
        *   只把入口卡的数量从 6 提到 7（新增一张），并补一条"卡片数 + 图标齐全"的断言。
        */
@@ -976,9 +978,9 @@ async function main() {
       check('adj897 桌面视口下同样成立（两类卡都是图标与标题一行，不是只在手机上改的）',
         cardsOk(cardDesktop), JSON.stringify(cardDesktop))
       const cardIcons = await iconsOf()
-      check('adj948 首页两排卡片的 emoji 图标都还在（功能卡 8 个 + 入口卡 7 个，含新增的命令行卡）—— 用户明确要求图标不动',
+      check('adj948/adj1316/adj1322 首页两排卡片的 emoji 图标都还在（功能卡 8 个 + 入口卡 9 个，含命令行、音视频工具、爱扒谱卡）—— 用户明确要求图标不动',
         cardIcons?.feature.length === 8 && cardIcons.feature.every((s) => s.length > 0) &&
-          cardIcons.link.length === 7 && cardIcons.link.every((s) => s.length > 0),
+          cardIcons.link.length === 9 && cardIcons.link.every((s) => s.length > 0),
         `功能卡 ${JSON.stringify(cardIcons?.feature)} / 入口卡 ${JSON.stringify(cardIcons?.link)}`)
       /**
        * 负对照（**必须为假**）：在活 DOM 上把第一张功能卡的图标删掉 ——
@@ -996,12 +998,15 @@ async function main() {
       check('adj948 负对照：把第一张卡的图标删掉 ⇒ "图标都在"判据判假（证明它真的在量图标，而不是恒真）',
         !!cardNeg && cardNeg.feature === 7, JSON.stringify(cardNeg))
       // ⚠ adj899 的换行测试放在下面"切示例"那组**之后**（它要点击示例，会改变初始状态）
-      check('首页入口链接 7 个（应用/手册/语法/命令行/桌面/插件/赞赏）', home.entries === 7, String(home.entries))
+      check('adj1322 首页入口链接 9 个（应用/手册/语法/命令行/音视频工具/爱扒谱/桌面/插件/赞赏）', home.entries === 9, String(home.entries))
       check('首页顶栏导航 ≥ 4 条（文档收敛后：功能/文档/下载/GitHub + 打开应用）', home.navLinks >= 4, String(home.navLinks))
       check('adj1080 首页顶栏「文档」入口指向 `/manual/`（五份文档从那里切换）',
         home.navDocs === '/manual/', home.navDocs)
       check('adj948 首页入口卡里有「命令行手册」（指向 `/cli/`，用户要求"底部也加一张卡"）',
         home.cardCli === '/cli/', home.cardCli)
+      check('adj1322 首页入口卡有「爱扒谱」（指向 ijipu-bp.pages.dev）',
+        home.cardBp === 'https://ijipu-bp.pages.dev/' && home.links.bpUrl === 'https://ijipu-bp.pages.dev/',
+        JSON.stringify({ cardBp: home.cardBp, navBp: home.links.bpUrl }))
       check('首页主按钮指向 `/app/`', home.cta === '/app/', home.cta)
       check('首页版本号占位全部填成 vX.Y.Z（没有漏成「·」）',
         home.verTotal > 0 && home.verCount === home.verTotal, `${home.verCount}/${home.verTotal}：${home.ver}`)

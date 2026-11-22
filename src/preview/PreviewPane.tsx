@@ -150,9 +150,11 @@ export function PreviewPane({ disableGuides = false }: { disableGuides?: boolean
    */
   const setPlaybackStart = useUiStore((s) => s.setPlaybackStart)
   const bumpPlaybackTick = useUiStore((s) => s.bumpPlaybackTick)
-  // adj723d：`Ctrl+单击音符` 要**打开并聚焦试听**（`requestDockPanel` 在 ToolDock 里落地为
-  // "打开并聚焦"；不能是"开关"，否则试听已开着时会被收起来）
-  const requestDockPanel = useUiStore((s) => s.requestDockPanel)
+  /**
+   * adj1320（用户 2026-11-22 口径）：双击 / `Ctrl+单击` 音符改为**打开试听小播放条并播放**，
+   * 不再打开试听页签。底栏壳没有小工具条的隐藏会话宿主 ⇒ action 内部退回"打开试听页签"。
+   */
+  const openTryoutBar = useUiStore((s) => s.openTryoutBar)
   // adj354：@@ 显示默认音色名——无 Y 时用试听音色列表第一个启用音色（与播放端一致）
   const playbackHqEnabled = useUiStore(enabledVoicesOf)
   const defaultInstrumentRef = useMemo(() => firstEnabledInstrumentRef(playbackHqEnabled), [playbackHqEnabled])
@@ -402,19 +404,19 @@ export function PreviewPane({ disableGuides = false }: { disableGuides?: boolean
    */
 
   /**
-   * adj723e（用户要求）：**从这里试听**——抽成一个动作，供 `Ctrl+单击` 与（新增的）**双击**共用。
+   * adj723e（用户要求）：**从这里试听**——抽成一个动作，供 `Ctrl+单击` 与**双击**共用。
    *
-   * 语义（与 `noteClickAction` 的 `ctrl-tryout` 一致）：
+   * adj1320（用户 2026-11-22 要求）：**改为"打开试听小播放条并播放"**，不再打开试听页签：
    *  · 把该音符设为试听起点；
-   *  · **打开并聚焦**试听页签（`requestDockPanel` 在 `ToolDock` 里是"打开并聚焦"，
-   *    已开着则**保持**，不会把底栏收起来）；
+   *  · 打开顶栏下方的小工具条（`openTryoutBar`：右栏壳里只置位，不展开页签；
+   *    底栏壳没有隐藏会话宿主，退回打开试听页签）；
    *  · 递增 `playbackTick` 让 `PlaybackDialog` 从该音符播放
-   *    （底栏**原本没开**时由对话框挂载后的"待播起点"逻辑接手，见 `adj723e`）。
+   *    （面板原本没挂时由"待播起点"逻辑接手，见 `adj723e`）。
    */
   const tryoutFromNote = (id: string) => {
     setActiveNoteId(id)
     setPlaybackStart(id)
-    requestDockPanel('tryout')
+    openTryoutBar()
     bumpPlaybackTick()
   }
 
@@ -477,11 +479,13 @@ export function PreviewPane({ disableGuides = false }: { disableGuides?: boolean
   }
 
   /**
-   * adj723e（用户要求）：「**双击音符执行与 Ctrl+点击音符同样的操作**」——
-   * 即"打开试听（有则保持）+ 从该音符播放 + 焦点落到播放按钮"。
+   * adj723e（用户要求）：「**双击音符执行与 Ctrl+点击音符同样的操作**」。
+   *
+   * adj1320（用户 2026-11-22 要求）：那条"同样的操作"现在 = **打开试听小播放条 + 从该音符播放**，
+   * 不再打开试听页签（页签只从小工具条的「设置」进）。
    *
    * 与旧口径（`adj88`/`adj166`）的差别：旧口径**只在试听已经可达时**才动作，
-   * 未打开试听时双击**不弹窗**（当年是为防误触）。现在用户明确要求双击等同于 `Ctrl+单击`，
+   * 未打开试听时双击**不弹窗**（当年是为防误触）。现在双击等同于 `Ctrl+单击`，
    * 故去掉"必须已可达"这条前置。
    *
    * 注：一次双击必然先触发两轮 `click`（`noteClickAction` 的 `single` 分支：光标跳转），

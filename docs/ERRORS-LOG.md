@@ -12355,6 +12355,182 @@ smoke 五条含"来源切换成对"结构断言与负对照） |
   `svg rect:not([data-page-bg])` 规则必须带 `:not([fill='#ffffff'])`。
   教训：**重涂墨色的规则要按"这是墨还是纸"筛，不能按"是不是 rect"筛**。
 
+### E-2026-596 `verify:app-ui` 报 3 项失败，实际测的是旧 `dist/`（`adj1314`，本轮自建用例）
 
+- **现象**：新增 adj1314 真点用例后跑 `npm run verify:app-ui` ⇒ `失败 3 项 ❌`：报「导出页签出现标记段下拉」
+  `{"hasSel":false,"opts":[]}`、「选中一段写进同一个当前段」`{"picked":null}`、「段删掉后给说明」的
+  `.dock-muted` 里找不到「先到「试听」页签」。同时 `tsc -b` ✓、`lint` 0 error、`smoke` 全绿。
+- **根因**：`scripts/verify-app-ui.mjs` 只**读** `dist/`、不起 vite（脚本头第 18-19 行写着"必须先有当前源码
+  构建出来的 dist"）。我改完源码直接跑，测的是上一版产物 ⇒ 新下拉根本不在页面里，三条失败与代码无关。
+- **解决**：先 `npm run build`（`✓ built in 739ms`、`[stamp-sw] dist/sw.js ← v0.82.0`），再跑 ⇒
+  `[verify-app-ui] 全部通过 ✅（166 项）`，adj1314 五条全绿（实报
+  `{"hasSel":true,"opts":["整曲（不切段）","段 1"],"val":"mmwm6nvc41"}`）。
+- **预防**：① 改 UI 后**先 build 再 verify**；② 怀疑旧产物时，在 `dist/assets/*.js` 里 grep 新加的类名
+  （如 `export-mark`），grep 不到就是没构建；③ 同轮 smoke 自建断言的同类坑：`/markSliceOf\(/` 匹配不到
+  **定义行**（`markSliceOf = (`，名字与括号之间有 ` = `），`!/practiceRangeI0/` 被自己的注释文本判红 ——
+  **断言先拿最小样例验一遍正则行为**，再往大文件上套。
 
+### E-2026-597 `.jps` 文件图标跟着应用图标走 / 钩子文件被编辑器洗掉 BOM（`adj1315`，用户要求）
+
+- **现象**：用户 2026-11-18 要求「jps 文件的关联图标用 Logo.png，应用图标用各自的 logo-xx.png」。
+  查本机 `HKCU\Software\Classes\iJipu.jps\DefaultIcon` = `C:\Users\snail\AppData\Local\iJipu\ijipu.exe,0`
+  —— `.jps` 显示的是**应用图标**（123JP），因为它直接指向 exe。
+- **根因**：Tauri 的 NSIS 模板（`APP_ASSOCIATE`，生成的 `installer.nsi:652`）把 ProgID 的 `DefaultIcon`
+  写成 `$INSTDIR\${MAINBINARYNAME}.exe,0`。它没有"文件类型图标"这个概念，默认就是"用应用图标"。
+  所以**改 `bundle.icon` 是错的**——那份图标同时是 exe 图标、安装包图标、快捷方式图标、窗口图标。
+- **解决**：另装一张通用图。`src-tauri/icons/jps.ico`（源图 `矢量图/Logo.png`，256…16 七档）经
+  `bundle.resources` 映射成 `$INSTDIR\jps.ico`；`nsis/hooks.nsh` 的 `NSIS_HOOK_POSTINSTALL` 在模板之后
+  （`installer.nsi:712` 晚于 652）覆写 `DefaultIcon` 并 `SHChangeNotify`。爱扒谱也注册 `.jps`，同样处理
+  （它的 ProgID 来自 `fileAssociations[].name` = `iJipu 简谱脚本`，与 jp 的 `iJipu.jps` 不同，两边都写同一张图）。
+  网页端同时把 `Jianpu.png / Jianpu.ico / pwa-* / apple-touch-icon` 从通用 Logo 换成 `Logo-jp`。
+- **踩的坑**：用编辑器工具改 `nsis/hooks.nsh` 会把**文件开头的 UTF-8 BOM 洗掉**，makensis 随即按 ANSI 解析
+  中文，报 `Bad text encoding: …` —— 这个报错只说"第 1 行"，不说"你少了 BOM"，很容易误判成语法错。
+  改完务必核对 BOM（`(Get-Content -Encoding Byte -TotalCount 3)` = `239 187 191`），丢了就补回去。
+- **怎么验的**：① 直接编译生成出来的 `installer.nsi`（`makensis /V2`，`OUTFILE` 是相对路径，在临时目录里跑
+  不会覆盖真产物）⇒ `exit=0`，证明钩子语法与 `IfFileExists` 兜底都成立；② 爱扒谱的钩子没有现成
+  `installer.nsi`，另写一个只 `!include` 它 + `!insertmacro` 的临时脚本编过（`exit=0`）——
+  比"肉眼看语法"可靠；③ `smoke` 新增 `adj1315` 四条：ico 是合法 ICO、conf 里资源映射在、钩子里
+  `DefaultIcon` 指向 `$INSTDIR\jps.ico`、网站图标字节已不等于通用 `Logo.png`。
+- **预防**：文件类型图标与应用图标**从两张源图来**，别再指望 `bundle.icon` 一处生效；改钩子文件先想 BOM。
+- **另一个坑（同轮自查发现）**：第一版生成的 4 个 `.ico` 只有 **16×16 一档**（Pillow 12 里给
+  `Image.save(..., format='ICO', sizes=[...], append_images=...)` 会只写出最小的那张，实测
+  `count=1`）。资源管理器把 16px 放大显示 ⇒ 糊成一片，而且很难看出是"图错了"还是"图标缓存没刷"。
+  正确写法：拿**最大**那张当底图，只给 `sizes=` 让 Pillow 自己重采样。`smoke` 的 adj1315 因此多一条
+  闸门：帧数 ≥5 且目录项里有 256×256（宽高字节 0 = 256，只查第一项会误判，要逐项看）。
+
+### E-2026-598 新增网站页 `/tools/`：不能复用 export 工具（静态拖引擎）、断言被自己的注释判红
+- **场景**：用户 2026-11-18 要求把爱出片的「音视频拆合」做成独立在线页 `/tools/`（合并 / 拆分 / 音频片段截取）。
+- **坑 1（架构）**：`src/export/audio.ts` 与 `src/export/zip.ts` 看着正合适（`audioBufferToWav`、`writeZip`），
+  但两份都**静态** `import ... from '@ijipu/engine'`（`eventsToMidi`/`pcmToWav`/`crc32`）。独立页一旦引用，
+  整个引擎（几百 KB）跟着进首包，页面白屏几秒。**解决**：另写 `src/tools/audioOut.ts`（WAV 手写 RIFF、
+  MP3 动态 `await import('@breezystack/lamejs')`）与 `src/tools/zip.ts`（store 不压缩 + 自带 CRC32 表），
+  并用 smoke 闸门钉住：`src/tools/**` 任何代码行都不许出现 `@ijipu/engine`。
+- **坑 2（断言自伤）**：上面那条闸门第一版是 `!content.includes('@ijipu/engine')`，而我恰好在
+  `audioOut.ts` / `zip.ts` 的文件头注释里写了"为什么不复用 `src/export/audio.ts` 里那份静态 import
+  `@ijipu/engine` 的" ⇒ 判据被自己的说明文字判红。**解决**：断言只扫**代码行**（过滤 `^\s*(\*|//)`）。
+  教训与 adj1316 的 `markSliceOf(` 那条同类：**负向断言要盯着"实现"而不是"文本"**，注释是会骗人的。
+- **坑 3（类型）**：`new Blob([wavBytes(buffer)])` 在 TS 5.7+ 报
+  `Uint8Array<ArrayBufferLike>` 不能当 `BlobPart`。**解决**：统一走 `tools/files.ts` 的 `downloadBytes()`
+  （先 `bytes.buffer.slice(...)` 拷成独立 `ArrayBuffer` 再包 Blob），别在调用处各写一遍。
+- **坑 4（流程）**：`edit` 工具连续替换同一文件的多个中文字面量时，我把 `old_string` / `new_string` 写反了两次
+  （工具直接报 `old_string was not found`，没造成损坏）。**预防**：一个文件要连改多处时，先
+  `Select-String` 列出待改字面量与行号，逐条对着行号改；改完再用同一条 `Select-String` 复核剩几条。
+- **加一页要同步的四处**（少一处就红灯）：①`vite.config.ts` 的 `build.rollupOptions.input` 与文件头那张表；
+  ②页面自己的 `index.html`（favicon / manifest / 入口脚本）；③首页 `index.html`（顶栏 + 底部链接卡）；
+  ④`smoke.mts` 的「八份 HTML 入口 / 八份 title / favicon 循环」三处计数，外加本页自己的闸门。
+- **坑 5（探针会改仓库）**：`npm run verify:site` 不只看页面，它**会重写** `public/site/*.webp`
+  和 `public/site/og.png`（截图落到 `SITE_ASSETS`，那是**提交进仓库**的素材；只有 `dist-site-shots/` 是本地）。
+  所以跑完 `git status` 里会多出十几个图片改动 —— 别当"别的会话改的"删掉，它们就是本次站点改动的结果。
+  同理 `.dsh-tmp/`（`verify-tools.mjs` 的截图）已写进 `.gitignore`，别再让它脏 `git status`。
+- **坑 6（浅色断言量错了元素）**：`verify-tools.mjs` 的浅色检查第一版量 `.t-top` 的
+  `background-color`，而顶栏**本来就是透明的**（靠页面底色）⇒ 量到 `rgba(0,0,0,0)` 判红。
+  改成量"卡片底色浅（>150）+ 品牌字色深（<140）"这一对：只有整套 `--t-*` 变量切过去了才同时成立。
+- **预防**：新页面先问"能不能只带 React"，任何 `src/export/*`、`src/store/*` 的复用都先看 import 头；
+  负向断言一律过滤注释行；断言量配色时先想清楚"这个元素有没有自己的底色"。
+
+### E-2026-599 `/tools/` 片段截取：点波形把选区清掉、起止点不能各自定、标记段不能播
+- **场景**：用户 2026-11-18 看了第一版后直说：「标记段的起止点应该单独可添加，可选取添加的起止点进行位置
+  调整，播放标记段；现在的方式选择后再点波形，原来的选取又没了，不好」。
+- **坑 1（交互，最要命）**：`ClipWave` 的 `onPointerDown` 里第一件事就是 `onSel({ start: t, end: t })`，
+  抬起时若没拖动又 `onSel(null)` ⇒ **只要点一下波形，好不容易拖好的选区就没了**。用户"选好一段→点别处
+  听一下→回来继续调"的常规动作每点一次就白干。**解决**：按下时只记起点、不改选区；抬起时没移动就只
+  `onSeek()`；拖得太短（<10ms）恢复拖动前的选区（`drag.prev`），不是清空。
+- **坑 2（模型）**：原来只有"拖出选区才能成段"，起点和终点被绑成一对手柄一起动。用户要的是两个**独立**
+  的点。**解决**：加 `dropAtHead('start' | 'end')`（按钮「起点＝播放头」「终点＝播放头」）；再给选区的
+  两条边各画一个抓手（`WaveView.grip`），`edgeAt()` 命中后 `mode: 'start' | 'end'` 只拖那一条边，另一端
+  用 `drag.prev` 保住不跟着跑。
+- **坑 3（缺功能）**：标记段列表只有「选中/导出/删掉」，没法试听。**解决**：每行加「播放」，直接
+  `player.play(mark.start, mark.end)`（开着「循环选区」时会一直循环这一段）。
+- **坑 4（断言精度）**：新加的真浏览器断言先写成 `text.includes('0:01.050')`，实测像素取整落在
+  `0:01.049` / `0:01.502`，两条全红。**解决**：`secsOf()` 把 `0:01.049 → 0:01.799（…）` 解析成秒数，
+  用 `near(a, b, 0.02)` 带容差比 —— **凡是从像素反算时间的断言，都必须带容差**。
+- **预防**：波形这类"指针即状态"的控件，先写清楚三件事：按下改什么、移动改什么、抬起判定什么；
+  抬起路径里不许有"清空用户数据"的动作，除非那是明确的手势（例如双击）。
+
+### E-2026-600 又一次重复造轮子：`/tools/` 的播放/试听/定位/标记本该从爱出片搬（`adj1318`，用户批评）
+- **场景**：`/tools/` 的片段截取第一版，我把波形抽样、播放器、时间标尺、复听全**手写**了一遍。
+  用户 2026-11-18 直接批评：「就不能直接把cp里的这一套搬过来吗？非得我再说一遍，一直重复造轮子耶」，
+  随后补一句说明范围：「播放、试听、定位、标记的那一套」。
+- **根因**：开头只把"爱出片的拆合页（`MediaTab` / `mediaTool`）"当成要搬的东西，把对拍台的音轨
+  （`SyncTab` 的波形 + 标尺 + 视野 + 复听）当成"要另写的新功能"。其实它早就在 cp 里跑了一年多，
+  连 50 毫秒启动余量、"点波形别清选区"这种细节都踩过了。**这是判断顺序错了：先问"哪个项目里已经有
+  同类界面"，再决定要不要新写**；不是先写再等用户骂。
+- **这次搬过来的（都在文件头写明出处，smoke 有闸门）**：
+  - `src/tools/waveRuler.ts` ← `ijipu-cp/src/sync/syncRuler.ts` 整份（`timeScaleOf` 挑刻度、
+    `audioClockOf`、`WaveView` 视野、`clampView` / `viewWindow` / `zoomView` / `panView`）；
+  - `src/tools/wavePeaks.ts` ← `ijipu-cp/src/render/video/accompaniment.ts` 的 `waveformPeaks()`
+    （逐字复制，多声道取 min/max，不取绝对值）；
+  - `src/tools/clipPlayer.ts` ← `ijipu-cp/src/render/video/audioPlayer.ts` 的 `DynamicAudioPlayer`
+    （`AudioContext` 当母钟、50 毫秒启动余量、`stopSource` 吞 InvalidStateError），只加"播到 `to` 秒
+    自动停"与秒为单位；
+  - `src/tools/waveform.ts` 的画法 ← `ijipu-cp/src/sync/SyncTab.tsx` 1793-2041（DPR 位图尺寸、
+    每像素取桶、段外压暗、`[` `]` 虚线、播放头品红、底部标尺）；
+  - 复听 ← `SyncTab.tsx` 的 `toggleAuditionLoop`（当前时点前 3 秒到后 5 秒，短于 0.2 秒不响应）。
+- **没能直接 import 的原因**：cp 是独立私有仓库（引擎靠 `vendor/engine` 字节同步），网站页不能跨仓库
+  import；所以是"带出处的复制"。**cp 那份改了，这里要跟着重搬**——文件头与 smoke 闸门就是为了让下一个人
+  知道"这不是本地原创"。
+- **坑 5（断言时序）**：真浏览器里的 `b.click()` 之后**同一个 tick** 读 `b.className` 拿到的是旧 class
+  （React 还没重渲染）⇒ 复听按钮"没亮"。**解决**：点完等 200ms 再读。**凡是点完就断言状态的探测，
+  都要留一帧/一段等待**。
+- **预防（写进工作流）**：接"新页面/新面板"的需求，第一步先 `grep` 兄弟仓库（`ijipu-cp`、`ijipu-bp`、
+  `ijipu-sm`、`ijipu-mv`、`iJipu-Library`）里有没有同类界面；有就搬，没有才写。
+
+### E-2026-601 `/tools/` 片段截取三件事：放大后没滚动条、空格不能播放、复听没留下时点（`adj1319`，用户要求）
+- **用户原话（2026-11-19）**：「波形放大后，应添加滚动条来移动波形显示位置 / 点在波形上时，空格未实现
+  播放/暂停 / 点击复听时，应在开始点击按钮前的当前位置添加一个临时时点定位虚线，正常播放时取消该虚线」。
+- **坑 1（放大之后走不回去）**：视野能靠 Ctrl+滚轮缩小到 1 秒以内，但没有滚动条 ⇒ 放大后只能靠再缩回来
+  才能看别处，等于半个功能。**解决**：把爱出片 `syncRuler.ts` 的 `scrollThumb()`（当时觉得"工具页用不上"
+  被我删掉了）原样搬回来，画出 `.t-scroll` 轨道 + 滑块；拖滑块 = 平移视野，点轨道 = 滑块中心跳到那儿。
+  **教训：搬一份模块时不要顺手删"暂时用不上"的函数 —— 功能是会长回来的。**
+- **坑 2（画布拿不到键盘）**：空格没反应，不是因为没写 handler，而是 `<canvas>` 默认不可聚焦，
+  键盘事件根本不会落到它身上。**解决**：`tabIndex={0}`，并且 `onPointerDown` 里显式 `focus()`；
+  空格键 `preventDefault()` 后再用。**只在画布上监听，不做全局 keydown** —— 否则在段名输入框里打字会
+  被抢走。
+- **坑 3（复听是"围绕着刚才那一点"，但画面上看不见那一点）**：复听起播后播放头一直在动，用户记不住
+  "我是在哪儿点的"。**解决**：`toggleAudition()` 里 `setAnchor(at)`，画一根金色虚线 + 顶部小三角；
+  任何"正常播放"（播放 / 播放选区 / 播某段 / 点波形定位 / 回到开头）都走 `endAudition()` 一起收掉。
+- **探测侧**：判据不能只读 DOM —— 金色虚线是画在 canvas 上的，改成读画布第 1 行像素找
+  `#ffd166`（255,209,102）；滚动条用 `role="scrollbar"` + `aria-valuenow` 读"视野左缘"，
+  拖完断言它变大（≥50ms）才算真挪动了。
+
+### E-2026-602 顶栏「试听」改成小播放条开关键：小条要先有"播放会话宿主"（`adj1320`，用户要求）
+- **用户原话（2026-11-22）**：「顶栏试听按钮，之前是点击试听显示试听页签，焦点在试听页签隐藏时才显示小播放
+  工具条，双击音符也是打开试听页签并播放；现在修改为：顶栏的试听按钮是试听小播放条的开关键，点击小播放条
+  的设置才打开试听页签，双击音符也是打开试听小播放条并播放，焦点在试听页签隐藏时还是显示小播放工具条」。
+- **难点（不是改一行按钮就行）**：小工具条本身**不持有播放状态**，它只转发
+  `store/playbackBridge` 里由 `PlaybackDialog` 登记的控制面。而 `PlaybackDialog` 只挂在试听面板里。
+  旧按钮"打开试听页签"恰好完成了"挂载会话"这一步；改成只开小条后，**会话没有地方挂**
+  ⇒ 小条上的播放键会对着 `null` 发命令（按钮干脆不出现）。
+- **解决**：加一个**隐藏的会话宿主**——`miniBarOpen` 为真时 `RightDock` / `ToolDock` 仍渲染整棵
+  面板树（`hidden`），并把「试听」面板补进已挂载集合（不替用户切当前页签）。顶栏按钮因此只改一个开关，
+  播放会话照样在；点小条「设置」= `setDockPanel('tryout')`，把**同一个已挂载的实例**展开出来
+  （不会出现第二个播放进程，守住 `adj723d` 的"同一谱子只有一个试听态"）。
+- **口径细节**：① 打开试听页签（任何入口）都顺手把 `miniBarOpen` 置真 ⇒ 页签收起后小条接着显示
+  （用户点名的那条）；② 关掉小条时先 `getPlaybackBridge()?.stop()`，否则会"声音还在响、界面没有控制入口"；
+  ③ **页签正开着**时点顶栏开关会**先把页签收起来**再落地开关（不这样做，按下去看不见任何变化）。
+  ④ **adj1321 用户拍板「底栏模式下类似」**：`ToolDock` 也改成"关而不卸"（第一次显示过之后关闭只
+  `hidden`；小工具条开着时即使从没打开过底栏也挂隐藏宿主并补挂「试听」面板），不再退回
+  "开关试听页签"的旧行为。
+- **探测侧**：`verify:app-ui` 阶段 F 重写——顶栏点「试听」后断言 `right-dock` **仍 hidden**、
+  按钮高亮、隐藏宿主里 `.pane-tryout` 已挂载、小条三按钮与定位；「设置」展开后仍是「暂停(A)」；
+  收起页签小条回来；点停止小条不消失；再点顶栏关掉后**停播**；最后真派发 `dblclick` 到
+  `[data-notepos]`，断言"小条出现 + 右栏仍 hidden + 播放键变暂停"。阶段 G 另验底栏壳同样的一套
+  （开小条不开底栏 / 设置展开底栏 / 关底栏小条回来）。
+- **预防**：任何"把入口从 A 面板改成 B 浮层"的需求，先查**B 浮层背后的会话/数据是谁挂载的**；
+  入口可以只是开关，但宿主必须明确（本次的宿主 = 两壳的隐藏面板树）。
+
+### E-2026-603 空格 = 播放/暂停：别把打字、按钮和"没开试听"一起抢了（`adj1321`，用户要求）
+- **用户原话（2026-11-22）**：「当焦点未在编辑区或未在右栏/底栏页签中时使用空格操作播放/暂停」。
+- **判定（`playback/spaceToggle.ts`）**：① **区域**：编辑区（`.editor-main`）、右栏/底栏
+  （`.tool-dock` / `.right-dock`）、模态框（`.modal`）里的空格**不接管**；② **原生控件**：输入框 /
+  文本域 / 下拉 / 按钮 / 链接 / contenteditable / 常见带 `role` 的控件**不接管**（键盘用户还要用
+  空格激活它们）；③ 其余（预览、页面空白）才允许。调用方还要确认**已有播放会话**
+  （`getPlaybackBridge() !== null`）且不是 `starting`——否则随手按空格会触发音源准备/下载。
+- **接线**：`App` 的全局 keydown（**capture 阶段**，与既有快捷键同一处）在最后接一条 Space 分支：
+  无修饰键、不重复、非输入法组合 ⇒ `preventDefault + stopPropagation + bridge.toggle()`。
+- **探测侧**：smoke 的纯判据 9 组（预览空白/ SVG 允许；按钮/输入框/可编辑区/编辑区/右栏底栏/
+  模态框/role 复选框全部拒绝）；`verify:app-ui` 阶段 G 真按空格：焦点在页面上 ⇒ 暂停/继续各一次；
+  焦点在编辑区 ⇒ **文本长度 +1 且播放态不变**；焦点在底栏页签 ⇒ 播放态不变。
+- **预防**：全局单键（空格/回车/字母）接管前先问三件事：**输入区让不让？原生控件让不让？没有会话时
+  会不会误触发？** 三条都写进纯判据、并各留一条负向断言。
 

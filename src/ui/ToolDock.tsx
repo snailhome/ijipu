@@ -252,12 +252,26 @@ export function ToolDock() {
    */
   const dockSide = useUiStore((s) => s.dockSide)
   const dockPanel = useUiStore((s) => s.dockPanel)
+  /**
+   * adj1321（用户 2026-11-22 拍板「底栏模式下类似」）：小工具条在**底栏壳**里也要能用。
+   *
+   * 底栏没有播放会话的宿主——`PlaybackDialog` 挂在试听面板上，而底栏关闭时原来整块卸载。
+   * 现在改成与右栏同一口径的"**关而不卸**"：小工具条开着时底栏以 `hidden` 挂着，
+   * 并额外确保「试听」面板已挂载；点小条的「设置」展开的是**同一个实例**。
+   */
+  const miniBarOpen = useUiStore((s) => s.miniBarOpen)
   const setDockPanel = useUiStore((s) => s.setDockPanel)
   const closeDock = useUiStore((s) => s.closeDock)
   /** adj610：Ctrl+H 发来的"按一下档位按钮"请求（nonce 自增；见 `cycleDockHeightRef` 处的消费逻辑） */
   const dockSizeStep = useUiStore((s) => s.dockSizeStep)
   // 首次激活即挂载；此后常挂载（切换仅用 hidden 隐藏）→ 面板内部状态天然保留
   const [everActive, setEverActive] = useState<readonly DockPanelKey[]>([])
+  /**
+   * adj1321：**本会话是否真的显示过底栏**（关而不卸的开关）。
+   * 没显示过时关着就整块不渲染（免得一进应用就预取音源）；显示过之后关着只 `hidden`，
+   * 试听的音源/时钟继续跑，小工具条也接得上。
+   */
+  const [everShown, setEverShown] = useState(false)
   /** adj465：各面板"当次"被拖拽调整过的高度（未调整则用 DEFAULT_H） */
   const [heights, setHeights] = useState<Partial<Record<DockPanelKey, number>>>({})
   /**
@@ -535,6 +549,11 @@ export function ToolDock() {
     }
     wasOpenRef.current = dockOpen
   }, [dockOpen])
+
+  // adj1321：只要真正显示过一次，就记住"本会话已挂载过"（关掉时只隐藏、不卸载）
+  useEffect(() => {
+    if (dockOpen && dockSide === 'bottom') setEverShown(true)
+  }, [dockOpen, dockSide])
 
   // adj520：切换面板时档位循环回到起点（相位 0）——各面板高度互相独立，
   // 上一个面板循环走到哪一格不该带到下一个面板（否则新面板的"当前档"与图标指示会对不上）。
@@ -923,11 +942,18 @@ export function ToolDock() {
     applyManualHeight(dockH + delta)
   }
 
-  // adj491：dock 关闭时**不渲染**。⚠ 这条守卫曾在 adj487（把拖拽从 mouse 改 Pointer Events）时
-  // 被连带删除——后果是「点 ✕ 后 `dockOpen` 已置 false，但组件照样渲染」⇒ 关闭按钮看着"失灵"（用户报）。
-  // 凡是"按状态决定渲染与否"的早退守卫，重构它前后的代码块时必须单独核对有没有被一起删掉。
-  // adj1295：**操作方式切到右侧栏后同样整块不渲染**（见 `dockSide` 的说明）。
-  if (!dockOpen || dockSide !== 'bottom') return null
+  // adj491：dock 关闭时不显示。adj1321：改成"关而不卸"——显示过一次之后只 `hidden`，
+  // 否则试听的音源/时钟会被卸载清理掉、小工具条接不上；小工具条开着（sessionHost）时
+  // 即使从没打开过底栏也要挂起来（顶栏按钮/双击音符只开小条、不打开页签）。
+  // ⚠ 开着/隐藏的判据仍必须同时看 `dockSide`：切到右侧栏后本组件整块不渲染。
+  const sessionHost = miniBarOpen && dockSide === 'bottom'
+  const shown = dockOpen && dockSide === 'bottom'
+  if (dockSide !== 'bottom' || !(shown || everShown || sessionHost)) return null
+  /**
+   * adj1321：会话宿主需要「试听」面板已挂载（当前页签可能是别的，面板用 `hidden` 藏住）。
+   */
+  const mountedTabs =
+    sessionHost && !everActive.includes('tryout') ? [...everActive, 'tryout' as const] : everActive
 
   /**
    * adj724b（用户实测反馈 #2）：**嵌入版里隐藏「工作区」页签**。
@@ -944,6 +970,10 @@ export function ToolDock() {
       // adj476：高度用内联 px 落到 `.tool-dock`。设置面板的"各栏独立滚动"改由 CSS grid 的
       // `minmax(0,1fr)` 行高保证（不再依赖 flex 链，也不再需要 --dock-cols-h 兜底）。
       style={{ height: `${dockH}px` }}
+      // adj1321：关而不卸（只隐藏，面板树继续挂着；CSS `.tool-dock[hidden]` 才有 display:none）
+      hidden={!shown}
+      data-dock-side="bottom"
+      data-dock-open={shown ? '1' : '0'}
       aria-label="底部工具面板"
     >
       {/* 顶部抓手（拖拽调整高度；键盘 ↑/↓ /PageUp/PageDown）
@@ -1102,7 +1132,7 @@ export function ToolDock() {
       </div>
       {/* 内容区：只渲染"已激活过"的面板；非当前面板用 hidden 隐藏（保住内部状态） */}
       <div className="tool-dock-body" ref={bodyRef}>
-        {PANELS.filter((p) => everActive.includes(p.key)).map((p) => {
+        {PANELS.filter((p) => mountedTabs.includes(p.key)).map((p) => {
           const Pane = p.render
           return (
             <div key={p.key} className={`tool-dock-pane pane-${p.key}`} hidden={dockPanel !== p.key} role="tabpanel">

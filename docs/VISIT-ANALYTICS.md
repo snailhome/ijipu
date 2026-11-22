@@ -13,6 +13,8 @@
 | 插件手册 | `/plugin/` |
 | 命令行手册 | `/cli/` |
 | 音色库推荐 | `/soundfonts/` |
+| 音视频工具 | `/tools/` |
+| 爱扒谱（iJipu BP） | `/bp/`（独立站点 `ijipu-bp.pages.dev` 跨站上报） |
 
 首页页脚的 PV 读公开接口 `/api/pv`（只返回总 PV）；页面明细仍走 `/api/stats`。
 
@@ -37,6 +39,19 @@
   按用户 2026-11-14 口径：**不做**旧 slug 的 301，也**不合并**旧 slug 的统计行。
 - **什么时候才另建**：只有乐谱站要完全脱离主站时，才在 `ijipu-sl` 里加 Functions + D1；
   现在不要建。
+
+### 0.1 爱扒谱（iJipu BP）也走同一套
+
+爱扒谱是独立站点 `https://ijipu-bp.pages.dev/`（仓库 `ijipu-bp`，Cloudflare Pages 项目 `ijipu-bp`）。
+它没有自己的 Functions/D1，而是在 `ijipu-bp/public/analytics.js` 里跨域 `POST` 到主站
+`https://ijipu.pages.dev/api/visit`，`path` 固定用 **`/bp/`** 作为统计标识（bp 站点本身是 `/`，
+这里只是统计口径，不是真实路由）。
+
+- 主站 `/api/visit` 的 `PATH_RE` 已放行 `/tools/` 与 `/bp/`；
+- `/api/stats` 的 `pages` 增加 `tools` 与 `bp`，统计页显示「音视频工具 /tools/」「爱扒谱 /bp/」；
+- 音视频工具就在主站 `/tools/`，用同一个 `public/analytics.js`，无需额外脚本；
+- bp 的 visitor 存在它自己的域名 localStorage（`bp.visitor`），与主站互不干扰；
+- 跨站上报可能被广告拦截/企业网络拦掉，数字比同源略低，属已知偏差。
 
 ## 1. 建 D1 数据库
 
@@ -101,7 +116,7 @@ https://ijipu.pages.dev/stats/
 
 输入 `STATS_TOKEN` 即可看：
 
-- 首页 / 应用 / 乐谱库 / 每首乐谱的 PV、UV；
+- 首页 / 应用 / 乐谱库 / 每首乐谱 / 音视频工具 / 爱扒谱的 PV、UV；
 - 每日 PV / UV 变化曲线；
 - 乐谱点击排名（按 PV 排序，带占比条）。
 
@@ -114,8 +129,8 @@ https://ijipu.pages.dev/stats/
 - 同一天、同一 path、同一 visitor、同一 channel 一行；
 - `views` 每次访问 +1 ⇒ **PV = SUM(views)**；
 - `UV = COUNT(*)`，同一天同一 visitor 只算一次；
-- visitor 是浏览器/应用本地随机 id，不存 IP、UA；**按域名隔离**——主站与新站各有一个 visitor id，
-  所以 UV 只在同一个 path 内自洽，迁移当天同一个人可能在旧站/新站各算一次；
+- visitor 是浏览器/应用本地随机 id，不存 IP、UA；**按域名隔离**——主站、乐谱站、爱扒谱各有一个
+  visitor id，所以 UV 只在同一个 path 内自洽；音视频工具在主站，和主站共用 visitor；
 - localhost / 127.0.0.1 / dev 不上报；
 - 301 跳转本身不计：旧地址 `/scores/` 只做跳转、没有页面，落到新站才记一次；
 - 跨站上报（新站 → 主站）可能被广告拦截/企业网络拦掉，数字会比同源时略低，属已知偏差；

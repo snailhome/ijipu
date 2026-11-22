@@ -14,15 +14,17 @@
  * 语法错误拦截、忙态禁用、错误提示——都与原 ExportDialog 相同（逻辑原样搬来）。
  * 导出进行中把任务名写进 `uiStore.exportJob`：**切走/关掉 dock，状态栏仍有动态指示**。
  */
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useDocStore } from '../../store/docStore'
 // adj965（方案 OVL，EP-10）：水印/背景资源（与预览/打印共用同一份）
 import { withOverlay } from '../../store/overlayAssets'
 import { useUiStore, enabledVoicesOf } from '../../store/uiStore'
 import { exportCopy, scorePackageCopy } from '../../brand/copy'
-import { layoutScore, renderScoreToSvg, buildPlaySequence, inferBpm, eventsToMidi, rangeBox, applyRangeToSvg, readViewBoxOf } from '@ijipu/engine'
-import type { ExportRange } from '@ijipu/engine'
+import { layoutScore, renderScoreToSvg, buildPlaySequence, inferBpm, eventsToMidi, rangeBox, applyRangeToSvg, readViewBoxOf, resolvePracticeRange, slicePlaySequenceByRange, hasNoteId } from '@ijipu/engine'
+import type { ExportRange, PlaySequence, ScoreLayout } from '@ijipu/engine'
 import { renderToAudioBuffer, audioBufferToWav, audioBufferToMp3 } from '../../export/audio'
+// adj1314：导出音频可选「整曲 / 标记段」——标记段存在 L1（与试听同一份）
+import { docKeyOf, loadMarks, PRACTICE_MARK_NONE } from '../../store/practiceMarks'
 import { exportSvg, exportPng, exportJpg, exportPdf } from '../../export/export'
 // adj1002：导出底色（纯函数，带 smoke 断言）
 import { exportBgColor } from '../../export/bgChoice'
@@ -47,6 +49,14 @@ function downloadBytes(bytes: Uint8Array, name: string, type: string) {
   a.download = name
   a.click()
   URL.revokeObjectURL(url)
+}
+
+/**
+ * adj1314：段名进文件名前的清洗（Windows 保留字符换空格；连续空白收敛）。
+ * 段名默认是「段 1」，用户以后能改名也照用。
+ */
+function safeSuffixOf(name: string): string {
+  return name.replace(/[\\/:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim()
 }
 
 /** 导出任务名（状态栏动态指示显示用） */
@@ -82,6 +92,18 @@ export function ExportPanel() {
   // adj1195：导出乐谱包（zip）走独立对话框；三端轻功能
   const openModal = useUiStore((s) => s.openModal)  // adj626：PDF 走打印（与 Ctrl+P / 菜单「打印」同一条路：同一份页面 + 同一个默认文件名）
   const printScore = useDocStore((s) => s.printScore)
+  /**
+   * adj1314（用户 2026-11-18 需求）：「导出页签增加标记段，导出音频时可以选择整曲/标记段以导出片段音频」。
+   *
+   * 选哪一段**与试听共用同一个「当前标记段」**（`practiceMarkId`）——用户刚在试听里练的那一段，
+   * 到导出页签不用再选一遍；反过来在这里换段，试听也跟着换（同一件事只有一份状态）。
+   */
+  const practiceMarks = useUiStore((s) => s.practiceMarks)
+  const practiceMarkId = useUiStore((s) => s.practiceMarkId)
+  const setPracticeMarkId = useUiStore((s) => s.setPracticeMarkId)
+  const setPracticeMarks = useUiStore((s) => s.setPracticeMarks)
+  const binding = useDocStore((s) => s.binding)
+  const nativePath = useDocStore((s) => s.nativePath)
   const defaultInstrumentRef = useMemo(() => firstEnabledInstrumentRef(playbackHqEnabled), [playbackHqEnabled])
 
   const [busy, setBusy] = useState<ExportKey | null>(null)
@@ -106,6 +128,45 @@ export function ExportPanel() {
     const lib = resolveActiveLibrary(playbackHqLibrary).lib
     const { bank } = await resolveHqBank(lib, hqCacheRef.current, hostBankUrl(lib.id))
     return bank
+  }
+
+  /** 文档身份（与试听面板同一份缓存键；换文档 ⇒ 换一批标记） */
+  const docKey = useMemo(() => docKeyOf({ fileName, binding, nativePath }), [fileName, binding, nativePath])
+  /**
+   * adj1314：标记段平时是**试听面板挂载时**（`PracticeMarkBar`）从本机缓存载入的；
+   * 用户若从没开过试听就直接来导出，列表会是空的 ⇒ 这里自己再读一次。
+   *
+   * **只读不写**：落盘仍归 `PracticeMarkBar`（唯一写入方），免得两处各存一份、互相覆盖。
+   */
+  useEffect(() => {
+    setPracticeMarks(loadMarks(docKey))
+  }, [docKey, setPracticeMarks])
+
+  /** 当前选中的段（缓存里已经没有它 —— 比如删了/换了文档 —— 就按「整曲」处理，与下拉显示一致） */
+  const markSelected = practiceMarks.find((m) => m.id === practiceMarkId) ?? null
+  /**
+   * adj1314：把「整首的演奏序列」按当前标记段切成要导出的那一段。
+   *
+   * 口径**完全复用试听**（`resolvePracticeRange` 配区间 + `slicePlaySequenceByRange` 重排到 0 点，
+   * 连用户选过的「第几遍」`PracticeMark.pass` 也照用）⇒ 试听里听到哪一段，导出的就是哪一段。
+   *
+   * ⚠ 这里**故意不读** `practiceRangeI0/I1`（试听侧那份"所见即所听"缓存）：那份缓存要等试听面板
+   * 挂载过才有值（从没开过试听、或换了文档，它就是空的/上一段的）。宁可自己解析一遍，
+   * 也不要因为缓存过期导出一段错的音频。
+   *
+   * @returns 切好的序列 + 文件名后缀（整曲时后缀为空）
+   */
+  const markSliceOf = (seq: PlaySequence, layout: ScoreLayout): { seq: PlaySequence; suffix: string } => {
+    const mark = markSelected
+    if (!mark) return { seq, suffix: '' }
+    const res = resolvePracticeRange(seq, mark.startId, mark.endId, { endInLayout: hasNoteId(layout, mark.endId) })
+    // 用户选过「第几遍」就照用（试听里挑的那一遍），否则用引擎推荐的那一遍
+    const idx = Math.min(Math.max(mark.pass ?? res.pick, 0), res.candidates.length - 1)
+    const c = res.candidates[idx]
+    const sliced = c ? slicePlaySequenceByRange(seq, c.i0, c.i1) : null
+    // 解析不出就**明确报错**：静默退成整曲，用户会以为"片段导出坏了"
+    if (!sliced) throw new Error(exportCopy.markInvalid)
+    return { seq: sliced, suffix: `-${safeSuffixOf(mark.name)}` }
   }
 
   /**
@@ -233,8 +294,10 @@ export function ExportPanel() {
         const layout = layoutScore(parseResult, pageConfig, defaultInstrumentRef)
         const bpm = inferBpm(parseResult)
         const seq = buildPlaySequence(parseResult, layout, bpm, undefined, defaultInstrumentRef)
-        const buf = await renderToAudioBuffer(seq.events, await ensureHqBank(), { bpm, title: parseResult.header.titles[0] ?? baseName })
-        downloadBytes(audioBufferToWav(buf), `${baseName}.wav`, 'audio/wav')
+        // adj1314：选了标记段 ⇒ 只出这一段（与试听同一套切片；整曲则原样）
+        const part = markSliceOf(seq, layout)
+        const buf = await renderToAudioBuffer(part.seq.events, await ensureHqBank(), { bpm, title: parseResult.header.titles[0] ?? baseName })
+        downloadBytes(audioBufferToWav(buf), `${baseName}${part.suffix}.wav`, 'audio/wav')
       }),
     },
     {
@@ -245,8 +308,9 @@ export function ExportPanel() {
         const layout = layoutScore(parseResult, pageConfig, defaultInstrumentRef)
         const bpm = inferBpm(parseResult)
         const seq = buildPlaySequence(parseResult, layout, bpm, undefined, defaultInstrumentRef)
-        const buf = await renderToAudioBuffer(seq.events, await ensureHqBank(), { bpm, title: parseResult.header.titles[0] ?? baseName })
-        downloadBytes(audioBufferToMp3(buf), `${baseName}.mp3`, 'audio/mpeg')
+        const part = markSliceOf(seq, layout)
+        const buf = await renderToAudioBuffer(part.seq.events, await ensureHqBank(), { bpm, title: parseResult.header.titles[0] ?? baseName })
+        downloadBytes(audioBufferToMp3(buf), `${baseName}${part.suffix}.mp3`, 'audio/mpeg')
       }),
     },
     { key: 'jps', label: exportCopy.jpsLabel, ext: '.jps', run: downloadJps },
@@ -303,6 +367,36 @@ export function ExportPanel() {
           <span>{exportCopy.bgImageLabel}</span>
         </label>
         <span className="dock-muted">{exportCopy.bgHint}</span>
+        {/*
+          adj1314（用户 2026-11-18 需求）：「导出音频时可以选择整曲/标记段以导出片段音频」。
+          下拉项 = 试听页签里标的那些段（同一份本机缓存、同一个"当前段"）；**只影响 WAV / MP3**，
+          所以紧贴在导出按钮上方，并用一行说明讲清它不管图片/PDF/MIDI。
+          一条段都没有时不给空下拉，直接告诉用户去哪儿标 —— 免得"点开是空的"不知道该干嘛。
+        */}
+        {practiceMarks.length > 0 ? (
+          <>
+            <label className="dock-field export-mark">
+              <span className="dock-field-label">{exportCopy.markLabel}</span>
+              <select
+                className="dock-select"
+                value={markSelected ? markSelected.id : PRACTICE_MARK_NONE}
+                onChange={(e) => setPracticeMarkId(e.target.value)}
+                disabled={busy !== null}
+                title={exportCopy.markHint}
+              >
+                <option value={PRACTICE_MARK_NONE}>{exportCopy.markWhole}</option>
+                {practiceMarks.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <span className="dock-muted">{exportCopy.markHint}</span>
+          </>
+        ) : (
+          <span className="dock-muted export-mark">{exportCopy.markEmptyHint}</span>
+        )}
       </div>
       <div className="dock-actions export-actions">
         {items.map((it) => (

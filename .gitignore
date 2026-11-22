@@ -3,6 +3,10 @@ logs
 *.log
 npm-debug.log*
 yarn-debug.log*
+
+# adj1316：真浏览器探针（scripts/verify-tools.mjs）把截图写在这里。
+# 写进 .gitignore 当闸门：探针跑一次就多一张 PNG，别让 `git add -A` 顺手带进仓库。
+.dsh-tmp/
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*

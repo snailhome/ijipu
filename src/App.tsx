@@ -7,7 +7,7 @@
  */
 import { Suspense, lazy, useEffect, useRef, useSyncExternalStore } from 'react'
 import { TopBar } from './ui/TopBar'
-// adj1301：浮动右栏收起后、试听还在播时的「三个按钮」小工具条（挂在顶栏试听按钮下方）
+// adj1301/adj1320：顶栏「试听」按钮下方那三个按钮的小工具条（开关由顶栏按钮控制）
 import { PlaybackMiniBar } from './ui/PlaybackMiniBar'
 import { EditorFootBar } from './ui/EditorFootBar'
 import { ToolDock } from './ui/ToolDock'
@@ -27,6 +27,9 @@ import { seedQueryFromSelection } from './editor/findReplace'
 import { PreviewPane } from './preview/PreviewPane'
 import { useDocStore } from './store/docStore'
 import { useUiStore } from './store/uiStore'
+// adj1321：空格 = 试听播放/暂停（焦点不在编辑区/右栏底栏/输入框时）
+import { getPlaybackBridge } from './store/playbackBridge'
+import { canSpaceTogglePlayback } from './playback/spaceToggle'
 // adj538：桌面壳「外部打开」（双击 .jps）——拉取待打开队列 + 监听后续打开请求
 import { drainExternalFiles, hasShell, onExternalOpen } from './store/externalOpen'
 // adj900：从 URL 文本串导入源码（官网首页「在应用里试听这段」带过来的）
@@ -424,12 +427,15 @@ function App() {
       } else if (e.ctrlKey && e.key.toLowerCase() === 'q') {
         e.preventDefault()
         e.stopPropagation()
-        // adj563：原为 `openModal('playback')`，但试听早在 adj462 迁进底栏 dock
-        // ⇒ `modal === 'playback'` 没有渲染分支、**Ctrl+Q 是死的**（菜单上还印着 Ctrl+Q）。
-        // 与菜单项 `entryTryout` 同口径：开关「试听」底栏。
-        // adj619（用户要求）：底栏入口快捷键走 `requestDockPanel`——**最小化时先展开到建议高度**
-        //（"是否最小化"只有 ToolDock 自己知道，故只发请求，见 uiStore 里那条说明）。
-        ui.requestDockPanel('tryout')
+        /**
+         * adj563：原为 `openModal('playback')`，但试听早在 adj462 迁进底栏 dock
+         * ⇒ `modal === 'playback'` 没有渲染分支、**Ctrl+Q 是死的**（菜单上还印着 Ctrl+Q）。
+         *
+         * adj1320（用户 2026-11-22 要求）：**Ctrl+Q 与顶栏「试听」按钮同语义**——
+         * 开关试听**小播放条**（不再打开试听页签；页签改由小工具条的「设置」打开）。
+         * adj1321（用户拍板「底栏模式下类似」）：右栏/底栏两种壳都由各自的隐藏宿主承载会话。
+         */
+        ui.toggleTryoutBar()
       } else if (e.ctrlKey && e.key.toLowerCase() === 'o') {
         e.preventDefault()
         e.stopPropagation()
@@ -573,6 +579,30 @@ function App() {
          */
         if (ui.dockOpen) ui.requestDockSizeStep()
         else ui.expandDock()
+      } else if (
+        /**
+         * adj1321（用户 2026-11-22 要求）：**空格 = 试听播放/暂停**。
+         *
+         * 只在"**已有播放会话** + **焦点不在编辑区 / 右栏底栏 / 输入框 / 按钮等原生控件**"
+         * 时接管（判定在 `playback/spaceToggle.ts`，纯函数有 smoke 断言）：
+         *  · 编辑区里空格是打字、右栏/底栏里空格是按键/滚动文档 ⇒ 不抢；
+         *  · 还没打开过试听（`playbackBridge` 没登记）⇒ 不抢，空格照常滚动页面；
+         *  · 按住不放（`repeat`）与带修饰键的 Space 也不接管。
+         */
+        (e.code === 'Space' || e.key === ' ') &&
+        !e.repeat &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.altKey &&
+        !e.shiftKey &&
+        !e.isComposing
+      ) {
+        const bridge = getPlaybackBridge()
+        if (bridge !== null && !bridge.starting && !ui.modal && canSpaceTogglePlayback(e.target)) {
+          e.preventDefault()
+          e.stopPropagation()
+          bridge.toggle()
+        }
       } else if (e.key === 'Tab' && !ui.modal && !(e.target as HTMLElement | null)?.closest?.('.editor-main')) {
         // 编辑器内 Tab 留给自动补全/默认行为（completion 时补全），其余区域切换视图
         e.preventDefault()
@@ -668,7 +698,7 @@ function App() {
   return (
     <div className="app" data-theme={theme} data-mode={effectiveMode} data-soften={previewSoften}>
       <TopBar />
-      {/* adj1301：右栏浮动且收起、试听还在跑时，这条小工具条才出现（位置跟着顶栏「试听」按钮） */}
+      {/* adj1301/adj1320/adj1321：顶栏「试听」按钮控制的小工具条（操作栏收起时显示；两种壳都行） */}
       <PlaybackMiniBar />
       {/* adj1295（方案 §五）：`.app-body` = 横向容器，编辑/预览在左、右栏在右。
           · **插入模式**：右栏是 flex 子项，真的把编辑/预览挤窄；

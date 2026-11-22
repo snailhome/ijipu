@@ -25,6 +25,9 @@ import type { FontOverride } from '@ijipu/engine'
 // 它是"水印层/背景层"这个领域概念，应用与插件共用；store 只在这里给它一个"用户选中的那层"的槽位
 export type { OverlayLayer } from '@ijipu/engine'
 import type { OverlayLayer } from '@ijipu/engine'
+// adj1320：顶栏「试听」按钮改成小工具条开关后，关掉它要顺手停播——
+// 否则声音会在"没有任何控制入口"的情况下继续响（小工具条是它唯一的常驻控制面）。
+import { getPlaybackBridge } from './playbackBridge'
 
 /**
  * adj563：**只保留 App 里真的还有渲染分支的模态**（原来还躺着 'about' / 'pageConfig' / 'playback' /
@@ -595,6 +598,22 @@ interface UiState {
   expandDock: () => void
   /** dock 标题栏 × 关闭：只关，不切面板（下次任意入口 toggle 会重新开） */
   closeDock: () => void
+  /**
+   * adj1320（用户 2026-11-22 要求）：顶栏「试听」按钮 = **试听小播放条的开关键**。
+   *
+   * 与旧版（按钮开关试听页签）不同：
+   *  · `true` = 小工具条"开着"；两种壳都会把面板树挂成隐藏态（右栏 `RightDock` /
+   *    底栏 `ToolDock`），让 `PlaybackDialog`（播放会话）有地方挂载——顶栏按钮因此不必先打开页签；
+   *  · 打开试听页签（任何入口）也会把它置 `true`：页签收起后小工具条接着显示
+   *    （用户口径「焦点在试听页签隐藏时还是显示小播放工具条」）；
+   *  · 页签正开着时点开关，会**先把页签收起来**再落地开关（否则按下去看不见任何变化）；
+   *  · 关掉它会**先停播**（否则声音继续、界面却没有控制入口）。
+   */
+  miniBarOpen: boolean
+  /** adj1320：顶栏「试听」按钮 / 菜单「试听播放」/ `Ctrl+Q` 共用的开关 */
+  toggleTryoutBar: () => void
+  /** adj1320：双击 / `Ctrl+单击` 音符 = **打开小工具条并播放**（不打开试听页签） */
+  openTryoutBar: () => void
   // ---- adj1294：操作栏的「壳」（底栏 / 右侧栏 / 右侧浮动栏）——四项 L1 用户个性 ----
   /**
    * 操作方式落在哪一侧：`bottom` = 底栏（现状，保留）/ `right` = 右侧栏。
@@ -879,7 +898,7 @@ export function dockModeOf(s: Pick<UiState, 'dockSide' | 'dockFloat'>): DockMode
   return s.dockFloat ? 'float' : 'insert'
 }
 
-export const useUiStore = create<UiState>()((set) => ({
+export const useUiStore = create<UiState>()((set, get) => ({
   modal: null,
   playbackStartId: null,
   playbackTick: 0,
@@ -1269,6 +1288,8 @@ export const useUiStore = create<UiState>()((set) => ({
   // （PC 的习惯是直接操作系统文件，插件由 OB 自己管文件）。判据只有一处：`fileHost.shouldOpenWorkspaceDock`。
   dockOpen: initialDock().open,
   dockPanel: initialDock().panel,
+  // adj1320：小工具条默认关（直接打开应用不显示任何操作栏）；打开试听页签会把它置 true
+  miniBarOpen: false,
   /**
    * adj1294：操作栏壳的四项 L1 偏好。默认值**按端算**——
    * 手机/平板与插件嵌入版 ⇒ 底栏；桌面壳/桌面浏览器/已装 PWA ⇒ 右侧浮动栏。
@@ -1287,22 +1308,61 @@ export const useUiStore = create<UiState>()((set) => ({
   toggleDock: (panel) =>
     set((s) => {
       // 关 → 开 + 切到该面板；已开且正是该面板 → 收起；已开但不是该面板 → 只切面板
-      if (!s.dockOpen) return { dockOpen: true, dockPanel: panel }
-      if (s.dockPanel === panel) return { dockOpen: false }
-      return { dockPanel: panel }
+      // adj1320：打开/切到试听页签时把小工具条也置为"开着"——页签收起后它接着显示
+      const onTryout = panel === 'tryout'
+      if (!s.dockOpen) return { dockOpen: true, dockPanel: panel, ...(onTryout ? { miniBarOpen: true } : {}) }
+      if (s.dockPanel === panel) return { dockOpen: false, ...(onTryout ? { miniBarOpen: true } : {}) }
+      return { dockPanel: panel, ...(onTryout ? { miniBarOpen: true } : {}) }
     }),
-  setDockPanel: (panel) => set({ dockOpen: true, dockPanel: panel }),
+  setDockPanel: (panel) =>
+    set(
+      panel === 'tryout'
+        ? { dockOpen: true, dockPanel: panel, miniBarOpen: true }
+        : { dockOpen: true, dockPanel: panel },
+    ),
   // adj1302：带谱进来（URL / 拖放 / 双击）⇒ 展开并落在试听
-  openDockForIncomingFile: () => set({ dockOpen: true, dockPanel: 'tryout' }),
+  // adj1320：也把小工具条置为"开着"（收起页签后它接着显示）
+  openDockForIncomingFile: () => set({ dockOpen: true, dockPanel: 'tryout', miniBarOpen: true }),
   // adj610/adj1290：展开底栏的唯一实现（告警抽屉已独立，不再顺带切告警）
   expandDock: () => set({ dockOpen: true }),
   closeDock: () => set({ dockOpen: false }),
+  /**
+   * adj1320（用户 2026-11-22 要求）：顶栏「试听」按钮 / 菜单 / `Ctrl+Q` 的开关语义。
+   *
+   * **两种壳都一样**（adj1321 用户拍板「底栏模式下类似」）：只开关小工具条。
+   * 右栏壳由 `RightDock`、底栏壳由 `ToolDock` 在 `miniBarOpen` 时挂成隐藏态，
+   * 播放会话因此有地方挂载；点小工具条「设置」展开的是同一个实例。
+   */
+  toggleTryoutBar: () => {
+    const s = get()
+    const next = !s.miniBarOpen
+    // 关掉小工具条 = 结束这次试听：不停播的话声音会继续、界面却没有控制入口
+    if (!next) getPlaybackBridge()?.stop()
+    /**
+     * 试听**页签正开着**时点这个开关：顺手把页签收起来再按开关落地。
+     * 否则页签挡住小工具条，点下去"看不见任何变化"（按了等于没按）。
+     */
+    const tabOpen = s.dockOpen && s.dockPanel === 'tryout'
+    set(tabOpen ? { miniBarOpen: next, dockOpen: false } : { miniBarOpen: next })
+  },
+  /**
+   * adj1320/adj1321：双击 / `Ctrl+单击` 音符 = **打开小工具条并播放**。
+   * 不打开试听页签；两种壳都只置位，会话由壳的隐藏态挂载（见 `miniBarOpen`）。
+   */
+  openTryoutBar: () => {
+    set({ miniBarOpen: true })
+  },
   // adj1294：操作栏壳四项（L1，写 `ijipu.dock*`）——每一处都"先落盘再改内存"，
   // 与 setTheme/setAutoWrap 等既有 L1 action 同一套路（写失败静默，不影响本次生效）
   setDockSide: (side) => {
     saveStr(DOCK_SIDE_KEY, side)
     // 切到右栏 ⇒ 顺带展开（用户点"右侧栏"是想看见它）；切回底栏不动开合（见接口注释）
-    set(side === 'right' ? { dockSide: side, dockOpen: true } : { dockSide: side })
+    // adj1320：展开时若当前页签是试听，小工具条开关也置开（收起后接着显示）
+    set(
+      side === 'right'
+        ? { dockSide: side, dockOpen: true, ...(get().dockPanel === 'tryout' ? { miniBarOpen: true } : {}) }
+        : { dockSide: side },
+    )
   },
   setDockFloat: (float) => {
     saveStr(DOCK_FLOAT_KEY, float ? '1' : '0')
@@ -1321,16 +1381,28 @@ export const useUiStore = create<UiState>()((set) => ({
     const float = mode === 'float'
     saveStr(DOCK_SIDE_KEY, side)
     saveStr(DOCK_FLOAT_KEY, float ? '1' : '0')
-    set(side === 'right' ? { dockSide: side, dockFloat: float, dockOpen: true } : { dockSide: side, dockFloat: float })
+    // adj1320：切到（并展开）右栏时若当前页签是试听，小工具条开关也置开
+    set(
+      side === 'right'
+        ? {
+            dockSide: side,
+            dockFloat: float,
+            dockOpen: true,
+            ...(get().dockPanel === 'tryout' ? { miniBarOpen: true } : {}),
+          }
+        : { dockSide: side, dockFloat: float },
+    )
   },
   toggleRightDock: () =>
     set((s) => {
       if (s.dockSide !== 'right') {
         // 底栏 ⇒ 切到右侧栏并展开（沿用用户上次记的浮/插档）
         saveStr(DOCK_SIDE_KEY, 'right')
-        return { dockSide: 'right', dockOpen: true }
+        return { dockSide: 'right', dockOpen: true, ...(s.dockPanel === 'tryout' ? { miniBarOpen: true } : {}) }
       }
-      return { dockOpen: !s.dockOpen }
+      // adj1320：**打开**右栏时若当前页签是试听，小工具条开关跟着置开（收起后接着显示）；
+      // 关闭时不改它——用户可能刚手动把开关关掉，别在关栏时又替他打开。
+      return { dockOpen: !s.dockOpen, ...(!s.dockOpen && s.dockPanel === 'tryout' ? { miniBarOpen: true } : {}) }
     }),
   // adj1290：告警抽屉（L3，不落盘；默认收起）
   problemsDrawerOpen: false,

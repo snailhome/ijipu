@@ -1,0 +1,458 @@
+/**
+ * tools/tools.css — `/tools/` 独立页样式（adj1316）
+ *
+ * 为什么单独一份、不 import 应用的 `index.css`：那份带着整个编辑器的布局变量与组件样式
+ * （几万行），工具页只要"一张卡片 + 三个页签"。配色跟随站点深浅（`html[data-site-mode]`，
+ * 由 `tools/index.html` 的内联脚本在首屏前定好，避免闪一下）。
+ */
+:root {
+  --t-bg: #0f1526;
+  --t-panel: #161d33;
+  --t-panel-2: #1c2440;
+  --t-line: rgba(147, 160, 200, 0.16);
+  --t-fg: #eef2ff;
+  --t-muted: #9aa6c6;
+  --t-accent: #2fd6c4;
+  --t-accent-2: #00f0ff;
+  --t-warn: #ffc61a;
+  --t-error: #ff7a7a;
+  --t-radius: 10px;
+}
+
+html[data-site-mode='light'] {
+  --t-bg: #f2f5fb;
+  --t-panel: #ffffff;
+  --t-panel-2: #f6f8fd;
+  --t-line: rgba(28, 37, 64, 0.12);
+  --t-fg: #1c2540;
+  --t-muted: #5b6785;
+  --t-accent: #0e8a72;
+  --t-accent-2: #0891a6;
+  --t-warn: #a26f00;
+  --t-error: #c02b2b;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--t-bg);
+  color: var(--t-fg);
+}
+
+body {
+  font: 15px/1.6 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+}
+
+#tools-root {
+  min-height: 100vh;
+}
+
+.t-shell {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 18px 16px 48px;
+}
+
+/* 顶栏 */
+.t-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.t-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.t-brand img {
+  border-radius: 8px;
+}
+
+.t-brand-name {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.t-brand-sub {
+  color: var(--t-muted);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+
+.t-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 13px;
+}
+
+.t-nav a {
+  color: var(--t-muted);
+  text-decoration: none;
+}
+
+.t-nav a:hover {
+  color: var(--t-fg);
+}
+
+.t-badge {
+  padding: 2px 8px;
+  border: 1px solid var(--t-line);
+  border-radius: 999px;
+  color: var(--t-muted);
+  font-size: 12px;
+}
+
+.t-intro {
+  margin: 14px 0 10px;
+  color: var(--t-muted);
+  font-size: 13px;
+}
+
+/* 页签 */
+.t-tabs {
+  display: flex;
+  gap: 6px;
+  border-bottom: 1px solid var(--t-line);
+  margin-bottom: 16px;
+  overflow-x: auto;
+}
+
+.t-tab {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--t-muted);
+  padding: 9px 14px;
+  font-size: 14px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+}
+
+.t-tab.is-active {
+  color: var(--t-fg);
+  border-bottom-color: var(--t-accent);
+  font-weight: 600;
+}
+
+/* 卡片 */
+.t-card {
+  background: var(--t-panel);
+  border: 1px solid var(--t-line);
+  border-radius: var(--t-radius);
+  padding: 16px 16px 18px;
+}
+
+.t-card h2 {
+  margin: 0 0 6px;
+  font-size: 16px;
+}
+
+.t-hint {
+  margin: 0 0 14px;
+  color: var(--t-muted);
+  font-size: 13px;
+}
+
+.t-muted {
+  color: var(--t-muted);
+  font-size: 13px;
+}
+
+.t-note {
+  margin: 6px 0 0;
+}
+
+.t-loading {
+  color: var(--t-accent);
+}
+
+.t-mono {
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-size: 12px;
+}
+
+/* 表单行 */
+.t-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.t-row-label {
+  min-width: 68px;
+  color: var(--t-muted);
+  font-size: 13px;
+}
+
+.t-btn {
+  appearance: none;
+  border: 1px solid var(--t-line);
+  background: var(--t-panel-2);
+  color: var(--t-fg);
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.t-btn:hover:not(:disabled) {
+  border-color: var(--t-accent);
+}
+
+.t-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.t-btn-run {
+  background: var(--t-accent);
+  border-color: var(--t-accent);
+  color: #06202a;
+  font-weight: 600;
+}
+
+.t-btn-mini {
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.t-btn-pick {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.t-hidden-input {
+  display: none;
+}
+
+.t-select,
+.t-input {
+  background: var(--t-panel-2);
+  color: var(--t-fg);
+  border: 1px solid var(--t-line);
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 13px;
+}
+
+.t-input {
+  width: 120px;
+}
+
+.t-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 10px 0;
+}
+
+.t-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--t-muted);
+  font-size: 13px;
+}
+
+/* adj1318：开着的那颗按钮（复听）—— 和「循环选区」的勾选框一样，要一眼看出是开着的 */
+.t-btn.is-on {
+  border-color: var(--t-accent);
+  color: var(--t-accent);
+  background: color-mix(in srgb, var(--t-accent) 14%, transparent);
+}
+
+.t-check .t-select {
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+/* 提示条 */
+.t-notice {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--t-line);
+  background: var(--t-panel-2);
+  font-size: 13px;
+}
+
+.t-notice-warn {
+  border-color: var(--t-warn);
+  color: var(--t-warn);
+}
+
+.t-notice-error {
+  border-color: var(--t-error);
+  color: var(--t-error);
+}
+
+/* 进度 */
+.t-progress {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--t-muted);
+}
+
+.t-progress-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--t-panel-2);
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+
+.t-progress-track i {
+  display: block;
+  height: 100%;
+  background: var(--t-accent);
+  transition: width 0.15s linear;
+}
+
+/* 波形 */
+.t-wave {
+  display: block;
+  width: 100%;
+  height: 168px;
+  margin: 4px 0 10px;
+  border: 1px solid var(--t-line);
+  border-radius: 8px;
+  background: var(--t-panel-2);
+  touch-action: none;
+  cursor: crosshair;
+}
+
+/* adj1319：波形被点过之后空格＝播放/暂停，所以它得能拿焦点，并且让焦点看得见 */
+.t-wave:focus-visible {
+  outline: 2px solid var(--t-accent-2);
+  outline-offset: 1px;
+}
+
+/* adj1319：放大后出现的横向滚动条（拖动滑块挪波形视野） */
+.t-scroll {
+  position: relative;
+  height: 12px;
+  margin: -4px 0 10px;
+  border: 1px solid var(--t-line);
+  border-radius: 6px;
+  background: var(--t-panel-2);
+  touch-action: none;
+  cursor: pointer;
+}
+
+.t-scroll-thumb {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 6px;
+  background: var(--t-accent);
+  opacity: 0.72;
+  cursor: grab;
+}
+
+.t-scroll-thumb:active {
+  opacity: 0.95;
+  cursor: grabbing;
+}
+
+.t-sel {
+  margin: 6px 0 10px;
+}
+
+.t-nudges {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+/* 标记段列表 */
+.t-marks {
+  margin-top: 14px;
+  border-top: 1px solid var(--t-line);
+  padding-top: 10px;
+}
+
+.t-marks h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.t-marks ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.t-marks li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 6px 8px;
+  border: 1px solid var(--t-line);
+  border-radius: 8px;
+  background: var(--t-panel-2);
+}
+
+.t-marks li.is-sel {
+  border-color: var(--t-accent);
+}
+
+/* 窄屏（手机）：顶栏换行、页签占满、波形矮一点 —— 这一页的使用场景是"随时拿出来截一段" */
+@media (max-width: 620px) {
+  .t-top,
+  .t-shell {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .t-top {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .t-brand-sub {
+    display: none;
+  }
+
+  .t-tabs {
+    gap: 2px;
+  }
+
+  .t-tab {
+    padding: 8px 10px;
+    font-size: 13px;
+  }
+
+  .t-card {
+    padding: 12px;
+  }
+
+  .t-wave {
+    height: 120px;
+  }
+
+  .t-row-label {
+    min-width: 0;
+  }
+
+  .t-marks li .t-input {
+    flex: 1 1 100%;
+  }
+}

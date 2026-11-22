@@ -41,6 +41,8 @@ export const brand = {
   siteUrl: 'https://ijipu.pages.dev',
   /** 独立乐谱站（ijipu-sl / 爱管谱管理） */
   scoresUrl: 'https://ijipu-sl.pages.dev',
+  /** adj1322：爱扒谱（iJipu BP）在线版，首页顶栏/入口卡直达 */
+  bpUrl: 'https://ijipu-bp.pages.dev/',
   /** Obsidian 插件仓库（同一位作者，用户在 Obsidian 里用得上） */
   obsidianRepoUrl: 'https://github.com/snailhome/obsidian-ijipu',
   /**

@@ -1,7 +1,8 @@
 /**
  * public/analytics.js — 网站页面访问计数
  *
- * 只统计四个页面：首页 / 应用 / 乐谱库 / 单首乐谱。
+ * 统计站点页面：首页 / 应用 / 音视频工具 / 文档 / 乐谱库 / 单首乐谱。
+ * 爱扒谱（ijipu-bp.pages.dev）是独立站点，它自己的 `public/analytics.js` 跨站上报 `/bp/`。
  * 生产环境才上报；visitor 是 localStorage 里的随机 id（不存 IP / UA）。
  * 桌面应用由 src/analytics/trackVisit.ts 走绝对地址上报。
  */
@@ -14,7 +15,7 @@
     if (path === '/scores') path = '/scores/'
     if (path === '/app') path = '/app/'
     if (path !== '/' && !path.endsWith('/')) path += '/'
-    if (!/^\/(?:app\/|scores\/(?:[a-z0-9-]+\/)?|manual\/|syntax\/|plugin\/|cli\/|soundfonts\/)?$/.test(path)) return
+    if (!/^\/(?:app\/|scores\/(?:[a-z0-9-]+\/)?|manual\/|syntax\/|plugin\/|cli\/|soundfonts\/|tools\/)?$/.test(path)) return
 
     var id = ''
     try {

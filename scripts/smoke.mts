@@ -239,6 +239,8 @@ import { normalizePastedSource } from '../src/store/importSource.ts'
 import { UPDATE_CHECK_INTERVAL_MS, shouldPromptUpdate } from '../src/pwa/swUpdate.ts'
 // adj409：试听暂停/续播的剩余事件平移（纯逻辑）
 import { shiftEventsFrom } from '../src/playback/playbackTimeline.ts'
+// adj1321：空格 = 播放/暂停 的目标判定（纯数据判据，Node 里可直接断言）
+import { spacePlaybackAllowed } from '../src/playback/spaceToggle.ts'
 import { passAt, passLabel } from '../src/dialogs/playbackPass.ts'
 // adj1002：导出底色（纯函数）
 import { exportBgColor } from '../src/export/bgChoice.ts'
@@ -9884,7 +9886,8 @@ console.log('[103] icons live in public/icons and only the used ones (adj417)')
   // （应用外壳在 `app/index.html`；首页的图标列表还多一个 apple-touch-icon，故阈值取 2。）
   // adj905x：新增 `/plugin/`（插件手册）后同样要在这一串里，否则"新页面忘了 favicon"没人守。
   // adj948：新增 `/cli/`（命令行手册）同理 —— 新页面必须自己带上 favicon。
-  for (const rel of ['index.html', 'app/index.html', 'manual/index.html', 'syntax/index.html', 'plugin/index.html', 'cli/index.html']) {
+  // adj1316：新增 `/tools/`（音视频工具）同理。
+  for (const rel of ['index.html', 'app/index.html', 'manual/index.html', 'syntax/index.html', 'plugin/index.html', 'cli/index.html', 'tools/index.html']) {
     const html = readFileSync(join(root, rel), 'utf8')
     const htmlIcons = [...html.matchAll(/href="(\/icons\/[^"]+)"/g)].map((m) => m[1])
     check(
@@ -9898,6 +9901,44 @@ console.log('[103] icons live in public/icons and only the used ones (adj417)')
     .filter((f) => /\.tsx?$/.test(f))
     .filter((f) => new RegExp(`["'\`]/(Jianpu|pwa-\\d+|good)\\.(png|ico)`).test(readFileSync(join(root, 'src', f), 'utf8')))
   check('adj417 源码里没有遗留的根目录图片路径（Logo/赞赏码/PWA 图标）', rootRefs.length === 0, rootRefs.join(','))
+
+  // ---- adj1315：图标分工（用户 2026-11-18「jps 文件的关联图标为 Logo.png，应用图标用 logo-xx.png」）----
+  // 口径：`.jps` 是**通用**简谱工程文件 ⇒ 文件类型图标用通用 Logo（123，不带产品字样），
+  // 由安装目录里的 `jps.ico` 提供；产品自己的图标（exe / 任务栏 / 标签页 / PWA）用各自品牌 Logo-xx。
+  // 这里守四件事：ico 是合法 ICO、安装器会把它装进安装目录、钩子会把 DefaultIcon 指过去、
+  // 网站图标确实已经不是通用 Logo 的字节（防"改了钩子忘了换图"或反过来）。
+  const jpsIcoPath = join(root, 'src-tauri', 'icons', 'jps.ico')
+  const jpsIcoBuf = existsSync(jpsIcoPath) ? readFileSync(jpsIcoPath) : Buffer.alloc(0)
+  const jpsIcoHead = jpsIcoBuf.subarray(0, 4)
+  check(
+    'adj1315 src-tauri/icons/jps.ico 是合法 ICO（0,0,1,0 头）',
+    jpsIcoHead.length === 4 && jpsIcoHead[0] === 0 && jpsIcoHead[1] === 0 && jpsIcoHead[2] === 1 && jpsIcoHead[3] === 0,
+    jpsIcoHead.join(','),
+  )
+  // adj1315：多档尺寸 —— 只写 16×16 一档的 ico 资源管理器会放大成糊图（本轮真踩过：Pillow 传
+  // `append_images` 只写出最小那一张）。要求至少 5 档、且带 256×256（0 表示 256）。
+  const icoFrameCount = jpsIcoBuf.length >= 6 ? jpsIcoBuf.readUInt16LE(4) : 0
+  // 目录项里宽高字节 0 表示 256（ico 格式的历史限制），所以要逐项看，不能只看第一项。
+  let icoHas256 = false
+  for (let i = 0; i < icoFrameCount; i += 1) {
+    const off = 6 + i * 16
+    if (jpsIcoBuf.length >= off + 2 && jpsIcoBuf[off] === 0 && jpsIcoBuf[off + 1] === 0) icoHas256 = true
+  }
+  check('adj1315 jps.ico 含多档尺寸（≥5 档且带 256×256）', icoFrameCount >= 5 && icoHas256, `frames=${icoFrameCount} has256=${icoHas256}`)
+  const jpConf = readFileSync(join(root, 'src-tauri', 'tauri.conf.json'), 'utf8')
+  check('adj1315 tauri.conf.json 的 bundle.resources 会装 jps.ico', /"icons\/jps\.ico":\s*"jps\.ico"/.test(jpConf))
+  const jpHooks = readFileSync(join(root, 'src-tauri', 'nsis', 'hooks.nsh'), 'utf8')
+  check(
+    'adj1315 安装钩子把 ProgID 的 DefaultIcon 指到 $INSTDIR\\jps.ico（不是 exe）',
+    jpHooks.includes('Software\\Classes\\${IJIPU_PROGID}\\DefaultIcon') && jpHooks.includes('$INSTDIR\\${IJIPU_JPS_ICON},0'),
+  )
+  const genericLogoBytes = readFileSync(join(root, 'public', 'icons', 'Logo.png'))
+  const brandIconBytes = ['Jianpu.png', 'pwa-192.png', 'pwa-512.png'].map((n) => readFileSync(join(root, 'public', 'icons', n)))
+  check(
+    'adj1315 网站图标（Jianpu/pwa-192/pwa-512）已换成品牌 Logo-jp，不再等于通用 Logo.png',
+    brandIconBytes.every((b) => !b.equals(genericLogoBytes)),
+    `Jianpu.png ${brandIconBytes[0].length}B vs Logo.png ${genericLogoBytes.length}B`,
+  )
 }
 
 // ---- 104. 文档里的示例必须真能解析（adj419 / adj422） ----
@@ -11459,6 +11500,45 @@ console.log('[adj433] segment beats align with melody beats (within-note interpo
     check('adj457 导出（MIDI/WAV/MP3）一律不传乐器覆盖（按谱面音色导出）',
       expCalls.length === 3 && expCalls.every((args) => args === 'parseResult, layout, bpm, undefined, defaultInstrumentRef'),
       expCalls.join(' | '))
+    /**
+     * adj1314（用户 2026-11-18 需求）：「在 jp 应用中导出页签增加标记段，导出音频时可以选择整曲/标记段
+     * 以导出片段音频」。
+     *
+     * 这批只看**源码连线**（真点一遍在 verify:app-ui）：导出的片段必须与试听**同一套切片**——
+     * 用户听到哪一段，导出来的就是哪一段；不许在导出面板里自己算 i0/i1（AGENTS §六之二·4 同一口径）。
+     */
+    const expMarkUses = [...expSrc.matchAll(/markSliceOf\(([^)]*)\)/g)].map((m) => m[1].trim())
+    check('adj1314 导出面板**读**标记段（`docKeyOf` + `loadMarks`；只读，落盘仍归试听那条条）',
+      /docKeyOf\(\{ fileName, binding, nativePath \}\)/.test(expSrc) &&
+        /setPracticeMarks\(loadMarks\(docKey\)\)/.test(expSrc) &&
+        !/saveMarks\(/.test(expSrc),
+      '')
+    check('adj1314 导出面板有「整曲 / 标记段」下拉（首项 = 不切段；与试听共用同一个当前段）',
+      expSrc.includes('{exportCopy.markWhole}') &&
+        expSrc.includes('value={PRACTICE_MARK_NONE}') &&
+        expSrc.includes('onChange={(e) => setPracticeMarkId(e.target.value)}'),
+      '')
+    check('adj1314 切片走引擎那一份（resolvePracticeRange + endInLayout + slicePlaySequenceByRange），不自算区间',
+      /resolvePracticeRange\(seq, mark\.startId, mark\.endId, \{ endInLayout: hasNoteId\(layout, mark\.endId\) \}\)/.test(expSrc) &&
+        /slicePlaySequenceByRange\(seq, c\.i0, c\.i1\)/.test(expSrc),
+      '')
+    check('adj1314 WAV / MP3 两条路都按标记段切片（调用恰好 2 处 ⇒ MIDI 那条路不动）',
+      expMarkUses.length === 2 && expMarkUses.every((a) => a === 'seq, layout'),
+      expMarkUses.join(' | '))
+    check('adj1314 不读试听侧那份「所见即所听」缓存（导出面板打开时 PracticeMarkBar 不在，缓存会过期）',
+      !/s\.practiceRangeI0/.test(expSrc) && !/practiceRangeEventCount/.test(expSrc),
+      '')
+    check('adj1314 **负向**：片段解析不出时明确报错（不静默退成整曲）',
+      /if \(!sliced\) throw new Error\(exportCopy\.markInvalid\)/.test(expSrc),
+      '')
+    const copySrc1314 = String(readFileSync('src/brand/copy.ts', 'utf8'))
+    check('adj1314 文案集中在 `exportCopy`（标记段 / 整曲 / 说明 / 空列表提示 / 报错）',
+      copySrc1314.includes("markLabel: '标记段'") &&
+        copySrc1314.includes("markWhole: '整曲（不切段）'") &&
+        copySrc1314.includes('markHint:') &&
+        copySrc1314.includes('markEmptyHint:') &&
+        copySrc1314.includes('markInvalid:'),
+      '')
   }
 }
 
@@ -13714,9 +13794,9 @@ function runAdj530TopBarLayoutTests() {
     const appCode = String(readFileSync('src/App.tsx', 'utf8'))
       .replace(/\/\*[\s\S]*?\*\//g, '')
       .replace(/\/\/[^\n]*/g, '')
-    check('adj563 Ctrl+Q 改为开关「试听」底栏（原 `openModal(\'playback\')` 是死调用）',
-      // adj619：底栏入口快捷键统一走 `requestDockPanel`（最小化时先展开到建议高度，见 [144]）
-      /toLowerCase\(\) === 'q'\)[\s\S]{0,300}?ui\.requestDockPanel\('tryout'\)/.test(appCode) &&
+    check('adj563/adj1320 Ctrl+Q 改为开关「试听小播放条」（原 `openModal(\'playback\')` 是死调用）',
+      // adj1320（用户 2026-11-22）：与顶栏「试听」按钮同语义——开关小工具条，不再打开试听页签
+      /toLowerCase\(\) === 'q'\)[\s\S]{0,500}?ui\.toggleTryoutBar\(\)/.test(appCode) &&
         !/openModal\('playback'\)/.test(appCode),
       '')
   }
@@ -17355,7 +17435,7 @@ function runAdj617Tests() {
     /title: withKbd\('排版辅助虚线', KBD\.guides\)/.test(topSrc) &&
       /title: withKbd\('自动折行', KBD\.wrap\)/.test(topSrc) &&
       /title: withKbd\('简谱输入条', KBD\.pad\)/.test(topSrc) &&
-      /title: withKbd\('试听播放', KBD\.tryout\)/.test(topSrc) &&
+      /title: withKbd\(playbackMiniCopy\.toggleTitle, KBD\.tryout\)/.test(topSrc) &&
       /title: withKbd\('导出', KBD\.export\)/.test(topSrc) &&
       /title=\{withKbd\(\s*\n?\s*themeMode === 'auto'/.test(topSrc) &&
       /title=\{withKbd\('切换视图（点击选）', KBD\.view\)\}/.test(topSrc),
@@ -17452,8 +17532,9 @@ function runAdj619Tests() {
   const dockSrc = readDockSrc()
 
   check(
-    'adj619/adj1290 四条底栏入口快捷键都走 `requestDockPanel`（试听/导出/工作区/导入），告警改走抽屉',
-    ['tryout', 'export', 'workspace', 'import'].every((p) => new RegExp(`ui\\.requestDockPanel\\('${p}'\\)`).test(appSrc)) &&
+    'adj619/adj1290/adj1320 底栏入口快捷键：试听改为小工具条开关（`ui.toggleTryoutBar`），导出/工作区/导入仍走 `requestDockPanel`，告警走抽屉',
+    ['export', 'workspace', 'import'].every((p) => new RegExp(`ui\\.requestDockPanel\\('${p}'\\)`).test(appSrc)) &&
+      /ui\.toggleTryoutBar\(\)/.test(appSrc) &&
       !/ui\.toggleDock\('(tryout|export|workspace|import|problems)'\)/.test(appSrc) &&
       /ui\.toggleProblemsDrawer\(\)/.test(appSrc),
     '',
@@ -18348,11 +18429,11 @@ async function runAdj541DockToggleTests() {
       // 负向：编辑区不再为"展开底栏"算告警条数、也不再有"先看告警"的文案
       !/summarizeProblems/.test(editorSrc) &&
       !/expandWithProblems/.test(editorSrc) &&
-      // 顶栏/菜单那几条**点名**的入口仍是直开（试听/导出/设置/关于）
+      // 顶栏/菜单那几条**点名**的入口：试听已改为小工具条开关（adj1320），其余仍直开（导出/设置/关于）
       (() => {
         const top = String(readFileSync('src/ui/TopBar.tsx', 'utf8'))
         return (
-          /onPick: \(\) => toggleDock\('tryout'\)/.test(top) &&
+          /onPick: toggleTryoutBar/.test(top) &&
           /onPick: \(\) => toggleDock\('settings'\)/.test(top) &&
           /label: '关于\(&A\)', hotkey: 'a', onPick: \(\) => toggleDock\('about'\)/.test(top)
         )
@@ -19143,8 +19224,10 @@ console.log('[115] dock close: early-return guard & close button inside dock (ad
   const css = String(readFileSync('src/index.css', 'utf8')).replace(/\/\*[\s\S]*?\*\//g, '')
   // 回归护栏：adj487 把拖拽从 mouse 改 Pointer Events 时**连带删掉了 `if (!dockOpen) return null`**，
   // 后果是「点 ✕ 后 dockOpen 已置 false，但组件照样渲染」⇒ 关闭按钮看着失灵（用户报 E-2026-211）。
-  check('adj491 dock 关闭时不渲染：保留 `if (!dockOpen) return null` 早退守卫',
-    /if \(!dockOpen\) return null/.test(dockSrc),
+  check('adj491/adj1321 dock 关闭时不显示：关而不卸（`hidden`），面板树继续挂着（试听不中断）',
+    /if \(dockSide !== 'bottom' \|\| !\(shown \|\| everShown \|\| sessionHost\)\) return null/.test(dockSrc) &&
+      /hidden=\{!shown\}/.test(dockSrc) &&
+      /\.tool-dock\[hidden\] \{\s*display: none;/.test(css),
     '')
   check('adj491 关闭按钮接线到 store 的 closeDock', /className="tool-dock-close" onClick=\{closeDock\}/.test(dockSrc), '')
   // 布局护栏：页签栏必须约束在 dock 宽度内，否则「右侧常驻按钮」会被推出可视区
@@ -19433,8 +19516,10 @@ console.log('[118] lazy dock panels, tabs at bottom, unified resize lines (adj49
   check('adj497 不再静态 import 任何 dock 面板（ToolDock 顶部无 import { ProblemPanel/ExportPanel }）',
     !/^import \{ (ProblemPanel|ExportPanel) \} from/m.test(dockSrc),
     '')
-  check('adj497 懒加载只在首次激活时发生（PANELS.filter(everActive) 守卫在位）',
-    /PANELS\.filter\(\(p\) => everActive\.includes\(p\.key\)\)/.test(dockSrc) && /<Suspense fallback=/.test(dockSrc),
+  check('adj497/adj1321 懒加载只在首次激活时发生（`PANELS.filter(mountedTabs)` 守卫在位；小工具条宿主只额外补挂「试听」）',
+    /PANELS\.filter\(\(p\) => mountedTabs\.includes\(p\.key\)\)/.test(dockSrc) &&
+      /const mountedTabs =\s*sessionHost && !everActive\.includes\('tryout'\)/.test(dockSrc) &&
+      /<Suspense fallback=/.test(dockSrc),
     '')
 
   // adj498：页签栏移到底部（视觉顺序 抓手 → 内容 → 页签），DOM 顺序不变（读屏/Tab 序不受影响）
@@ -27929,8 +28014,8 @@ function runAdj966Tests() {
       }),
     )
     check(
-      'adj1302 **带谱进来才展开到试听**：动作定义一处（`openDockForIncomingFile`），URL / 拖放 / 双击三个入口都调它',
-      uiSrc1302.includes("openDockForIncomingFile: () => set({ dockOpen: true, dockPanel: 'tryout' })") &&
+      'adj1302/adj1320 **带谱进来才展开到试听**：动作定义一处（`openDockForIncomingFile`，同时把小工具条置开），URL / 拖放 / 双击三个入口都调它',
+      uiSrc1302.includes("openDockForIncomingFile: () => set({ dockOpen: true, dockPanel: 'tryout', miniBarOpen: true })") &&
         (appSrc1302.match(/openDockForIncomingFile\(\)/g) ?? []).length >= 2 &&
         dropSrc1302.includes('useUiStore.getState().openDockForIncomingFile()'),
       JSON.stringify({
@@ -27941,7 +28026,7 @@ function runAdj966Tests() {
     check(
       'adj1302 **负对照**：拖放入口不调那个动作 ⇒ 判据判红（它真的在数三个入口的接线，不是看名字）',
       !(
-        uiSrc1302.includes("openDockForIncomingFile: () => set({ dockOpen: true, dockPanel: 'tryout' })") &&
+        uiSrc1302.includes("openDockForIncomingFile: () => set({ dockOpen: true, dockPanel: 'tryout', miniBarOpen: true })") &&
         (appSrc1302.match(/openDockForIncomingFile\(\)/g) ?? []).length >= 2 &&
         dropSrc1302.replace('useUiStore.getState().openDockForIncomingFile()', '').includes('openDockForIncomingFile()')
       ),
@@ -28195,9 +28280,9 @@ function runAdj1294Tests() {
     '',
   )
   check(
-    'adj1301 右栏**自锁**（不是右侧栏模式就整块不渲染）+ **关而不卸**（关栏只 `hidden`，试听不中断）+ 宽度写成 CSS 变量',
+    'adj1301/adj1320 右栏**自锁**（不是右侧栏模式就整块不渲染）+ **关而不卸**（关栏只 `hidden`；小工具条开着时也当隐藏会话宿主）+ 宽度写成 CSS 变量',
     rdCode.includes("const active = open && side === 'right'") &&
-      rdCode.includes("if (side !== 'right' || !(active || everShown)) return null") &&
+      rdCode.includes("if (side !== 'right' || !(active || everShown || sessionHost)) return null") &&
       rdCode.includes('hidden={!active}') &&
       !rdCode.includes('if (!active) return null') &&
       rdCode.includes("setProperty('--jp-right-dock-w'"),
@@ -28230,9 +28315,9 @@ function runAdj1294Tests() {
       JSON.stringify({ 按钮数: (miniSrc.match(/className="playback-mini-btn"/g) ?? []).length }),
     )
     check(
-      'adj1303 小工具条**只在"右栏 + 浮动 + 已收起 + （试听页签 或 正在播放）"时出现**（点停止不隐藏；不在试听页签且没在播才隐藏），宽高与右栏顶部按钮一致',
-      /side === 'right' && float && !open/.test(miniSrc) &&
-        /panel === 'tryout' \|\| bridge\.playing \|\| bridge\.starting/.test(miniSrc) &&
+      'adj1320/adj1321 小工具条的显示条件 = **操作栏收起着 + 开关开着 + 会话已挂载**（两种壳都行；不再按"当前页签是不是试听 / 有没有在播"判），宽高与右栏顶部按钮一致',
+      /const visible = !open && miniBarOpen && bridge !== null/.test(miniSrc) &&
+        !/panel === 'tryout' \|\| bridge\.playing/.test(miniSrc) &&
         /\.playback-mini \{[\s\S]{0,200}?position: fixed;/.test(cssCss) &&
         /\.playback-mini-btn \{[\s\S]{0,200}?width: 28px;[\s\S]{0,80}?height: 28px;/.test(cssCss),
       '',
@@ -28257,6 +28342,138 @@ function runAdj1294Tests() {
         /if \(active\) setEverShown\(true\)/.test(rdCode),
       '',
     )
+    check(
+      'adj1320 小工具条开着时右栏充当**隐藏的播放会话宿主**：`sessionHost` 参与渲染判据、并把「试听」面板补进已挂载集合（不替用户切页签）',
+      rdCode.includes("const sessionHost = miniBarOpen && side === 'right'") &&
+        /if \(side !== 'right' \|\| !\(active \|\| everShown \|\| sessionHost\)\) return null/.test(rdCode) &&
+        /const mountedTabs =\s*sessionHost && !everActive\.includes\('tryout'\)/.test(rdCode) &&
+        rdCode.includes('PANELS.filter((p) => mountedTabs.includes(p.key))'),
+      '',
+    )
+    // adj1321（用户拍板「底栏模式下类似」）：底栏壳也做同样的"关而不卸"隐藏会话宿主
+    const dockSrc1321 = String(readFileSync('src/ui/ToolDock.tsx', 'utf8'))
+    check(
+      'adj1321 小工具条开着时**底栏壳**也充当隐藏会话宿主（`sessionHost` + 关而不卸 `hidden` + 补挂「试听」面板）',
+      dockSrc1321.includes("const miniBarOpen = useUiStore((s) => s.miniBarOpen)") &&
+        dockSrc1321.includes("const sessionHost = miniBarOpen && dockSide === 'bottom'") &&
+        /if \(dockSide !== 'bottom' \|\| !\(shown \|\| everShown \|\| sessionHost\)\) return null/.test(dockSrc1321) &&
+        /const mountedTabs =\s*sessionHost && !everActive\.includes\('tryout'\)/.test(dockSrc1321) &&
+        dockSrc1321.includes('hidden={!shown}') &&
+        dockSrc1321.includes('PANELS.filter((p) => mountedTabs.includes(p.key))') &&
+        /\.tool-dock\[hidden\] \{\s*display: none;/.test(cssCss),
+      '',
+    )
+  }
+
+  // ================= ④c adj1320：顶栏「试听」按钮 = 小工具条开关键 =================
+  {
+    const uiSrc = String(readFileSync('src/store/uiStore.ts', 'utf8'))
+    const topbarSrc = String(readFileSync('src/ui/TopBar.tsx', 'utf8'))
+    const previewSrc = String(readFileSync('src/preview/PreviewPane.tsx', 'utf8'))
+    const appSrcNow = String(readFileSync('src/App.tsx', 'utf8'))
+    check(
+      'adj1320 uiStore：新增 `miniBarOpen` 开关 + `toggleTryoutBar` / `openTryoutBar`；打开试听页签会把它置开；关掉前先停播（不留"无控件还在响"）',
+      uiSrc.includes('miniBarOpen: false') &&
+        uiSrc.includes('toggleTryoutBar: () =>') &&
+        uiSrc.includes('openTryoutBar: () =>') &&
+        /getPlaybackBridge\(\)\?\.stop\(\)/.test(uiSrc) &&
+        /const onTryout = panel === 'tryout'/.test(uiSrc) &&
+        /miniBarOpen: true/.test(uiSrc),
+      '',
+    )
+    check(
+      'adj1320 试听页签正开着时点顶栏开关：**先把页签收起来**再落地开关（`tabOpen`；否则按下去看不见变化）',
+      uiSrc.includes("const tabOpen = s.dockOpen && s.dockPanel === 'tryout'") &&
+        /set\(tabOpen \? \{ miniBarOpen: next, dockOpen: false \} : \{ miniBarOpen: next \}\)/.test(uiSrc),
+      '',
+    )
+    check(
+      'adj1320 顶栏「试听」按钮 = **小工具条开关键**（不再 `toggleDock(\'tryout\')`）；菜单「试听播放」同一动作；标题写明是小工具条',
+      /playback: \{[\s\S]{0,420}?onPick: toggleTryoutBar/.test(topbarSrc) &&
+        !/playback: \{[\s\S]{0,420}?toggleDock\('tryout'\)/.test(topbarSrc) &&
+        /const entryTryout: MenuEntry = \{[^\n]*onPick: toggleTryoutBar \}/.test(topbarSrc) &&
+        topbarSrc.includes('playbackMiniCopy.toggleTitle') &&
+        uiSrc.includes("miniBarOpen: true"),
+      '',
+    )
+    check(
+      'adj1320 `Ctrl+Q` 与顶栏按钮同语义（`ui.toggleTryoutBar()`，不再 `requestDockPanel(\'tryout\')`）',
+      appSrcNow.includes('ui.toggleTryoutBar()') &&
+        !/e\.ctrlKey && e\.key\.toLowerCase\(\) === 'q'[\s\S]{0,500}?requestDockPanel\('tryout'\)/.test(appSrcNow),
+      '',
+    )
+    check(
+      'adj1320 双击 / `Ctrl+单击` 音符 = **打开小工具条并播放**（`openTryoutBar()`；不再 `requestDockPanel(\'tryout\')`）',
+      previewSrc.includes('openTryoutBar()') &&
+        !previewSrc.includes("requestDockPanel('tryout')") &&
+        /const tryoutFromNote = \(id: string\) => \{[\s\S]{0,200}?openTryoutBar\(\)[\s\S]{0,80}?bumpPlaybackTick\(\)/.test(previewSrc),
+      '',
+    )
+    // ---- adj1321（用户 2026-11-22 要求）：空格 = 试听播放/暂停 ----
+    const spaceSrc = String(readFileSync('src/playback/spaceToggle.ts', 'utf8'))
+    const spaceBase = {
+      tag: 'DIV',
+      role: null as string | null,
+      editable: false,
+      link: false,
+      inEditor: false,
+      inDock: false,
+      inModal: false,
+    }
+    const spaceCases = {
+      预览空白: spacePlaybackAllowed(spaceBase),
+      SVG: spacePlaybackAllowed({ ...spaceBase, tag: 'TEXT' }),
+      按钮: spacePlaybackAllowed({ ...spaceBase, tag: 'BUTTON' }),
+      输入框: spacePlaybackAllowed({ ...spaceBase, tag: 'TEXTAREA' }),
+      可编辑区: spacePlaybackAllowed({ ...spaceBase, editable: true }),
+      编辑区: spacePlaybackAllowed({ ...spaceBase, inEditor: true }),
+      右栏底栏: spacePlaybackAllowed({ ...spaceBase, inDock: true }),
+      模态框: spacePlaybackAllowed({ ...spaceBase, inModal: true }),
+      role复选框: spacePlaybackAllowed({ ...spaceBase, role: 'checkbox' }),
+    }
+    check(
+      'adj1321 空格判定：**只在**"非编辑区 / 非右栏底栏 / 非模态框 / 非输入框或按钮"时允许；预览空白与 SVG 允许',
+      spaceCases.预览空白 === true &&
+        spaceCases.SVG === true &&
+        spaceCases.按钮 === false &&
+        spaceCases.输入框 === false &&
+        spaceCases.可编辑区 === false &&
+        spaceCases.编辑区 === false &&
+        spaceCases.右栏底栏 === false &&
+        spaceCases.模态框 === false &&
+        spaceCases.role复选框 === false,
+      JSON.stringify(spaceCases),
+    )
+    check(
+      'adj1321 空格判据的 DOM 取信息：区域选择器**真的**包含编辑区 / 右栏 / 底栏 / 模态框，原生控件选择器包含输入框与按钮',
+      spaceSrc.includes("const BLOCKED_REGION = '.editor-main, .tool-dock, .right-dock, .modal'") &&
+        spaceSrc.includes(
+          "const NATIVE_SPACE_SELECTOR = 'input, textarea, select, button, summary, a[href], [contenteditable], [role]'",
+        ) &&
+        spaceSrc.includes('isContentEditable'),
+      '',
+    )
+    check(
+      'adj1321 空格接线：App 里只在**已有播放会话**时接管（Space 键 + 无修饰/不重复 + `bridge.toggle()` + preventDefault），没会话时空格照常滚动',
+      appSrcNow.includes("(e.code === 'Space' || e.key === ' ')") &&
+        appSrcNow.includes('!e.repeat') &&
+        appSrcNow.includes('!e.ctrlKey') &&
+        appSrcNow.includes('!e.metaKey') &&
+        appSrcNow.includes('!e.altKey') &&
+        appSrcNow.includes('!e.shiftKey') &&
+        appSrcNow.includes('getPlaybackBridge()') &&
+        /bridge !== null && !bridge\.starting && !ui\.modal && canSpaceTogglePlayback\(e\.target\)/.test(appSrcNow) &&
+        appSrcNow.includes('bridge.toggle()') &&
+        /e\.preventDefault\(\)[\s\S]{0,80}?e\.stopPropagation\(\)[\s\S]{0,80}?bridge\.toggle\(\)/.test(appSrcNow),
+      '',
+    )
+    check(
+      'adj1321 速查表与文案：有「空格 = 播放/暂停」一条（`KBD.spacePlay`），且试听键的口径已改成"小播放条开关"',
+      /spacePlay: '空格'/.test(String(readFileSync('src/brand/shortcuts.ts', 'utf8'))) &&
+        String(readFileSync('src/dialogs/ShortcutsDialog.tsx', 'utf8')).includes('KBD.spacePlay') &&
+        /试听小播放条的开关/.test(String(readFileSync('src/brand/shortcuts.ts', 'utf8'))),
+      '',
+    )
   }
 
   // ================= ⑤ App / 底栏：`.app-body` 与两壳自锁 =================
@@ -28279,8 +28496,10 @@ function runAdj1294Tests() {
     '',
   )
   check(
-    'adj1295 底栏**自锁**：切到右侧栏后 `ToolDock` 整块不渲染（ESC / Ctrl+H 也不再动那个看不见的底栏）',
-    String(readFileSync('src/ui/ToolDock.tsx', 'utf8')).includes("if (!dockOpen || dockSide !== 'bottom') return null") &&
+    'adj1295/adj1321 底栏**自锁**：切到右侧栏后 `ToolDock` 整块不渲染（ESC / Ctrl+H 也不再动那个看不见的底栏）；底栏关闭时只 `hidden`（关而不卸）',
+    /if \(dockSide !== 'bottom' \|\| !\(shown \|\| everShown \|\| sessionHost\)\) return null/.test(
+      String(readFileSync('src/ui/ToolDock.tsx', 'utf8')),
+    ) &&
       String(readFileSync('src/ui/ToolDock.tsx', 'utf8')).includes(
         "if (useUiStore.getState().dockSide !== 'bottom') return",
       ),
@@ -29645,8 +29864,8 @@ C2: 歌，@那么我@是想要画你的手。@ {tp 1// 2/.} 你看我多么 {tp 
   const readSrc = (rel: string) => String(readFileSync(join(root, rel), 'utf8'))
 
   // ---- ① 七份 HTML 都在，且各自角色正确 ----
-  const rel = ['index.html', 'app/index.html', 'manual/index.html', 'syntax/index.html', 'plugin/index.html', 'cli/index.html', 'soundfonts/index.html']
-  check('adj876/adj1026 七份 HTML 入口都存在（首页 / 应用 / 手册 / 语法 / 插件 / 命令行 / 音色库推荐）',
+  const rel = ['index.html', 'app/index.html', 'manual/index.html', 'syntax/index.html', 'plugin/index.html', 'cli/index.html', 'soundfonts/index.html', 'tools/index.html']
+  check('adj876/adj1026/adj1316 八份 HTML 入口都存在（首页 / 应用 / 手册 / 语法 / 插件 / 命令行 / 音色库推荐 / 音视频工具）',
     rel.every((p) => existsSync(join(root, p))), rel.join(', '))
 
   const homeHtml = readSrc('index.html')
@@ -29656,6 +29875,7 @@ C2: 歌，@那么我@是想要画你的手。@ {tp 1// 2/.} 你看我多么 {tp 
   const pluginHtml = readSrc('plugin/index.html')
   const cliHtml = readSrc('cli/index.html')
   const sfHtml = readSrc('soundfonts/index.html')
+  const toolsHtml = readSrc('tools/index.html')
 
   check('adj876 `app/index.html` 挂的是应用入口 `/src/main.tsx` 且带 `#root`（它是应用外壳的唯一来源）',
     shellHtml.includes('src="/src/main.tsx"') && shellHtml.includes('id="root"'))
@@ -29668,8 +29888,8 @@ C2: 歌，@那么我@是想要画你的手。@ {tp 1// 2/.} 你看我多么 {tp 
       cliHtml.includes('src="/src/docs/cli.ts"') &&
       sfHtml.includes('src="/src/docs/soundfonts.ts"'))
 
-  const titles = [homeHtml, shellHtml, manualHtml, syntaxHtml, pluginHtml, cliHtml, sfHtml].map((h) => h.match(/<title>([^<]*)<\/title>/)?.[1] ?? '')
-  check('adj876/adj1026 七份 HTML 的 <title> 各不相同', new Set(titles).size === 7, titles.join(' | '))
+  const titles = [homeHtml, shellHtml, manualHtml, syntaxHtml, pluginHtml, cliHtml, sfHtml, toolsHtml].map((h) => h.match(/<title>([^<]*)<\/title>/)?.[1] ?? '')
+  check('adj876/adj1026/adj1316 八份 HTML 的 <title> 各不相同', new Set(titles).size === 8, titles.join(' | '))
   check('adj876 首页 title 含 Slogan「码即成，谱自现」', titles[0].includes('码即成，谱自现'), titles[0])
   /**
    * adj1080（用户 2026-10-23）：「首页上面一排链接放太多，导致文本折行；应做些链接的精简」。
@@ -29690,10 +29910,14 @@ C2: 歌，@那么我@是想要画你的手。@ {tp 1// 2/.} 你看我多么 {tp 
     navHas(nav, '功能') &&
     /<a href="https:\/\/ijipu-sl\.pages\.dev\/scores\/">乐谱库<\/a>/.test(nav) &&
     /<a href="\/manual\/">文档<\/a>/.test(nav) &&
+    // adj1316：顶栏加「音视频工具」（用户要求"挂在网站上、方便随时可用"）
+    /<a href="\/tools\/">音视频工具<\/a>/.test(nav) &&
+    // adj1322：顶栏加「爱扒谱」（用户要求首页挂 bp 链接）
+    /<a data-l="bpUrl"[^>]*>爱扒谱<\/a>/.test(nav) &&
     navHas(nav, '下载桌面端') &&
     /<a data-l="repoUrl"[^>]*>GitHub<\/a>/.test(nav) &&
     !/插件手册|命令行手册|音色库推荐|应用 Github|插件 Github/.test(nav)
-  check('adj1080/adj1191 首页顶栏 6 条：功能 / 乐谱库 / 文档 / 下载桌面端 / GitHub / 打开应用',
+  check('adj1080/adj1191/adj1316/adj1322 首页顶栏 8 条：功能 / 乐谱库 / 文档 / 音视频工具 / 爱扒谱 / 下载桌面端 / GitHub / 打开应用',
     navMinimalOk(navPlain) && /topbar-cta" href="\/app\/">打开应用<\/a>/.test(homeHtml),
     navPlain.replace(/\s+/g, ' ').slice(0, 240))
   check('adj1080 负对照：把插件手册 / 命令行手册 / 音色库推荐任一条塞回顶栏 ⇒ 判据为假',
@@ -29718,6 +29942,149 @@ C2: 歌，@那么我@是想要画你的手。@ {tp 1// 2/.} 你看我多么 {tp 
   const homeCardHasCli = (h: string): boolean =>
     /<a class="link-card" href="\/cli\/">[\s\S]*?<b>命令行手册<\/b>[\s\S]*?<\/a>/.test(h)
   check('adj948 首页底部「开始使用」区有「命令行手册」入口卡（指向 `/cli/`）', homeCardHasCli(homeHtml))
+
+  // ---- adj1316：音视频工具独立页（用户 2026-11-18「做为一个独立的音视频工具在线网页，挂在爱记谱网站上」）----
+  // 口径：这一页是**独立的静态页**（`/tools/`），只带 React + 三个页签，不加载应用的状态/引擎；
+  // 入口在首页顶栏与底部链接卡各一格（用户拍板）。这里守四件事：入口声明、首页两处入口、
+  // 工具页**不碰** `@ijipu/engine`（首包隔离）、三个页签与关键链路都在。
+  check('adj1316 `tools/index.html` 挂的是自己的入口 `/src/tools/main.tsx`，且不挂应用入口',
+    toolsHtml.includes('src="/src/tools/main.tsx"') && toolsHtml.includes('id="tools-root"') &&
+      !toolsHtml.includes('/src/main.tsx') && toolsHtml.includes('/manifest.webmanifest'))
+  check('adj1316 `vite.config.ts` 把 `/tools/` 登记进多页输入',
+    /tools:\s*entry\('\.\/tools\/index\.html'\)/.test(readSrc('vite.config.ts')))
+  check('adj1316 首页底部「开始使用」区有「音视频工具」入口卡（指向 `/tools/`）',
+    /<a class="link-card" href="\/tools\/">[\s\S]*?<b>音视频工具<\/b>[\s\S]*?<\/a>/.test(homeHtml))
+
+  // ---- adj1322：访问统计加入音视频工具 / 爱扒谱 ----
+  // 音视频工具在主站，走同一个 public/analytics.js；爱扒谱是独立站点，跨站上报 /bp/。
+  {
+    const visitFn = readSrc('functions/api/visit.js')
+    const statsFn = readSrc('functions/api/stats.js')
+    const siteAnalytics = readSrc('public/analytics.js')
+    const statsPage = readSrc('public/stats/index.html')
+    check('adj1322 `/api/visit` 放行 `/tools/` 与 `/bp/`',
+      visitFn.includes('tools\\/') && visitFn.includes('bp\\/'),
+      visitFn.match(/const PATH_RE = .*/)?.[0] ?? '')
+    check('adj1322 主站 analytics.js 也放行 `/tools/`',
+      siteAnalytics.includes('tools\\/'), siteAnalytics.includes('tools\\/') ? 'tools\\/' : '')
+    check('adj1322 `/api/stats` 把 stats 分成 tools / bp 两类',
+      statsFn.includes("'/tools/'") && statsFn.includes("'/bp/'") &&
+        /tools:\s*\{\s*pv:\s*0/.test(statsFn) && /bp:\s*\{\s*pv:\s*0/.test(statsFn),
+      statsFn.match(/const pages = \{[\s\S]*?\n  \}/)?.[0].slice(0, 220) ?? '')
+    check('adj1322 统计页显示「音视频工具 /tools/」与「爱扒谱 /bp/」',
+      statsPage.includes('音视频工具 /tools/') && statsPage.includes('爱扒谱 /bp/'))
+  }
+
+  const toolsSrcFiles = (readdirSync(join(root, 'src/tools'), { recursive: true }) as string[])
+    .filter((f) => /\.tsx?$/.test(f))
+  // 只看代码行：注释里解释"为什么不能复用 src/export/audio.ts"时会提到 `@ijipu/engine`，
+  // 那是说明文字，不是依赖（adj1316 第一版断言就被自己的注释判红了）。
+  const codeOnlyOf = (f: string): string =>
+    readFileSync(join(root, 'src/tools', f), 'utf8')
+      .split('\n')
+      .filter((line) => !/^\s*(\*|\/\/)/.test(line))
+      .join('\n')
+  check('adj1316 工具页源码不 import `@ijipu/engine`（独立页不该把整个引擎拖进首包）',
+    toolsSrcFiles.length >= 8 && toolsSrcFiles.every((f) => !codeOnlyOf(f).includes('@ijipu/engine')),
+    `${toolsSrcFiles.length} 个文件`)
+  check('adj1316 三个页签的文案在 `tools/copy.ts`（合并 / 拆分 / 片段截取）',
+    /merge: '音视频合并'/.test(readSrc('src/tools/copy.ts')) &&
+      /split: '有声视频拆分'/.test(readSrc('src/tools/copy.ts')) &&
+      /clip: '音频片段截取'/.test(readSrc('src/tools/copy.ts')))
+  check('adj1316 片段截取链路齐备（波形抽样 / 切片 / 播放器 / 导出编码）',
+    // adj1318：抽样函数搬到 `wavePeaks.ts`（从爱出片搬过来的那份），`waveform.ts` 只负责画
+    readSrc('src/tools/wavePeaks.ts').includes('export function peaksOf(') &&
+      readSrc('src/tools/waveform.ts').includes('export function drawWave(') &&
+      readSrc('src/tools/clipAudio.ts').includes('export function sliceBuffer(') &&
+      readSrc('src/tools/clipAudio.ts').includes('export async function encodeClip(') &&
+      readSrc('src/tools/clipPlayer.ts').includes('export function createPlayer(') &&
+      readSrc('src/tools/ClipPanel.tsx').includes('audioBufferOf('))
+  check('adj1316 合并与拆分走 mediabunny（动态 import），能力闸门集中在 `capability.ts`',
+    /await import\('\.\/mux'\)/.test(readSrc('src/tools/MergePanel.tsx')) &&
+      /await import\('\.\/mux'\)/.test(readSrc('src/tools/SplitPanel.tsx')) &&
+      readSrc('src/tools/capability.ts').includes('VideoDecoder') &&
+      readSrc('src/tools/capability.ts').includes('export function probeCapability('))
+  /**
+   * adj1317（用户 2026-11-18）：「标记段的起止点应该单独可添加……播放标记段；现在选择后再点波形，
+   * 原来的选取又没了」。四条闸门钉住这个交互口径，别再退回"点一下波形就把选区清掉"。
+   */
+  const clipSrc = readSrc('src/tools/ClipPanel.tsx')
+  check('adj1317 点一下波形只挪播放头：指针抬起时不再清选区（`onSel(null)` 已从代码里消失）',
+    !/onSel\(null\)/.test(clipSrc) && /onSeek\(drag\.from\)/.test(clipSrc))
+  check('adj1317 起点与终点能各自落到播放头（两个按钮 + `dropAtHead`）',
+    clipSrc.includes('dropAtHead(\'start\')') &&
+      clipSrc.includes('dropAtHead(\'end\')') &&
+      clipSrc.includes("const dropAtHead = (side: 'start' | 'end'): void =>") &&
+      readSrc('src/tools/copy.ts').includes('headStart: \'起点＝播放头\''))
+  check('adj1317 选区两端可抓：`edgeAt` 命中后按边拖（另一端不动），波形上画抓手',
+    /const edgeAt = \(e: PointerEventOf<HTMLCanvasElement>, at: number\)/.test(clipSrc) &&
+      clipSrc.includes("dragRef.current = { mode: edge, from: t, to: t, moved: false, prev: sel }") &&
+      readSrc('src/tools/waveform.ts').includes('frame.grip === \'start\'') &&
+      readSrc('src/tools/waveform.ts').includes('frame.grip === \'end\''))
+  check('adj1317 标记段能单独播放：列表里有「播放」按钮，点了把这一段交给播放器',
+    clipSrc.includes('onPlay={playMark}') &&
+      clipSrc.includes('player.play(mark.start, mark.end)') &&
+      readSrc('src/tools/copy.ts').includes('playMark: \'播放\''))
+  /**
+   * adj1318（用户 2026-11-18）：「就不能直接把 cp 里的这一套搬过来吗？…一直重复造轮子耶」
+   * ⇒ 播放/试听/定位/标记这一套**从爱出片搬**，不再自己写第二份。这几条钉住"来源"与"搬了哪些"：
+   * 原文出处写在文件头，删掉就等于"又自己造了一遍"，闸门立刻红。
+   */
+  const rulerSrc = readSrc('src/tools/waveRuler.ts')
+  const peaksSrc = readSrc('src/tools/wavePeaks.ts')
+  const playerSrc = readSrc('src/tools/clipPlayer.ts')
+  check('adj1318 标尺/视野从爱出片搬：`timeScaleOf` / `zoomView` 在位，文件头写明出处',
+    rulerSrc.includes('export function timeScaleOf(') &&
+      rulerSrc.includes('export function zoomView(') &&
+      rulerSrc.includes('ijipu-cp/src/sync/syncRuler.ts'))
+  check('adj1318 波形抽样从爱出片搬：`waveformPeaks` 逐字复制，文件头写明出处',
+    peaksSrc.includes('export function waveformPeaks(channels: Float32Array[], buckets: number): PeakBucket[]') &&
+      peaksSrc.includes('ijipu-cp/src/render/video/accompaniment.ts'))
+  check('adj1318 播放器从爱出片搬：50 毫秒启动余量 + 文件头写明出处（含"别自己再写一份"）',
+    playerSrc.includes('ijipu-cp/src/render/video/audioPlayer.ts') &&
+      playerSrc.includes('ctx.currentTime + 0.05') &&
+      playerSrc.includes('src.start(startAt, started, duration)'))
+  check('adj1318 定位按视野换算：指针 x 走 `viewWindow`，Ctrl+滚轮缩放用原生 passive:false',
+    clipSrc.includes('viewWindow(view, buffer.duration * 1000)') &&
+      clipSrc.includes("addEventListener('wheel', onWheel, { passive: false })") &&
+      clipSrc.includes('onZoom(e.deltaY < 0 ? 0.7 : 1.4'))
+  check('adj1318 复听口径同爱出片：当前时点前 3 秒到后 5 秒循环',
+    clipSrc.includes('const from = Math.max(0, at - 3)') &&
+      clipSrc.includes('const to = Math.min(duration, at + 5)') &&
+      readSrc('src/tools/copy.ts').includes('audition: \'复听（前 3 秒 / 后 5 秒）\''))
+  // adj1319（用户 2026-11-19）：放大后有滚动条 / 波形上空格能播放 / 复听留一根临时定位虚线
+  check('adj1319 放大后有滚动条：`scrollThumb` 从爱出片搬来，面板画了滑块与轨道', () => {
+    const ruler = readSrc('src/tools/waveRuler.ts')
+    const css = readSrc('src/tools/tools.css')
+    return (
+      ruler.includes('export function scrollThumb(') &&
+      ruler.includes('ijipu-cp/src/sync/syncRuler.ts') &&
+      clipSrc.includes('function ViewScroll(') &&
+      clipSrc.includes('scrollThumb(view, durMs)') &&
+      clipSrc.includes('className="t-scroll-thumb"') &&
+      css.includes('.t-scroll-thumb')
+    )
+  })
+  check('adj1319 点过波形之后空格＝播放/暂停（波形可聚焦，空格被拦下不再滚页面）', () => {
+    return (
+      clipSrc.includes('tabIndex={0}') &&
+      clipSrc.includes("if (e.key !== ' ' && e.key !== 'Spacebar') return") &&
+      clipSrc.includes('onTogglePlay') &&
+      clipSrc.includes('const togglePlay = (): void =>') &&
+      readSrc('src/tools/copy.ts').includes('spaceHint')
+    )
+  })
+  check('adj1319 复听在按下那一刻的位置留一根金色虚线，正常播放时收掉', () => {
+    const wave = readSrc('src/tools/waveform.ts')
+    return (
+      wave.includes('anchor?: number | null') &&
+      wave.includes('color.anchor') &&
+      wave.includes('ctx.setLineDash([3, 3])') &&
+      clipSrc.includes('setAnchor(at)') &&
+      clipSrc.includes('setAnchor(null)') &&
+      readSrc('src/tools/copy.ts').includes('anchorHint')
+    )
+  })
   check('adj948 文档页页脚仍能到命令行手册 / 插件手册',
     [manualHtml, syntaxHtml, pluginHtml].every((h) => h.includes('<a href="/cli/">命令行手册</a>')) &&
       cliHtml.includes('<a href="/plugin/">插件手册</a>'))
@@ -33636,7 +34003,8 @@ function runAdj948SiteCopyTests() {
    * 两排各配一次负对照（少一个 / 换一个都得判红）——判别力靠"逐字相等"，不靠"有没有 emoji"。
    */
   const FEATURE_ICONS = ['⌨️', '👁️', '🔊', '🖨️', '🎼', '🔁', '📱', '🔓']
-  const LINK_ICONS = ['🚀', '📖', '📐', '⌨️', '💾', '🧩', '☕']
+  // adj1316：新增「音视频工具」卡（🎬）；adj1322：新增「爱扒谱」卡（🎙️），都插在命令行卡与桌面下载卡之间
+  const LINK_ICONS = ['🚀', '📖', '📐', '⌨️', '🎬', '🎙️', '💾', '🧩', '☕']
   const iconsOf = (html: string, cardRe: RegExp, icoRe: RegExp): string[] =>
     (html.match(cardRe) ?? []).map((c) => icoRe.exec(c)?.[1] ?? '')
   const featureIcons = iconsOf(homeHtml, /<article class="card">[\s\S]*?<\/article>/g, /<p class="card-ico">([^<]*)<\/p>/)
@@ -33644,7 +34012,7 @@ function runAdj948SiteCopyTests() {
   const sameList = (a: string[], b: string[]): boolean => a.length === b.length && a.every((x, i) => x === b[i])
   check('adj948 首页 8 张功能卡的 emoji 图标逐字保留（⌨️👁️🔊🖨️🎼🔁📱🔓）—— 用户要求图标不动',
     sameList(featureIcons, FEATURE_ICONS), JSON.stringify(featureIcons))
-  check('adj948 首页 7 张入口卡的 emoji 图标逐字在位（🚀📖📐💾🧩☕ + 新增命令行卡 ⌨️）—— 用户要求图标不动',
+  check('adj948/adj1316/adj1322 首页 9 张入口卡的 emoji 图标逐字在位（🚀📖📐⌨️🎬🎙️💾🧩☕ + 爱扒谱卡 🎙️）—— 用户要求图标不动',
     sameList(linkIcons, LINK_ICONS), JSON.stringify(linkIcons))
   check('adj948 负对照④a：抹掉一张卡的图标（或把它换成别的符号）⇒ "逐字保留"判据判红',
     !sameList(featureIcons.map((x, i) => (i === 0 ? '' : x)), FEATURE_ICONS) &&

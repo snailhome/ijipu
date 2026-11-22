@@ -78,6 +78,15 @@ export function RightDock() {
   const panel = useUiStore((s) => s.dockPanel)
   const setDockPanel = useUiStore((s) => s.setDockPanel)
   const closeDock = useUiStore((s) => s.closeDock)
+  /**
+   * adj1320（用户 2026-11-22 要求）：顶栏「试听」按钮改为**试听小播放条的开关键**。
+   *
+   * 小工具条本身不持有播放会话（只转发 `store/playbackBridge` 里的控制面），
+   * 而会话在 `PlaybackDialog` 里、挂在右栏的「试听」面板上。于是小工具条开着时
+   * 本组件也要把整棵右栏挂起来（`hidden`）并确保「试听」面板已挂载——
+   * 顶栏按钮因此不必先打开页签，双击音符也能"只开小条、不弹页签"。
+   */
+  const miniBarOpen = useUiStore((s) => s.miniBarOpen)
   const setDockWidth = useUiStore((s) => s.setDockWidth)
   const setDockTabsPos = useUiStore((s) => s.setDockTabsPos)
   const setDockFloat = useUiStore((s) => s.setDockFloat)
@@ -103,6 +112,11 @@ export function RightDock() {
   const vertical = tabsPos === 'right'
   /** 只有"当前在右栏 + 已展开"才算真的在显示（否则整块不渲染） */
   const active = open && side === 'right'
+  /**
+   * adj1320：小工具条开着时，右栏充当**隐藏的播放会话宿主**（见上面 `miniBarOpen` 的说明）。
+   * 它不改变 `dockOpen`，只让面板树挂起来；面板本身用 `hidden` 藏住。
+   */
+  const sessionHost = miniBarOpen && side === 'right'
   const px = dockWidthPx(width, vw, mobile)
 
   // 视口宽跟随（旋转屏 / 拖窗口 / 缩放）
@@ -298,10 +312,17 @@ export function RightDock() {
   // 只有"右侧栏"这一种壳才归本组件；底栏模式整块不渲染。
   // adj1301：本会话显示过之后，`dockOpen=false` 只**隐藏**（`hidden`）而不卸载——
   // 试听播放中关栏时音源/时钟继续跑（用户要求"播放不停止"）。
-  if (side !== 'right' || !(active || everShown)) return null
+  // adj1320：小工具条开着时也要挂起来（顶栏按钮不打开页签，但会话得有地方挂）。
+  if (side !== 'right' || !(active || everShown || sessionHost)) return null
 
   // adj1293：可见页签判据共用（嵌入版过滤「工作区」；右栏同源）
   const visibleTabs = dockVisibleTabs()
+  /**
+   * adj1320：会话宿主需要「试听」面板**已挂载**（不一定要是当前页签）——
+   * 当前页签可能是导出/设置等，面板用 `hidden` 藏住即可，不必替用户切页签。
+   */
+  const mountedTabs =
+    sessionHost && !everActive.includes('tryout') ? [...everActive, 'tryout' as const] : everActive
   const nextWidth: DockWidth = width === 'narrow' ? 'wide' : 'narrow'
   const nextTabsPos: DockTabsPos = vertical ? 'bottom' : 'right'
   const mode: DockMode = float ? 'float' : 'insert'
@@ -428,7 +449,7 @@ export function RightDock() {
       {/* 内容区 + （竖排时）右侧竖条：`right-dock-main` 是横向 flex，DOM 顺序 = 视觉顺序 */}
       <div className="right-dock-main">
         <div className="right-dock-body">
-          {PANELS.filter((p) => everActive.includes(p.key)).map((p) => {
+          {PANELS.filter((p) => mountedTabs.includes(p.key)).map((p) => {
             const Pane = p.render
             return (
               <div key={p.key} className={`tool-dock-pane pane-${p.key}`} hidden={panel !== p.key} role="tabpanel">

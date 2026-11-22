@@ -44,8 +44,14 @@ export const KBD = {
   save: 'Ctrl+S',
   /** 重做（adj619b：`Ctrl+Y` 让给「导出」后，重做改用跨平台惯例 `Ctrl+Shift+Z`） */
   redo: 'Ctrl+Shift+Z',
-  /** adj563：试听（开关底栏） */
+  /** adj1320：试听小播放条的开关（不再是"开关底栏"） */
   tryout: 'Ctrl+Q',
+  /**
+   * adj1321（用户 2026-11-22 要求）：**空格 = 试听播放/暂停**——只在焦点不在编辑区、
+   * 不在右栏/底栏、也不在输入框/按钮等原生有空格语义的控件上时生效。
+   * 它不是组合键，这里只给提示文案用（判定在 `playback/spaceToggle.ts`）。
+   */
+  spacePlay: '空格',
   /** adj615/adj619b：导出开关（用户指定 `Ctrl+Y`） */
   export: 'Ctrl+Y',
   /** adj615：打印 */

@@ -80,6 +80,8 @@ export async function onRequestGet({ request, env }) {
     home: { pv: 0, uv: 0 },
     app: { pv: 0, uv: 0 },
     library: { pv: 0, uv: 0 },
+    tools: { pv: 0, uv: 0 },
+    bp: { pv: 0, uv: 0 },
   }
   const docs = {
     '/manual/': { pv: 0, uv: 0 },
@@ -103,6 +105,10 @@ export async function onRequestGet({ request, env }) {
       pages.app = { pv, uv }
     } else if (row.path === '/scores/') {
       pages.library = { pv, uv }
+    } else if (row.path === '/tools/') {
+      pages.tools = { pv, uv }
+    } else if (row.path === '/bp/') {
+      pages.bp = { pv, uv }
     } else if (Object.prototype.hasOwnProperty.call(docs, row.path)) {
       docs[row.path] = { pv, uv }
     } else {
