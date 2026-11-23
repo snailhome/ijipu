@@ -22695,6 +22695,15 @@ function runAdj1324Tests() {
       barsOf(shrinkGroups[1]) === 2,
     rShrink.source)
 
+  // 用户 2026-11-23 谱例：第一结尾前的 `|]/` 是结构断点；不能把前 3 小节排满、
+  // 把第一结尾最后 1 小节挤到下一行
+  const voltaBreak = H + 'Q: 1 2 3 4 |]/ 5 6 7 1 | 2 3 4 5 |\nQ: 6 7 1 2 |\n'
+  const rvb = reflowJps(voltaBreak, { maxMeasuresPerLine: 3 })
+  const vbGroups = parseJps(rvb.source).groups
+  check('adj1324 闭合跳房子 `]` 后强制换行：后 2 小节 + 下一条 1 小节成 3 小节',
+    vbGroups.length === 2 && barsOf(vbGroups[0]) === 1 && barsOf(vbGroups[1]) === 3,
+    rvb.source)
+
   const voltaSrc = H + 'Q: 1 2 3 4 |\nQ: ["1." 5 6 7 1 | 2 3 4 5 |\nQ: 6 7 1 2 |\n'
   const rv2 = reflowJps(voltaSrc, { maxMeasuresPerLine: 4 })
   check('adj1324 行首开放跳房子重排后仍留在行首（不被并到上一行）',
