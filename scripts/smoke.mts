@@ -97,7 +97,7 @@ import {
 // adj1162：资源安装包命名规则的唯一出处（构建/静态闸门/冒烟共用）
 import { resourceInstallerName, validateResourceDescriptor } from './asset-naming.mjs'
 import { inflateSync } from 'node:zlib'
-import { parseJps as parseJpsRaw, formatJps, formatLine, tokenizeJpsLine, tokenizeJpsMusic, interludeBeatsOf, matchInterludeHead, jpsBlockSpan, jpsBlockMarks, highlightModel, highlightLineModel, groupBlocksByLine, lineLevelOf, trackKeysOf, JPS_HIGHLIGHT_COLORS, JPS_PLAIN_COLORS, JPS_HL_CSS_VAR, createPlaybackClock, DEFAULT_NEW_JPS_TEMPLATE, configValuesEqual, isDefaultConfigValue, changedConfigKeys, instrumentColorMap, playheadBaseOf, primaryVoiceOf, playheadPosIn, tokenDuration, layoutScore, renderScoreToSvg, defaultPageConfig, metaAreaH, extractJpsConfig, mergeJpsConfig, writeJpsConfig, mergeConfigEdits, configCarryover, inspectJpsConfig, extractLegacyEditorPrefs, JPS_CONFIG_PREFIX, nonDefaultConfigKeys, OPTIONAL_CONFIG_FIELDS, defaultConfigForReset, SYS_FONT, SCORE_FONT_OPTIONS, EDITOR_FONT_OPTIONS, normalizeFontStack, applyFontOverride, clampEditorFontSize, splitNoteDur, digitSlotW, dotBodyW, augBodyW, slideBodyW, bracketBodyW, noteBodyW, nonDurGap, accidentalBodyW, accidentalPenDx, accidentalInkLeftDx, accidentalInkRightDx, accidentalFontSize, slideExtraW, slideGlyphInk, graceSlotLayout, graceSlideInk, mordentInkW, computeSegments, mainSpans, mainSpansInRange, beatRatio, segmentRowExtra, lyricCommentFontSize, lyricCommentWidth, LYRIC_COMMENT_GAP, segmentNoteIndexBase, decodeSegmentNoteId, buildIndexToPage, decodeTpNoteId, tpNoteIndexBase, measureBeatsOf, meterBeatsOf, inlineMeterBeats, GRACE_MARK_CODES, GRACE_MORDENT_CODES, rangeBox, applyRangeToSvg, readViewBoxOf, normalizeRangePad, minInkFor, MIN_INK_FALLBACK, NEAR_PAGE_RATIO, inkBoxOfLayout, inkBoxesOfLayout, INK_ESTIMATE_SLACK, insertPngPhys, readPngPhys, crc32, isPng, dpiForScale, pixelsPerMeterFor } from '@ijipu/engine/index.ts'
+import { parseJps as parseJpsRaw, formatJps, formatLine, tokenizeJpsLine, tokenizeJpsMusic, interludeBeatsOf, matchInterludeHead, jpsBlockSpan, jpsBlockMarks, highlightModel, highlightLineModel, groupBlocksByLine, lineLevelOf, trackKeysOf, JPS_HIGHLIGHT_COLORS, JPS_PLAIN_COLORS, JPS_HL_CSS_VAR, createPlaybackClock, DEFAULT_NEW_JPS_TEMPLATE, configValuesEqual, isDefaultConfigValue, changedConfigKeys, instrumentColorMap, playheadBaseOf, primaryVoiceOf, playheadPosIn, tokenDuration, layoutScore, reflowJps, renderScoreToSvg, defaultPageConfig, metaAreaH, extractJpsConfig, mergeJpsConfig, writeJpsConfig, mergeConfigEdits, configCarryover, inspectJpsConfig, extractLegacyEditorPrefs, JPS_CONFIG_PREFIX, nonDefaultConfigKeys, OPTIONAL_CONFIG_FIELDS, defaultConfigForReset, SYS_FONT, SCORE_FONT_OPTIONS, EDITOR_FONT_OPTIONS, normalizeFontStack, applyFontOverride, clampEditorFontSize, splitNoteDur, digitSlotW, dotBodyW, augBodyW, slideBodyW, bracketBodyW, noteBodyW, nonDurGap, accidentalBodyW, accidentalPenDx, accidentalInkLeftDx, accidentalInkRightDx, accidentalFontSize, slideExtraW, slideGlyphInk, graceSlotLayout, graceSlideInk, mordentInkW, computeSegments, mainSpans, mainSpansInRange, beatRatio, segmentRowExtra, lyricCommentFontSize, lyricCommentWidth, LYRIC_COMMENT_GAP, segmentNoteIndexBase, decodeSegmentNoteId, buildIndexToPage, decodeTpNoteId, tpNoteIndexBase, measureBeatsOf, meterBeatsOf, inlineMeterBeats, GRACE_MARK_CODES, GRACE_MORDENT_CODES, rangeBox, applyRangeToSvg, readViewBoxOf, normalizeRangePad, minInkFor, MIN_INK_FALLBACK, NEAR_PAGE_RATIO, inkBoxOfLayout, inkBoxesOfLayout, INK_ESTIMATE_SLACK, insertPngPhys, readPngPhys, crc32, isPng, dpiForScale, pixelsPerMeterFor } from '@ijipu/engine/index.ts'
 // adj971：应用标题（`文件名.jps - 爱记谱 iJipu`）与版本串的**唯一来源** —— 冒烟直接调真函数，不抄模板
 import { appTitleOf, APP_TITLE_PREFIX, APP_VERSION, APP_VERSION_FULL } from '../src/brand/version.ts'
 /**
@@ -13675,13 +13675,13 @@ function runAdj530TopBarLayoutTests() {
     const m = new RegExp(`const ${name}: readonly ToolKey\\[\\] = \\[([^\\]]+)\\]`).exec(top)
     return (m?.[1] ?? '').replace(/[\s']/g, '').replace(/,$/, '')
   }
-  check('adj530/adj570/adj603 功能按钮组顺序 = 视图/排版/试听/导出/**设置(全局)/谱面**/主题/缩放（组靠左对齐）',
-    orderOf('FN_ORDER') === 'view,guides,playback,export,pageConfig,scoreConfig,themeMode,zoom', orderOf('FN_ORDER'))
+  check('adj530/adj570/adj603/adj1324 功能按钮组顺序 = 视图/排版/重排/试听/导出/**设置(全局)/谱面**/主题/缩放（组靠左对齐）',
+    orderOf('FN_ORDER') === 'view,guides,reflow,playback,export,pageConfig,scoreConfig,themeMode,zoom', orderOf('FN_ORDER'))
   check('adj530 编辑设置组顺序 = 折行/输入条/字体/字号（组靠右对齐）',
     orderOf('EDIT_ORDER') === 'autoWrap,scriptPad,font,fontSize', orderOf('EDIT_ORDER'))
-  check('adj530/adj570/adj603 可见优先级 = 视图>支持>排版>试听>导出>**设置(全局)>谱面**>主题>缩放>折行>输入条>字体>字号',
+  check('adj530/adj570/adj603/adj1324 可见优先级 = 视图>支持>排版>重排>试听>导出>**设置(全局)>谱面**>主题>缩放>折行>输入条>字体>字号',
     orderOf('TOOL_PRIORITY') ===
-      'view,donate,guides,playback,export,pageConfig,scoreConfig,themeMode,zoom,autoWrap,scriptPad,font,fontSize',
+      'view,donate,guides,reflow,playback,export,pageConfig,scoreConfig,themeMode,zoom,autoWrap,scriptPad,font,fontSize',
     orderOf('TOOL_PRIORITY'))
   /**
    * adj603（用户报"顶栏也没创建谱面按钮"的真因）：**新按钮只加进 `FN_ORDER`、忘了 `TOOL_PRIORITY`** ⇒
@@ -15465,7 +15465,7 @@ async function runAdj540WorkspaceTests() {
     // adj963（**用户要求**）：改回**窄屏常驻** —— 因为嵌入版又隐藏了「工作区」项（adj724b
     // "文件操作交给 Obsidian"），两者叠加 ⇒ 窄的插件面板里**一个文件操作入口都没有**。
     // adj615：末尾有平台无关的「打印」；adj723z：中间有「最近…」（打开历史二级菜单）
-    /const fileEntries: \(MenuEntry \| 'sep'\)\[\] = isNarrow\s*\?\s*\[entryNew, entrySave, entrySaveAs, entryWorkspace, entrySamples, entryPaste, entryRecent, entryTryout, entryExport, entryPrint\]/.test(
+    /const fileEntries: \(MenuEntry \| 'sep'\)\[\] = isNarrow\s*\?\s*\[entryNew, entrySave, entrySaveAs, entryWorkspace, entrySamples, entryPaste, entryReflow, entryRecent, entryTryout, entryExport, entryPrint\]/.test(
       topSrc,
     ) &&
       // **负对照**：把「新建」从窄屏那组里去掉（＝退回 adj540 的写法）⇒ 同一判据判红
@@ -20186,6 +20186,13 @@ runAdj927ExternalChangeTests()
       console.error('  ✗ adj1323 断行合并用例抛异常', e)
     }
     try {
+      // adj1324：乐谱重排纯函数（最多 N 小节 / 占宽 / 目标行数 / 歌词 / 多声部）
+      runAdj1324Tests()
+    } catch (e) {
+      failed++
+      console.error('  ✗ adj1324 重排用例抛异常', e)
+    }
+    try {
       // adj968：拖放打开 .jps（用户要求；真拖那一下在 verify:app-ui）
       runAdj968Tests()
     } catch (e) {
@@ -22602,6 +22609,79 @@ function runAdj1323Tests() {
   check('adj1323 行首 `[` 直接可用（无 warning、voltaOnly）',
     r1323l.errors.length === 0 && r1323l.groups[0].music.tokens.some((t) => t.kind === 'barline' && t.voltaOnly === true && t.voltaStart?.open === true),
     JSON.stringify(r1323l.errors.map((e) => e.message)))
+}
+
+
+function runAdj1324Tests() {
+  console.log('[212] 乐谱重排纯函数（adj1324）')
+  const H = 'V: 1.0\nB: t\nD: C\nP: 4/4\n'
+  const countQ = (s: string) => (s.match(/^Q\d*(?:"[^"]*")?\s*:/gm) ?? []).length
+  const countC = (s: string) => (s.match(/^C\d*\s*:/gm) ?? []).length
+  const seqOf = (s: string) => {
+    const r = parseJps(s)
+    const l = layoutScore(r, defaultPageConfig)
+    return buildPlaySequence(r, l, 96, null, undefined, undefined, [])
+  }
+  const sigOf = (s: string) =>
+    seqOf(s).events.map((e) => `${e.placed.audioPitch ?? ''}:${Math.round(e.durationMs)}`).join(',')
+
+  const src = H + 'Q: 1 2 3 4 | 5 6 7 1 | 2 3 4 5 | 6 7 1 2 |\nC: 一 二 三 四 五 六 七 八 九 十 百 千 万 亿 兆 京\n'
+  const r2 = reflowJps(src, { maxMeasuresPerLine: 2 })
+  check('adj1324 最多 2 小节 → 2 行、每行 ≤2 小节',
+    countQ(r2.source) === 2 && !/Q[^:]*:\s*(?:[^|\n]*\|){3}/.test(r2.source) && r2.warnings.length === 0,
+    r2.source)
+  const s0 = seqOf(src)
+  const s2 = seqOf(r2.source)
+  check('adj1324 重排后播放总时长/小节号/音高时值不变',
+    s0.totalMs === s2.totalMs && JSON.stringify(s0.barNos) === JSON.stringify(s2.barNos) && sigOf(src) === sigOf(r2.source),
+    JSON.stringify({ total: [s0.totalMs, s2.totalMs], bars: [s0.barNos, s2.barNos] }))
+  check('adj1324 重排幂等', reflowJps(r2.source, { maxMeasuresPerLine: 2 }).source === r2.source, '')
+
+  const r3 = reflowJps(src, { targetLineCount: 3 })
+  check('adj1324 目标 3 行 → 正好 3 行', countQ(r3.source) === 3, r3.source)
+
+  const rRatio = reflowJps(src, { fixedInkRatio: 0.3, pageConfig: { ...defaultPageConfig, margin_left: 150, margin_right: 150 } })
+  check('adj1324 固定占宽比例也会断行（窄页 + 30%）', countQ(rRatio.source) > 2 && seqOf(rRatio.source).totalMs === s0.totalMs, rRatio.source)
+
+  const lyric = H + 'Q: 1 2 3 4 | 5 6 7 1 |\nC: 一 二 三 四 五 六 七 八\nC: 甲 乙 丙 丁 戊 己 庚 辛\n'
+  const rl = reflowJps(lyric, { maxMeasuresPerLine: 1 })
+  check('adj1324 两段词拆行后每行仍两条 C 行（条数/顺序保留）',
+    countQ(rl.source) === 2 && countC(rl.source) === 4 &&
+      rl.source.includes('C: 一 二 三 四') && rl.source.includes('C: 五 六 七 八') &&
+      rl.source.includes('C: 甲 乙 丙 丁') && rl.source.includes('C: 戊 己 庚 辛'),
+    rl.source)
+
+  const shortLyric = H + 'Q: 1 2 3 4 | 5 6 7 1 |\nC: 一 二\n'
+  const rs = reflowJps(shortLyric, { maxMeasuresPerLine: 1 })
+  check('adj1324 歌词不够长：不崩、第二行不写空 C 行', countQ(rs.source) === 2 && countC(rs.source) === 1, rs.source)
+
+  const noEnd = H + 'Q: 1 2 3 4 | 5 6 7 1\n'
+  check('adj1324 行末缺小节线 → 默认补 `|`', reflowJps(noEnd, { maxMeasuresPerLine: 1 }).source.trimEnd().endsWith('|'), reflowJps(noEnd, { maxMeasuresPerLine: 1 }).source)
+
+  const seg = H + 'Q: 1 2 3 4 | {bz 5 6 | 7 1} | 2 3 4 5 |\n'
+  const rseg = reflowJps(seg, { maxMeasuresPerLine: 1 })
+  check('adj1324 段内不断（`{bz 5 6 | 7 1 }` 保留在一行）',
+    /\{bz 5 6 \| 7 1 \}/.test(rseg.source) && seqOf(rseg.source).totalMs === seqOf(seg).totalMs, rseg.source)
+
+  const mv = H + 'Q1: 1 2 3 4 | 5 6 7 1 | 2 3 4 5 | 6 7 1 2 |\nC1: 一 二 三 四 五 六 七 八 九 十 百 千 万 亿 兆 京\nQ2: 8 8 8 8 | 8 8 8 8 | 8 8 8 8 | 8 8 8 8 |\n'
+  const rmv = reflowJps(mv, { maxMeasuresPerLine: 2 })
+  const mv0 = seqOf(mv)
+  const mv1 = seqOf(rmv.source)
+  check('adj1324 多声部按同一小节切块：两块各含 Q1/Q2，播放不变',
+    countQ(rmv.source) === 4 && mv0.totalMs === mv1.totalMs && JSON.stringify(mv0.barNos) === JSON.stringify(mv1.barNos),
+    rmv.source)
+
+  const fy = H + 'Q: 1 2 3 4 | 5 6 7 1 |\n[fenye]\nQ: 2 3 4 5 | 6 7 1 2 |\n'
+  const rfy = reflowJps(fy, { maxMeasuresPerLine: 1 })
+  check('adj1324 `[fenye]` 原样保留', rfy.source.includes('[fenye]') && seqOf(rfy.source).totalMs === seqOf(fy).totalMs, rfy.source)
+
+  // 接线：顶栏按钮 + 文件菜单 + 对话框挂载（源码级；真交互另在 verify:app-ui）
+  const topSrc = String(readFileSync('src/ui/TopBar.tsx', 'utf8'))
+  const appSrc = String(readFileSync('src/App.tsx', 'utf8'))
+  check('adj1324 顶栏/文件菜单都有重排入口，且 App 挂载 ReflowDialog',
+    topSrc.includes("key: 'reflow'") && topSrc.includes('entryReflow') && topSrc.includes("openModal('reflow')") &&
+      appSrc.includes("modal === 'reflow'") && appSrc.includes('ReflowDialog'),
+    '')
 }
 
 

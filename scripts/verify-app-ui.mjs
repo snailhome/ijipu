@@ -4049,6 +4049,69 @@ async function main() {
         )
       }
 
+      // ---- ⑲ adj1324：顶栏「重排」按钮 → 对话框 → 应用 → Ctrl+Z 还原 ----
+      {
+        const reflowSrc =
+          'V: 1.0\nB: 重排测试\nD: C\nP: 4/4\n' +
+          'Q: 1 2 3 4 | 5 6 7 1 | 2 3 4 5 | 6 7 1 2 | 3 4 5 6 | 7 1 2 3 | 4 5 6 7 | 1 2 3 4 |\n' +
+          'C: 一 二 三 四 五 六 七 八 九 十 百 千 万 亿 兆 京 甲 乙 丙 丁 戊 己 庚 辛 壬 癸 子 丑 寅 卯 辰 巳\n'
+        await evalJs(
+          c,
+          `(() => { const ta = document.querySelector('.editor-main textarea'); ta.focus(); ta.setSelectionRange(0, ta.value.length); return true })()`,
+        )
+        await c.send('Input.insertText', { text: reflowSrc })
+        await waitFor(c, `document.querySelector('.editor-main textarea').value.includes('重排测试')`, '重排夹具进编辑器')
+        await sleep(300)
+        const beforeReflow = String(await evalJs(c, `document.querySelector('.editor-main textarea').value`))
+        const clicked = await evalJs(
+          c,
+          `(() => { const b = document.querySelector('.topbar-toolbar button[data-tool-key="reflow"]'); if (!b) return 'no-btn'; b.click(); return 'ok' })()`,
+        )
+        check('adj1324 顶栏能找到「重排」按钮并打开对话框', clicked === 'ok')
+        await waitFor(
+          c,
+          `[...document.querySelectorAll('.modal-head span')].some((el) => (el.textContent || '').includes('重排脚本'))`,
+          '重排对话框出现',
+        )
+        await evalJs(
+          c,
+          `[...document.querySelectorAll('.modal .btn.primary')].find((b) => (b.textContent || '').includes('应用重排')).click(), true`,
+        )
+        await waitFor(c, `!document.querySelector('.modal')`, '重排对话框关闭')
+        await sleep(350)
+        const afterReflow = String(await evalJs(c, `document.querySelector('.editor-main textarea').value`))
+        const qCount = (s) => (s.match(/^Q\d*(?:"[^"]*")?\s*:/gm) ?? []).length
+        check(
+          'adj1324 应用重排：源码真的重写（8 小节 → 多行 Q），且不是空操作',
+          afterReflow !== beforeReflow && qCount(afterReflow) > qCount(beforeReflow),
+          JSON.stringify({ before: qCount(beforeReflow), after: qCount(afterReflow) }),
+        )
+        // Ctrl+Z 撤销（与编辑器同一份历史）
+        await c.send('Input.dispatchKeyEvent', {
+          type: 'keyDown',
+          key: 'z',
+          code: 'KeyZ',
+          modifiers: 2,
+          windowsVirtualKeyCode: 90,
+          nativeVirtualKeyCode: 90,
+        })
+        await c.send('Input.dispatchKeyEvent', {
+          type: 'keyUp',
+          key: 'z',
+          code: 'KeyZ',
+          modifiers: 2,
+          windowsVirtualKeyCode: 90,
+          nativeVirtualKeyCode: 90,
+        })
+        await sleep(350)
+        const undone = String(await evalJs(c, `document.querySelector('.editor-main textarea').value`))
+        check(
+          'adj1324 重排只占一步撤销：Ctrl+Z 回到重排前的 Q 行数',
+          qCount(undone) === qCount(beforeReflow) && undone.includes('B: 重排测试'),
+          JSON.stringify({ before: qCount(beforeReflow), after: qCount(afterReflow), undone: qCount(undone), undoneHead: undone.slice(0, 120), beforeHead: beforeReflow.slice(0, 120) }),
+        )
+      }
+
     c.close()
   } catch (e) {
     check(`脚本自身出错：${e instanceof Error ? e.message : String(e)}`, false)

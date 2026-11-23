@@ -15,7 +15,7 @@ import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } f
 import { useDocStore, type ViewType } from '../store/docStore'
 import { useUiStore, PREVIEW_ZOOM_RANGE, PREVIEW_ZOOM_STEP, PREVIEW_ZOOM_LIMITS } from '../store/uiStore'
 import { clampEditorFontSize, EDITOR_FONT_OPTIONS, EDITOR_FONT_SIZE_RANGE } from '@ijipu/engine'
-import { pasteImportCopy, numCopy, workspaceCopy, playbackMiniCopy } from '../brand/copy'
+import { pasteImportCopy, numCopy, workspaceCopy, playbackMiniCopy, reflowCopy } from '../brand/copy'
 // adj614：深浅模式的循环表（顶栏「深浅模式」按钮与 `Ctrl+T` 共用一份，见 `nextThemeMode`）
 import { nextThemeMode } from '../brand/themes'
 // adj617（用户要求）：快捷键提示的唯一出处——菜单 kbd 角标与顶栏/底栏/浮动栏的 title 都引它
@@ -183,6 +183,7 @@ const viewItem = (k: ViewType) => VIEWS.find((v) => v.key === normViewKey(k))
 type ToolKey =
   | 'view'
   | 'guides'
+  | 'reflow'
   | 'playback'
   | 'export'
   | 'themeMode'
@@ -229,6 +230,7 @@ const TOOL_PRIORITY: readonly ToolKey[] = [
   'view',
   'donate',
   'guides',
+  'reflow',
   'playback',
   'export',
   'pageConfig',
@@ -243,7 +245,7 @@ const TOOL_PRIORITY: readonly ToolKey[] = [
 
 /** adj530（用户要求）：功能按钮组（左侧）内的显示顺序——视图、排版、试听、导出、设置、主题、预览比率缩放
     （adj570：用户要求"主题与设置对换位置" ⇒ 现在是**设置在前、主题在后**） */
-const FN_ORDER: readonly ToolKey[] = ['view', 'guides', 'playback', 'export', 'pageConfig', 'scoreConfig', 'themeMode', 'zoom']
+const FN_ORDER: readonly ToolKey[] = ['view', 'guides', 'reflow', 'playback', 'export', 'pageConfig', 'scoreConfig', 'themeMode', 'zoom']
 
 /** adj530（用户要求）：编辑设置组（右侧）内的显示顺序——折行、输入条、字体、字号 */
 const EDIT_ORDER: readonly ToolKey[] = ['autoWrap', 'scriptPad', 'font', 'fontSize']
@@ -400,6 +402,14 @@ export function TopBar() {
       onPick: () => setShowGuides(!showGuides),
     },
     // adj384：音色库按钮已移除（移入「设置 → 音色库」标签）
+    // adj1324：重排 = 只在小节线后自动重写 Q/C 行（弹对话框）
+    reflow: {
+      key: 'reflow',
+      label: '重排',
+      title: reflowCopy.toolTitle,
+      kind: 'btn',
+      onPick: () => openModal('reflow'),
+    },
     // adj462：试听/导出/设置三个按钮改为**底部 dock 的入口（开关）**——不再打开对话框：
     //   dock 关 → 展开并切到该面板；已开且正是该面板 → 收起 dock；已开但不是该面板 → 只切面板。
     //   面板本体的状态（播放进度/导出选项/设置页签）由 dock 保持挂载而保留。
@@ -1264,6 +1274,8 @@ export function TopBar() {
   const entryOpenSystem: MenuEntry = { label: workspaceCopy.openSystemLabel, onPick: runOpen, hidden: isHostEmbedded() }
   const entrySamples: MenuEntry = { label: '打开示例(&E)…', hotkey: 'e', onPick: () => openModal('samples') }
   const entryPaste: MenuEntry = { label: pasteImportCopy.menuLabel, kbd: KBD.import, hotkey: 'v', onPick: () => toggleDock('import') }
+  // adj1324：重排脚本（与顶栏「重排」按钮同一对话框）
+  const entryReflow: MenuEntry = { label: reflowCopy.menuLabel, hotkey: 'l', onPick: () => openModal('reflow') }
   const entrySave: MenuEntry = { label: '保存(&S)', kbd: KBD.save, hotkey: 's', onPick: runSaveSmart }
   const entrySaveAs: MenuEntry = { label: '另存为(&A)…', hotkey: 'a', onPick: runSaveAsSmart }
   // adj1198：发布信息维护（.jps.meta.json），与导出乐谱包分开
@@ -1324,13 +1336,14 @@ export function TopBar() {
    * 因为嵌入版的保存已由专用对话框接管，见 `docStore.requestSave`）。
    */
   const fileEntries: (MenuEntry | 'sep')[] = isNarrow
-    ? [entryNew, entrySave, entrySaveAs, entryWorkspace, entrySamples, entryPaste, entryRecent, entryTryout, entryExport, entryPrint]
+    ? [entryNew, entrySave, entrySaveAs, entryWorkspace, entrySamples, entryPaste, entryReflow, entryRecent, entryTryout, entryExport, entryPrint]
     : [
         entryNew,
         entryOpen,
         entryOpenSystem,
         entrySamples,
         entryPaste,
+        entryReflow,
         entryRecent,
         entrySave,
         entrySaveAs,

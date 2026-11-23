@@ -62,6 +62,8 @@ const VoicePickerDialog = lazy(() => import('./dialogs/VoicePickerDialog').then(
 const FileDiffDialog = lazy(() => import('./dialogs/FileDiffDialog').then((m) => ({ default: m.FileDiffDialog })))
 // adj963（用户要求）：「保存到工作区」专用对话框（插件嵌入版的保存主入口）
 const SaveAsDialog = lazy(() => import('./dialogs/SaveAsDialog').then((m) => ({ default: m.SaveAsDialog })))
+// adj1324：乐谱重排（顶栏「重排」/ 文件菜单）
+const ReflowDialog = lazy(() => import('./dialogs/ReflowDialog').then((m) => ({ default: m.ReflowDialog })))
 // adj1195：导出乐谱包（zip）——乐谱库上传用；三端轻功能
 const ScorePackageDialog = lazy(() =>
   import('./dialogs/ScorePackageDialog').then((m) => ({ default: m.ScorePackageDialog })),
@@ -751,6 +753,7 @@ function App() {
       {/* adj509：试听音色选择对话框（音色库「指定音色」按钮触发） */}
       {modal === 'voicePicker' && <Suspense fallback={null}><VoicePickerDialog /></Suspense>}
       {modal === 'saveAs' && <Suspense fallback={null}><SaveAsDialog /></Suspense>}
+{modal === 'reflow' && <Suspense fallback={null}><ReflowDialog /></Suspense>}
       {/* adj1074：自定义卡片风格（相机位「自定义…」触发） */}
       {/* adj1119：对拍台（独立台面） */}
       {/* adj1264：连续动态谱对拍台（横滚条带 + 背景视频 + 出片） */}

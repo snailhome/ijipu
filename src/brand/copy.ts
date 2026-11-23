@@ -1805,3 +1805,22 @@ export const scorePackageCopy = {
   needSource: '来源不能为空（公版写「传统」/ 授权写授权方）',
   fail: (e: string) => `导出失败：${e}`,
 } as const
+
+/** adj1324：乐谱重排对话框文案（入口在顶栏「重排」/ 文件菜单） */
+export const reflowCopy = {
+  title: '重排脚本',
+  menuLabel: '重排脚本(&L)…',
+  toolTitle: '按小节重排分行',
+  hint: '只在小节线后断行；多声部按同一小节切块；歌词一起拆；每行末尾缺小节线会补 `|`。',
+  modeMax: '每行最多小节数',
+  modeRatio: '固定部分占宽超过',
+  modeLines: '按目标行数',
+  apply: '应用重排',
+  cancel: '取消',
+  preview: (lines: number, measures: number) => `重排后约 ${lines} 行 / ${measures} 小节`,
+  needFixErrors: '先修语法错误再重排',
+  applied: (n: number) => `已重排为 ${n} 行，可 Ctrl+Z 撤销`,
+  ratioSuffix: '%',
+  maxSuffix: '小节',
+  linesSuffix: '行',
+} as const

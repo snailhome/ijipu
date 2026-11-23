@@ -162,7 +162,7 @@ interface DocState {
   /** 历史步数上限（默认 50） */
   historyLimit: number
 
-  setCode: (code: string) => void
+  setCode: (code: string, breakHistory?: boolean) => void
   setViewType: (v: ViewType) => void
   setAutoFormat: (b: boolean) => void
   /**
@@ -613,12 +613,17 @@ export const useDocStore = create<DocState>()((set, get) => ({
   lastEditAt: 0,
   historyLimit: DEFAULT_HISTORY_LIMIT,
 
-  setCode: (code) => {
+  setCode: (code, breakHistory = false) => {
     const s = get()
     if (code === s.code) return // 无变化不产生历史
     const current: HistoryEntry = { code: s.code, selStart: s.sel.start, selEnd: s.sel.end }
     const { next } = recordEdit(
-      { undoStack: s.undoStack, redoStack: s.redoStack, lastEditAt: s.lastEditAt },
+      /**
+       * adj1324：`breakHistory` = 这是一次**离散动作**（如“应用重排”），
+       * 不许和 1.2 秒内的连续输入合并成一步——否则一次 Ctrl+Z 会把刚打的字也一起撤掉。
+       * `lastEditAt: 0` 让 `recordEdit` 的合并窗口失效（与撤销后重置时间戳同一手法）。
+       */
+      { undoStack: s.undoStack, redoStack: s.redoStack, lastEditAt: breakHistory ? 0 : s.lastEditAt },
       current,
       Date.now(),
       s.historyLimit,
