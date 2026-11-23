@@ -22716,6 +22716,14 @@ function runAdj1324Tests() {
     rsRep.source.includes(':|]') && parseJps(rsRep.source).errors.length === 0,
     rsRep.source)
 
+  // 用户 2026-11-24：一行 4 小节的谱面，不应出现只有 1 小节的行
+  const orphan = H + 'Q: 1 2 3 4 | 5 6 7 1 | 2 3 4 5 | 6 7 1 2 |\nQ: 1 2 3 4 :|\n'
+  const rOrphan = reflowJps(orphan, { maxMeasuresPerLine: 4 })
+  const orphanGroups = parseJps(rOrphan.source).groups
+  check('adj1324 尾行不留 1 小节：5 小节按 4 排成 3+2，而不是 4+1',
+    orphanGroups.length === 2 && barsOf(orphanGroups[0]) === 3 && barsOf(orphanGroups[1]) === 2,
+    rOrphan.source)
+
   // 用户 2026-11-24：跳房子范围重排后落在同一行内 ⇒ 自动闭口
   const openRow = H + 'Q: ["1." 1 2 3 4 | 5 6 7 1 :|\n'
   const rOpen = reflowJps(openRow, { maxMeasuresPerLine: 3 })
