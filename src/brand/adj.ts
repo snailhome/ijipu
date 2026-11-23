@@ -8,5 +8,6 @@
  * `npm run smoke` 有闸门：`LATEST_ADJ` 不得小于 git log 里的最大 adj。
  * 仍保留手工改的余地（只增不减），不要在首页 HTML/脚本里另写数字。
  */
-export const LATEST_ADJ = 1323
+/** adj1325（用户 2026-11-23）：首页手机菜单点外面 / 按 Esc 也能收起 */
+export const LATEST_ADJ = 1325
 
