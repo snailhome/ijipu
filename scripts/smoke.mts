@@ -22697,14 +22697,14 @@ function runAdj1324Tests() {
 
   // 用户 2026-11-23 谱例：第一结尾前的 `|]/` 是结构断点；不能把前 3 小节排满、
   // 把第一结尾最后 1 小节挤到下一行
-  const voltaBreak = H + 'Q: 1 2 3 4 |]/ 5 6 7 1 | 2 3 4 5 |\nQ: 6 7 1 2 |\n'
+  const voltaBreak = H + 'Q: 1 2 3 4 |]/ 5 6 7 1 | 2 3 4 5 |\nQ: 6 7 1 2 |\nQ: 3 4 5 6 |\n'
   const rvb = reflowJps(voltaBreak, { maxMeasuresPerLine: 3 })
   const vbGroups = parseJps(rvb.source).groups
-  check('adj1324 闭合跳房子 `]` 后强制换行：后 2 小节 + 下一条 1 小节成 3 小节',
-    vbGroups.length === 2 && barsOf(vbGroups[0]) === 1 && barsOf(vbGroups[1]) === 3,
+  check('adj1324 `|]/` 不强制换行：后面小节还能并进同一行补满',
+    vbGroups.length === 2 && barsOf(vbGroups[0]) === 3 && barsOf(vbGroups[1]) === 2,
     rvb.source)
 
-  // 用户 2026-11-23：跳房子范围重排后落在同一行内 ⇒ 自动闭口
+  // 用户 2026-11-24：跳房子范围重排后落在同一行内 ⇒ 自动闭口
   const openRow = H + 'Q: ["1." 1 2 3 4 | 5 6 7 1 :|\n'
   const rOpen = reflowJps(openRow, { maxMeasuresPerLine: 3 })
   check('adj1324 开放跳房子范围在同一行 → 自动闭口 `:|]`',
