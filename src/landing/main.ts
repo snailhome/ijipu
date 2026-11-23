@@ -58,19 +58,52 @@ function bindTopbar(): void {
   window.addEventListener('scroll', sync, { passive: true })
 }
 
-/** 窄屏菜单：点汉堡展开导航，点任一链接后收起 */
+/**
+ * 窄屏菜单：点汉堡展开导航，点任一链接后收起（adj876）。
+ *
+ * adj1325（用户 2026-11-23 要求）：**点菜单外的任意位置也要收起**。
+ * 以前只有"点汉堡"和"点导航里的链接"两条路，手机上点正文/标题那块没反应，
+ * 菜单会一直挂着挡住内容。这里补两条，都用**捕获阶段**：
+ *   · `pointerdown`（点外面）—— 目标和菜单项自己的 pointerdown 都在捕获阶段最先收到，
+ *     与 `ui/Modal` 的"点外面关掉"同一手法（AGENTS 五·5）；不等 `click` 是为了
+ *     手指一按下去就收起来，不用等抬手。
+ *   · `keydown` 的 `Esc` —— 键盘用户也能关。
+ * 汉堡自己点的那一下要排除掉，否则会"先关再被汉堡打开"。
+ * 另：跨过 900px 断点（切到宽屏常驻导航）时把 open 清掉，免得下次变窄直接展开。
+ */
 function bindBurger(): void {
   const burger = document.getElementById('burger')
   const nav = document.getElementById('nav')
   if (!burger || !nav) return
+  const isOpen = () => nav.classList.contains('open')
   const setOpen = (open: boolean) => {
     nav.classList.toggle('open', open)
     burger.setAttribute('aria-expanded', open ? 'true' : 'false')
   }
-  burger.addEventListener('click', () => setOpen(!nav.classList.contains('open')))
+  burger.addEventListener('click', () => setOpen(!isOpen()))
   nav.addEventListener('click', (e) => {
     if ((e.target as HTMLElement).closest('a')) setOpen(false)
   })
+  document.addEventListener(
+    'pointerdown',
+    (e) => {
+      if (!isOpen()) return
+      const t = e.target as HTMLElement | null
+      if (t && (nav.contains(t) || burger.contains(t))) return
+      setOpen(false)
+    },
+    true,
+  )
+  document.addEventListener(
+    'keydown',
+    (e) => {
+      if (!isOpen() || e.key !== 'Escape') return
+      setOpen(false)
+      burger.focus()
+    },
+    true,
+  )
+  window.matchMedia('(max-width: 900px)').addEventListener('change', () => setOpen(false))
 }
 
 /** 赞赏弹层：用原生 `<dialog>`（无需第三方库，Esc 关闭是内建行为） */

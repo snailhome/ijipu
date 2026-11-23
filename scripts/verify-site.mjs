@@ -1892,6 +1892,78 @@ async function main() {
        */
       console.log('[verify-site] 验证窄屏（手机视口）的目录抽屉…')
       await viewport(390, 844, 2)
+
+      /**
+       * adj1325（用户 2026-11-23）：「首页三横菜单点开后，允许点击菜单外的部分位置来关闭」。
+       * 判据必须用**真实鼠标/键盘事件** —— `el.click()` 不产生 pointerdown，
+       * 测不到"点外面"那条路（那样会假绿）。三条：点外面收起、Esc 收起、点菜单里面不误关。
+       */
+      console.log('[verify-site] 验证首页手机菜单：点外面 / Esc 收起…')
+      {
+        await c.send('Page.navigate', { url: `${origin}/` })
+        await sleep(1400)
+        const opened = await evalJs(
+          c,
+          `(() => {
+            const burger = document.getElementById('burger')
+            const nav = document.getElementById('nav')
+            if (!burger || !nav) return null
+            burger.click()
+            const r = nav.getBoundingClientRect()
+            return {
+              open: nav.classList.contains('open'),
+              expanded: burger.getAttribute('aria-expanded'),
+              navBottom: Math.round(r.bottom),
+              visible: getComputedStyle(nav).display !== 'none' && r.height > 0,
+            }
+          })()`,
+        )
+        check('adj1325 首页手机菜单：点汉堡能展开（open + aria-expanded + 真的有高度）',
+          !!opened && opened.open === true && opened.expanded === 'true' && opened.visible === true,
+          JSON.stringify(opened))
+        /* 点菜单外：y 落在导航条下沿再往下 60px（避开覆盖层），x 取左边距 */
+        const spot = await evalJs(
+          c,
+          `({ x: 24, y: Math.min(window.innerHeight - 24, ${Number(opened?.navBottom ?? 400)} + 60) })`,
+        )
+        const press = { x: spot.x, y: spot.y, button: 'left', clickCount: 1 }
+        await c.send('Input.dispatchMouseEvent', { type: 'mousePressed', ...press })
+        await c.send('Input.dispatchMouseEvent', { type: 'mouseReleased', ...press })
+        await sleep(250)
+        const afterOutside = await evalJs(
+          c,
+          `(() => {
+            const nav = document.getElementById('nav')
+            return { open: nav.classList.contains('open'), expanded: document.getElementById('burger').getAttribute('aria-expanded') }
+          })()`,
+        )
+        check('adj1325 首页手机菜单：点菜单外的正文（真实 pointerdown）⇒ 菜单收起',
+          !!afterOutside && afterOutside.open === false && afterOutside.expanded === 'false',
+          JSON.stringify({ spot, afterOutside }))
+        /* Esc 关 */
+        await evalJs(c, `document.getElementById('burger').click()`)
+        await sleep(150)
+        const esc = { key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27, nativeVirtualKeyCode: 27 }
+        await c.send('Input.dispatchKeyEvent', { type: 'keyDown', ...esc })
+        await c.send('Input.dispatchKeyEvent', { type: 'keyUp', ...esc })
+        await sleep(200)
+        const afterEsc = await evalJs(c, `document.getElementById('nav').classList.contains('open')`)
+        check('adj1325 首页手机菜单：按 Esc 也能收起', afterEsc === false, String(afterEsc))
+        /* 负对照：点菜单里面（导航条下沿往上 4px 的留白）不应该收起 */
+        await evalJs(c, `document.getElementById('burger').click()`)
+        await sleep(150)
+        const inner = await evalJs(
+          c,
+          `(() => { const r = document.getElementById('nav').getBoundingClientRect(); return { x: 24, y: Math.round(r.bottom - 4) } })()`,
+        )
+        await c.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: inner.x, y: inner.y, button: 'left', clickCount: 1 })
+        await c.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: inner.x, y: inner.y, button: 'left', clickCount: 1 })
+        await sleep(200)
+        const stillOpen = await evalJs(c, `document.getElementById('nav').classList.contains('open')`)
+        await evalJs(c, `document.getElementById('burger').click()`)
+        check('adj1325 负对照：点菜单里面（不是外面）不会误关',
+          stillOpen === true, String(stillOpen))
+      }
       /* adj948：四份文档页都过一遍（新增的 `/cli/` 也要有抽屉，否则新页面在手机上点不了目录） */
       for (const [label, url] of [
         ['操作手册', '/manual/'],
