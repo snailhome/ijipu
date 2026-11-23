@@ -4836,13 +4836,13 @@ check('[- 降低修饰解析（minus=1）', b38e.length >= 2 && b38e[0].kind ===
   const vPlus = vyOf('V: 1.0\nB: t\nD: C\nP: 4/4\nQ: 1 |[+ 3 4 ] 5 |\n')
   check('[- 降低跳房子线（y 更大，方向与 + 相反）', vMinus > vDef + 1 && vMinus2 > vDef + 2 && vPlus < vDef - 1, `def=${vDef.toFixed(2)} minus=${vMinus.toFixed(2)} minus2=${vMinus2.toFixed(2)} plus=${vPlus.toFixed(2)}`)
 }
-// 3. 行首跳房子用 |/ [
+// 3. 行首跳房子：adj1323 起行首默认隐式隐藏小节线，`|/` 被丢弃，`[` 变成 voltaOnly 注释
 const r38c = parseJps('V: 1.0\nB: t\nD: C\nP: 4/4\nQ: |/ [ 5 6 ] 1 2 |\n')
 const b38c = r38c.groups[0].music.tokens.filter((t) => t.kind === 'barline')
-check('|/ [ 行首跳房子并入隐藏小节线', r38c.errors.length === 0 && b38c[0].kind === 'barline' && b38c[0].voltaStart?.open === true && b38c[0].type === '|/', JSON.stringify(b38c[0]))
-// 行首直接 [ → 警告
+check('adj1323 行首 |/ [ → |/ 丢弃、[ 保留为 voltaOnly 注释', r38c.errors.length === 0 && b38c[0]?.kind === 'barline' && b38c[0].voltaStart?.open === true && b38c[0].voltaOnly === true && b38c.some((t) => t.kind === 'barline' && t.voltaEnd === true), JSON.stringify(b38c))
+// 行首直接 [ → 合法（不再要求先写 |/）
 const r38d = parseJps('V: 1.0\nB: t\nD: C\nP: 4/4\nQ: [ 5 6 ] 1 2 |\n')
-check('行首 [ 无小节线 → 警告', r38d.errors.some((e) => e.message.includes('小节线后')))
+check('adj1323 行首 [ 直接可用（不再警告、不要求 |/）', r38d.errors.length === 0 && r38d.groups[0].music.tokens.some((t) => t.kind === 'barline' && t.voltaStart?.open === true), JSON.stringify(r38d.errors))
 // 渲染：番号显示在线起点上方
 const lay38 = layoutScore(r38a, DUR_CFG)
 const svg38 = renderScoreToSvg(lay38)[0]
@@ -5644,10 +5644,12 @@ const n54b = [...layoutScore(r54b, DUR_CFG).pages[0].notes].sort((a, b) => a.x -
 let minGap54 = Infinity
 for (let i = 1; i < n54b.length; i++) minGap54 = Math.min(minGap54, n54b[i].x - n54b[i - 1].x)
 check('跨拍/拍中起始音符不重叠（最小间距 ≥ 数字槽宽）', minGap54 >= DIGIT_W, `minGap=${minGap54}`)
-// 行首 |* 占位、|/ 不占位（需求）
+// 行首 |* 与无行首线等价（adj1323：行首默认隐式隐藏，`|*` 的占位只在行内）
 const r54c = parseJps('V: 1.0\nB: t\nD: C\nP: 4/4\nQ: |* 1 2 3 4 |\n')
 const n54c = layoutScore(r54c, DUR_CFG).pages[0].notes[0]
-check('行首 |* 占位（音符右移；adj391 线组宽 1 后实测 52）', n54c.x >= ML + 11.5, `x=${n54c.x}`)
+const r54cNo = parseJps('V: 1.0\nB: t\nD: C\nP: 4/4\nQ: 1 2 3 4 |\n')
+const n54cNo = layoutScore(r54cNo, DUR_CFG).pages[0].notes[0]
+check('adj1323 行首 |* 与无行首线等价（不再在行首占位）', Math.abs(n54c.x - n54cNo.x) < 0.01, `star=${n54c.x} none=${n54cNo.x}`)
 
 // ---- 55. 多连音线（(1 2 3) 三连音 / (y...) 平均连音组） ----
 console.log('[55] tuplets')
@@ -16405,11 +16407,12 @@ function runAdj594MeasureBeatsTests() {
     })(),
     JSON.stringify(meterWarns('V: 1.0\nB: t\nD: C\nP: 4/4\nQ1: 1 2 3 4 | 1 2 3 4 |\nQ2: 1 2 3 4 | 1 2 |\n').map((e) => `${e.line} ${e.message}`)),
   )
-  // ⑧ 空小节（一个带时值元素都没有，多声部填充用）不该报
+  // ⑧ 空小节（一个带时值元素都没有，多声部填充用）不该报；adj1323 起 `| |` 会合并，
+  //    要一个真正的空小节请用隐藏休止补满（`| 8 8 8 8 |`）
   check(
     'adj594 空小节 / 只有记号的"小节"不报（多声部填充空小节是合法的）',
-    meterWarns('V: 1.0\nB: t\nD: C\nP: 4/4\nQ1: 1 2 3 4 | | 1 2 3 4 |\n').length === 0,
-    JSON.stringify(meterWarns('V: 1.0\nB: t\nD: C\nP: 4/4\nQ1: 1 2 3 4 | | 1 2 3 4 |\n').map((e) => e.message)),
+    meterWarns('V: 1.0\nB: t\nD: C\nP: 4/4\nQ1: 1 2 3 4 | 8 8 8 8 | 1 2 3 4 |\n').length === 0,
+    JSON.stringify(meterWarns('V: 1.0\nB: t\nD: C\nP: 4/4\nQ1: 1 2 3 4 | 8 8 8 8 | 1 2 3 4 |\n').map((e) => e.message)),
   )
   // ⑨ 没写 P: 时按 4/4 检查（adj595：首小节豁免 ⇒ 用第 2 小节做判据）
   check(
@@ -20176,6 +20179,13 @@ runAdj927ExternalChangeTests()
       console.error('  ✗ adj967 小节序号落点用例抛异常', e)
     }
     try {
+      // adj1323：行首默认隐式隐藏小节线 / 任意小节线后断行 / | &dc | / || 合并按结束
+      runAdj1323Tests()
+    } catch (e) {
+      failed++
+      console.error('  ✗ adj1323 断行合并用例抛异常', e)
+    }
+    try {
       // adj968：拖放打开 .jps（用户要求；真拖那一下在 verify:app-ui）
       runAdj968Tests()
     } catch (e) {
@@ -22524,6 +22534,77 @@ function runAdj625Tests() {
  *    却仍被 `barOrdinalsOf` 编了号（那里只把"组首空 seg"判 null）⇒ 行末埋点给它画了方框；而那条空小节
  *    只有 ~11px 宽（实测 533.5→544.3），于是方框看起来就"挂在最后那条 `‖` 上"——与用户截图一致。
  */
+function runAdj1323Tests() {
+  console.log('[211] 行首隐式小节线 / 断行合并（adj1323）')
+  const H = 'V: 1.0\nB: t\nD: C\nP: 4/4\n'
+  const barsOf = (src: string, gi = 0) =>
+    parseJps(src).groups[gi]?.music.tokens.filter((t) => t.kind === 'barline') ?? []
+  const firstTokOf = (src: string, gi = 0) => parseJps(src).groups[gi]?.music.tokens[0]
+
+  // 1) `| &dc |`：独立修饰符先挂到前一根线，再合并相邻 barline
+  const t1323a = parseJps(H + 'Q: 1 2 3 4 | &dc |\n').groups[0].music.tokens.filter((t) => t.kind === 'barline')
+  check('adj1323 `| &dc |` → 一根 `|&dc`（不留空小节）',
+    t1323a.length === 1 && t1323a[0].kind === 'barline' && t1323a[0].marks?.includes('dc') === true,
+    JSON.stringify(t1323a))
+  // 2) `| |`：只留一根
+  const t1323b = parseJps(H + 'Q: 1 2 3 4 | | 5 6 7 1 |\n').groups[0].music.tokens.filter((t) => t.kind === 'barline')
+  check('adj1323 `| |` → 一根 `|`', t1323b.length === 2 && t1323b[0]?.kind === 'barline' && t1323b[0].type === '|', JSON.stringify(t1323b))
+  // 3) 行首 `|:` 归上一行末；下一行不再以 barline 开头
+  const r1323c = parseJps(H + 'Q: 1 2 3 4 |\nQ: |: 5 6 7 1 :|\n')
+  const c0 = r1323c.groups[0].music.tokens.filter((t) => t.kind === 'barline')
+  check('adj1323 行首 `|:` 并到上一行末（上一行末 = `|:`；下一行首不是 barline）',
+    c0[c0.length - 1]?.kind === 'barline' && (c0[c0.length - 1] as { type?: string }).type === '|:' &&
+      firstTokOf(H + 'Q: 1 2 3 4 |\nQ: |: 5 6 7 1 :|\n', 1)?.kind !== 'barline',
+    JSON.stringify(c0))
+  // 4) `||` + `|:` → `:|:`（用户口径：|| 就是 :|）
+  const r1323d = parseJps(H + 'Q: 1 2 3 4 ||\nQ: |: 5 6 7 1 ||\n')
+  const d0 = r1323d.groups[0].music.tokens.filter((t) => t.kind === 'barline')
+  check('adj1323 `||` + `|:` → `:|:`', d0[d0.length - 1]?.kind === 'barline' && (d0[d0.length - 1] as { type?: string }).type === ':|:', JSON.stringify(d0))
+  // 5) `:||:` 文本 → `:|:`
+  const e0 = barsOf(H + 'Q: 1 2 3 4 :||: 5 6 7 1 |\n')
+  check('adj1323 `:||:` → `:|:`', e0.length === 2 && e0[0].kind === 'barline' && e0[0].type === ':|:', JSON.stringify(e0))
+  // 6) 首行普通线丢弃；首行语义线保留
+  check('adj1323 首行普通 `|` 丢弃', firstTokOf(H + 'Q: | 1 2 3 4 |\n')?.kind !== 'barline', JSON.stringify(firstTokOf(H + 'Q: | 1 2 3 4 |\n')))
+  check('adj1323 首行 `|:` 保留', firstTokOf(H + 'Q: |: 1 2 3 4 :|\n')?.kind === 'barline' && (firstTokOf(H + 'Q: |: 1 2 3 4 :|\n') as { type?: string }).type === '|:')
+  // 7) 裸 `&hs` 行首 warning
+  const r1323g = parseJps(H + 'Q: &hs 1 2 3 4 |\n')
+  check('adj1323 裸 `&hs` 行首给 warning（不自动挂）', r1323g.errors.some((e) => e.message.includes('不要裸放行首')), JSON.stringify(r1323g.errors.map((e) => e.message)))
+  // 8) `| {jz 16} |` 无效 → warning + 合并成一根
+  const r1323h = parseJps(H + 'Q: 1 2 3 4 | {jz 16} |\n')
+  check('adj1323 `| {jz 16} |` → warning 且合并成一根线',
+    r1323h.errors.some((e) => e.message.includes('要紧跟在休止符后面')) && barsOf(H + 'Q: 1 2 3 4 | {jz 16} |\n').length === 1,
+    JSON.stringify(r1323h.errors.map((e) => e.message)))
+  // 9) 行首 barline 不再让播放小节号 +1
+  const r1323i = parseJps(H + 'Q: 1 2 3 4 |\nQ: | 5 6 7 1 |\nQ: 2 3 4 5 ||\n')
+  const lay1323i = layoutScore(r1323i, defaultPageConfig)
+  const seq1323i = buildPlaySequence(r1323i, lay1323i, 96, null, undefined, undefined, [])
+  const flat1323i = flattenScoreNotes(lay1323i)
+  check('adj1323 行首 barline 的播放小节号与排版一致（1,2,3）',
+    JSON.stringify(seq1323i.barNos) === '[1,2,3]' && flat1323i.every((n) => n.bar >= 1 && n.bar <= 3),
+    `barNos=${JSON.stringify(seq1323i.barNos)} flat=${flat1323i.map((n) => n.bar).join(',')}`)
+  // 10) 跨行转调：合并 / 转调线在上一行末 / 下一行首，排版音高一致
+  const pitchOf1323 = (code: string) =>
+    layoutScore(parseJps(code), defaultPageConfig).pages.flatMap((p) => p.notes).map((n) => n.audioPitch).join(',')
+  const pMerged = pitchOf1323(H + 'Q: 1 |"d:1=D" 2 3 4 |\n')
+  const pEnd = pitchOf1323(H + 'Q: 1 |"d:1=D"\nQ: 2 3 4 |\n')
+  const pStart = pitchOf1323(H + 'Q: 1 |\nQ: |"d:1=D" 2 3 4 |\n')
+  check('adj1323 跨行转调：合并 / 上一行末 / 下一行首三种排版音高一致',
+    pMerged === 'C4,E4,F#4,G4' && pEnd === pMerged && pStart === pMerged, JSON.stringify({ pMerged, pEnd, pStart }))
+  // 11) 行首 `|/` 不占位（space / duration 都与“无行首线”一致）
+  for (const mode of ['space', 'duration'] as const) {
+    const cfg: PageConfig = { ...defaultPageConfig, noteSpaceLayout: mode }
+    const xNo = layoutScore(parseJps(H + 'Q: 1 2 3 4 |\n'), cfg).pages[0].notes[0]?.x
+    const xSlash = layoutScore(parseJps(H + 'Q: |/ 1 2 3 4 |\n'), cfg).pages[0].notes[0]?.x
+    check(`adj1323 行首 |/ 不占位（${mode}）`, xNo !== undefined && Math.abs((xSlash ?? -1) - xNo) < 0.01, `no=${xNo} slash=${xSlash}`)
+  }
+  // 12) 行首 `[` 直接可用、不告警
+  const r1323l = parseJps(H + 'Q: [ 5 6 ] 1 2 |\n')
+  check('adj1323 行首 `[` 直接可用（无 warning、voltaOnly）',
+    r1323l.errors.length === 0 && r1323l.groups[0].music.tokens.some((t) => t.kind === 'barline' && t.voltaOnly === true && t.voltaStart?.open === true),
+    JSON.stringify(r1323l.errors.map((e) => e.message)))
+}
+
+
 function runAdj967Tests() {
   console.log('[178] 行首序号挪到上一行行末小节线 + 末尾无小节不画（adj967）')
   const lay = (src: string, cfg: PageConfig) => layoutScore(parseJps(src), cfg)
@@ -22558,7 +22639,8 @@ function runAdj967Tests() {
 
   // ---- 判据②：**最后一条小节线后面没有小节 ⇒ 不画**（用户截图那条） ----
   const GHOST = 'V: 1.0\nB: t\nD: C\nP: 4/4\nQ: 1 2 3 4 | 5 6 7 1 | 2 3 4 5 | 6 7 1 2 | 3 4 5 6 | 7 1 2 3 | 4 5 6 7 | |\n'
-  const MID = 'V: 1.0\nB: t\nD: C\nP: 4/4\nQ: 1 2 3 4 | | 2 3 4 5 |\n'
+  // adj1323：`| |` 现在是“同一根边界”，会合并；要一个真正的空小节请用隐藏休止补满
+  const MID = 'V: 1.0\nB: t\nD: C\nP: 4/4\nQ: 1 2 3 4 | 8 8 8 8 | 2 3 4 5 |\n'
   const g = BOXES(GHOST, { ...defaultPageConfig, showBarCount: true, barCountInterval: 4 })
   const m = BOXES(MID, { ...defaultPageConfig, showBarCount: true, barCountInterval: 1 })
   check('adj967 末尾多一个小节线（幽灵末小节）⇒ **不画方框**：间隔 4、7 个真小节 ⇒ 只该有 4 号，不该有 8 号',

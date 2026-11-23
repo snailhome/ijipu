@@ -12536,3 +12536,30 @@ smoke 五条含"来源切换成对"结构断言与负对照） |
 - **预防**：全局单键（空格/回车/字母）接管前先问三件事：**输入区让不让？原生控件让不让？没有会话时
   会不会误触发？** 三条都写进纯判据、并各留一条负向断言。
 
+### E-2026-604 行首小节线：空小节、小节号 +1、跨行转调丢（`adj1323`，用户要求）
+- **用户原话（2026-11-23）**：「取消行首小节线，即默认行首都是隐藏的小节线」；「`:|`、`|:` 可以移到
+  上一行末，替换上一行末的 `|`」；「`| &dc |` 应该变为 `| &dc`」；「`||` 就是 `:|`，`:||:` 就是 `:|:`」。
+- **实测到的三处偏差**：
+  1. 两行 `|: … :|` 合到一行后，排版在 `:|` 与 `|:` 之间多出 **10.8px 空小节**（`splitBars` 把
+     相邻 barline 之间当成一格）；
+  2. 行首带 `|` 时，排版小节 1/2/3、`seq.barNos` 却是 `[1,3,4]`（`barBaseOf` 按 barline 数量累加，
+     把组首空 seg 算成一节）；
+  3. 跨行转调 `Q: 1 |"d:1=D"` / `Q: 2 3 4 |`：排版 `C4,D4,E4,F4`、播放 `E4,F#4,G4`
+     （`effectiveKeysOf` 每组都从描述头重算）。
+- **解决**：
+  - 新增 `parser/bars.ts`（`splitBars` / `countMeasures` 唯一口径）与 `parser/barlineJoin.ts`
+    （合并类型/属性；`||`/`||/` 按“结束”参与合并）；
+  - `parser/normalize.ts`：解析期把行首 barline 归到上一行末；`| &dc |` 先把 `&dc` 挂到前一根线；
+    `| |` 只留一根；首行普通线丢弃、语义线保留；行首 `[` 变 voltaOnly 注释；
+  - `PlacedToken.measureIndex` + `ScoreLayout.groupStartBar`：小节号不再用 `barIndex`（seg 下标）；
+    播放、`flattenScoreNotes`、标记段/CLI 全部消费这一份；
+  - 布局按排版单元预计算 `keysAtByGroup`：跨行/多声部共享调号，`d:` 恢复描述头调号；
+  - `|/` 与行首 voltaOnly 在 space 路径不再占 2.5px；流线谱拼接用 `prev.endType`。
+- **验证**：`npm run smoke` **ALL SMOKE TESTS PASSED**（新增 `[179] adj1323` 14 条：`| &dc |`、`| |`、
+  行首 `|:`、`||`+`|:`、`:||:`、首行线、裸 `&hs` warning、`| {jz 16} |` warning、播放小节号 1/2/3、
+  跨行转调三种写法、`|/` 两种布局不占位、行首 `[` 无 warning）；`npm run build` ✓。
+- **预防**：① 「空 seg 算不算小节」只留 `countMeasures` 一处；② 小节号只认
+  `groupStartBar + measureIndex`，不再从 `barIndex` 推；③ 跨行状态（调号/临时拍号/跳房子注释）
+  必须在**排版单元**级统一算，不能每组从描述头重来。
+
+
