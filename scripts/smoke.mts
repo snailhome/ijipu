@@ -22704,6 +22704,13 @@ function runAdj1324Tests() {
     vbGroups.length === 2 && barsOf(vbGroups[0]) === 1 && barsOf(vbGroups[1]) === 3,
     rvb.source)
 
+  // 用户 2026-11-23：跳房子范围重排后落在同一行内 ⇒ 自动闭口
+  const openRow = H + 'Q: ["1." 1 2 3 4 | 5 6 7 1 :|\n'
+  const rOpen = reflowJps(openRow, { maxMeasuresPerLine: 3 })
+  check('adj1324 开放跳房子范围在同一行 → 自动闭口 `:|]`',
+    rOpen.source.includes(':|]') && parseJps(rOpen.source).errors.length === 0,
+    rOpen.source)
+
   const voltaSrc = H + 'Q: 1 2 3 4 |\nQ: ["1." 5 6 7 1 | 2 3 4 5 |\nQ: 6 7 1 2 |\n'
   const rv2 = reflowJps(voltaSrc, { maxMeasuresPerLine: 4 })
   check('adj1324 行首开放跳房子重排后仍留在行首（不被并到上一行）',
