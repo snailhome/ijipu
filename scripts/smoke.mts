@@ -3001,6 +3001,23 @@ const vo3Start = layVo3.pages[0].barlines.find((b) => b.voltaStart)
 const vo3Y = vo3Start ? vo3Start.yTop - VOLTA_BAR_GAP : NaN
 const openLines = (svgVo3.match(new RegExp(`y1="${vo3Y}"[^>]*stroke-width="0.8"`, 'g')) ?? []).length
 check('未封闭 [/ 只画起点+横线（2 条）', openLines === 2, `got ${openLines}`)
+// adj1324：右侧开放的跳房子按“2 小节或到右侧”画，不再是固定 60px
+const voltaOpen = parseJps(
+  'V: 1.0\nB: t\nD: C\nP: 4/4\nQ: 1 2 3 4 | 5 6 7 1 |\nQ: ["1." 1 2 3 4 | 5 6 7 1 | 2 3 4 5 |\n',
+)
+const layOpen = layoutScore(voltaOpen, DUR_CFG)
+const openStart = layOpen.pages[0].barlines.find((b) => b.voltaStart)
+const openRowBars = layOpen.pages[0].barlines
+  .filter((b) => openStart && Math.abs(b.yTop - openStart.yTop) < 1 && b.x > openStart.x + 0.5)
+  .sort((a, b) => a.x - b.x)
+const openY = openStart ? openStart.yTop - VOLTA_BAR_GAP : NaN
+const svgOpen = renderScoreToSvg(layOpen)[0]
+const openX2 = Number(
+  (svgOpen.match(new RegExp(`<line x1="[\\d.]+" y1="${openY}" x2="([\\d.]+)" y2="${openY}"`)) ?? [])[1],
+)
+const expectOpenX2 = openRowBars.length >= 2 ? openRowBars[1].x - 2 : layOpen.pages[0].width - DUR_CFG.margin_right
+check('adj1324 右侧开放的跳房子：有 2 小节就画到第 2 小节末（不是固定 60px）',
+  Math.abs(openX2 - expectOpenX2) < 0.6, `openX2=${openX2} expect=${expectOpenX2}`)
 
 // ---- 19. 连音线（M7c） ----
 console.log('[19] slurs (M7c)')
@@ -22640,6 +22657,37 @@ function runAdj1324Tests() {
   const r3 = reflowJps(src, { targetLineCount: 3 })
   check('adj1324 目标 3 行 → 正好 3 行', countQ(r3.source) === 3, r3.source)
 
+  // 用户 2026-11-23 指正：重排是**整体先合并再拆**，不是逐条 Q 行各自处理
+  const mergeShort = H + 'Q: 1 2 3 4 |\nQ: 5 6 7 1 |\nQ: 2 3 4 5 |\nQ: 6 7 1 2 |\n'
+  const shortMerged = reflowJps(mergeShort, { maxMeasuresPerLine: 4 })
+  check('adj1324 多条短 Q 行先整体合并：4 条 1 小节 → 1 行 4 小节',
+    countQ(shortMerged.source) === 1 && seqOf(shortMerged.source).totalMs === seqOf(mergeShort).totalMs,
+    shortMerged.source)
+
+  const mergeLyric = H + 'Q: 1 2 3 4 |\nC: 一 二 三 四\nQ: 5 6 7 1 |\nC: 五 六 七 八\n'
+  const shortLyricMerged = reflowJps(mergeLyric, { maxMeasuresPerLine: 4 })
+  check('adj1324 跨 Q 行合并时歌词也接起来（两条 C 行 → 一条）',
+    countQ(shortLyricMerged.source) === 1 && countC(shortLyricMerged.source) === 1 &&
+      shortLyricMerged.source.includes('C: 一 二 三 四 五 六 七 八'),
+    shortLyricMerged.source)
+
+  const versesMixed = H + 'Q: 1 2 3 4 |\nC: 一 二 三 四\nQ: 5 6 7 1 |\nC: 五 六 七 八\nC: 甲 乙 丙 丁\n'
+  const rv = reflowJps(versesMixed, { maxMeasuresPerLine: 4 })
+  check('adj1324 C 行由 1 段变 2 段：新行补 `@` 占位，保持“第几遍”不错位',
+    countC(rv.source) === 2 && rv.source.includes('C: @ @ @ @ 甲 乙 丙 丁'), rv.source)
+
+  const shortMv = H + 'Q1: 1 2 3 4 |\nQ2: 8 8 8 8 |\nQ1: 5 6 7 1 |\nQ2: 8 8 8 8 |\n'
+  const shortMvMerged = reflowJps(shortMv, { maxMeasuresPerLine: 4 })
+  check('adj1324 多声部短块也先整体合并（两块 → 一块两小节）',
+    countQ(shortMvMerged.source) === 2 && seqOf(shortMvMerged.source).totalMs === seqOf(shortMv).totalMs,
+    shortMvMerged.source)
+
+  const voltaSrc = H + 'Q: 1 2 3 4 |\nQ: ["1." 5 6 7 1 | 2 3 4 5 |\nQ: 6 7 1 2 |\n'
+  const rv2 = reflowJps(voltaSrc, { maxMeasuresPerLine: 4 })
+  check('adj1324 行首开放跳房子重排后仍留在行首（不被并到上一行）',
+    /^Q: \["1\."/m.test(rv2.source) && parseJps(rv2.source).errors.length === 0,
+    rv2.source)
+
   const rRatio = reflowJps(src, { fixedInkRatio: 0.3, pageConfig: { ...defaultPageConfig, margin_left: 150, margin_right: 150 } })
   check('adj1324 固定占宽比例也会断行（窄页 + 30%）', countQ(rRatio.source) > 2 && seqOf(rRatio.source).totalMs === s0.totalMs, rRatio.source)
 
@@ -22672,8 +22720,10 @@ function runAdj1324Tests() {
     rmv.source)
 
   const fy = H + 'Q: 1 2 3 4 | 5 6 7 1 |\n[fenye]\nQ: 2 3 4 5 | 6 7 1 2 |\n'
-  const rfy = reflowJps(fy, { maxMeasuresPerLine: 1 })
-  check('adj1324 `[fenye]` 原样保留', rfy.source.includes('[fenye]') && seqOf(rfy.source).totalMs === seqOf(fy).totalMs, rfy.source)
+  const rfy = reflowJps(fy, { maxMeasuresPerLine: 4 })
+  check('adj1324 `[fenye]` 原样保留，且分页是硬边界（两页不合并）',
+    rfy.source.includes('[fenye]') && countQ(rfy.source) === 2 && seqOf(rfy.source).totalMs === seqOf(fy).totalMs,
+    rfy.source)
 
   const tp = H + 'Q: 1 2 3 4 | 5 6 7 1 |\nC: 一 二 {tp 1/ 2/} 三 四 五 六 七 八\n'
   const rtp = reflowJps(tp, { maxMeasuresPerLine: 1 })
