@@ -22675,6 +22675,12 @@ function runAdj1324Tests() {
   const rfy = reflowJps(fy, { maxMeasuresPerLine: 1 })
   check('adj1324 `[fenye]` 原样保留', rfy.source.includes('[fenye]') && seqOf(rfy.source).totalMs === seqOf(fy).totalMs, rfy.source)
 
+  const tp = H + 'Q: 1 2 3 4 | 5 6 7 1 |\nC: 一 二 {tp 1/ 2/} 三 四 五 六 七 八\n'
+  const rtp = reflowJps(tp, { maxMeasuresPerLine: 1 })
+  check('adj1324 替谱段 `{tp}` 留在歌词行、不写进 Q 行',
+    rtp.source.includes('{tp') && !/^Q[^\n]*\{tp/m.test(rtp.source) && parseJps(rtp.source).errors.length === 0,
+    rtp.source)
+
   // 接线：顶栏按钮 + 文件菜单 + 对话框挂载（源码级；真交互另在 verify:app-ui）
   const topSrc = String(readFileSync('src/ui/TopBar.tsx', 'utf8'))
   const appSrc = String(readFileSync('src/App.tsx', 'utf8'))
