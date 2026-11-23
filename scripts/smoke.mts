@@ -22704,6 +22704,18 @@ function runAdj1324Tests() {
     vbGroups.length === 2 && barsOf(vbGroups[0]) === 3 && barsOf(vbGroups[1]) === 2,
     rvb.source)
 
+  // 用户 2026-11-24：`]/` 是视觉终点，可移到本房子范围内的小节线；到真实末尾改闭口 `]`
+  const slashNoEnd = H + 'Q: 1 2 3 4 |]/ 5 6 7 1 |\n'
+  const rsNo = reflowJps(slashNoEnd, { maxMeasuresPerLine: 3 })
+  check('adj1324 `|]/` 找不到后面的反复/跳跃 ⇒ 真实末尾就是自己，改成闭口 `|]`',
+    rsNo.source.includes('|]') && parseJps(rsNo.source).errors.length === 0,
+    rsNo.source)
+  const slashRepeat = H + 'Q: ["1." 1 2 3 4 |]/ 5 6 7 1 | 2 3 4 5 :|\n'
+  const rsRep = reflowJps(slashRepeat, { maxMeasuresPerLine: 3 })
+  check('adj1324 `|]/` 重排后移到真实末尾（`:|`）并改闭口 `:|]`',
+    rsRep.source.includes(':|]') && parseJps(rsRep.source).errors.length === 0,
+    rsRep.source)
+
   // 用户 2026-11-24：跳房子范围重排后落在同一行内 ⇒ 自动闭口
   const openRow = H + 'Q: ["1." 1 2 3 4 | 5 6 7 1 :|\n'
   const rOpen = reflowJps(openRow, { maxMeasuresPerLine: 3 })
