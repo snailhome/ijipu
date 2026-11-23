@@ -22682,6 +22682,19 @@ function runAdj1324Tests() {
     countQ(shortMvMerged.source) === 2 && seqOf(shortMvMerged.source).totalMs === seqOf(shortMv).totalMs,
     shortMvMerged.source)
 
+  // 多声部 → 单声部（第一段先唱完第二声部退出）也要能合并，否则 Q1 只剩 1 小节
+  const shrinkMv = H + 'Q1: 1 2 3 4 |\nQ2: 8 8 8 8 |\nQ1: 5 6 7 1 |\nQ2: 8 8 8 8 |\nQ1: 1[6,/]-- &ykh 5,/ 3,/ :|\n'
+  const rShrink = reflowJps(shrinkMv, { maxMeasuresPerLine: 4 })
+  const shrinkGroups = parseJps(rShrink.source).groups.filter((g) => g.music.voice <= 2)
+  const barsOf = (g: (typeof shrinkGroups)[number]) =>
+    g.music.tokens.filter((t) => t.kind === 'barline' && !t.voltaOnly).length
+  check('adj1324 多声部缩成单声部时也整体合并：第一声部 3 小节、第二声部 2 小节',
+    countQ(rShrink.source) === 2 &&
+      shrinkGroups.length === 2 &&
+      barsOf(shrinkGroups[0]) === 3 &&
+      barsOf(shrinkGroups[1]) === 2,
+    rShrink.source)
+
   const voltaSrc = H + 'Q: 1 2 3 4 |\nQ: ["1." 5 6 7 1 | 2 3 4 5 |\nQ: 6 7 1 2 |\n'
   const rv2 = reflowJps(voltaSrc, { maxMeasuresPerLine: 4 })
   check('adj1324 行首开放跳房子重排后仍留在行首（不被并到上一行）',
