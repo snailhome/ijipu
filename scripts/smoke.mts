@@ -22720,9 +22720,15 @@ function runAdj1324Tests() {
   const orphan = H + 'Q: 1 2 3 4 | 5 6 7 1 | 2 3 4 5 | 6 7 1 2 |\nQ: 1 2 3 4 :|\n'
   const rOrphan = reflowJps(orphan, { maxMeasuresPerLine: 4 })
   const orphanGroups = parseJps(rOrphan.source).groups
-  check('adj1324 尾行不留 1 小节：5 小节按 4 排成 3+2，而不是 4+1',
-    orphanGroups.length === 2 && barsOf(orphanGroups[0]) === 3 && barsOf(orphanGroups[1]) === 2,
+  check('adj1324 允许 1 小节尾行（跳房子从行末小节开始），不强行拆前一行',
+    orphanGroups.length === 2 && barsOf(orphanGroups[0]) === 4 && barsOf(orphanGroups[1]) === 1,
     rOrphan.source)
+
+  const oneHouse = H + 'Q: 1 2 3 4 | 5 6 7 1 | 2 3 4 5 | ["1." 6 7 1 2 :|\n'
+  const rOneHouse = reflowJps(oneHouse, { maxMeasuresPerLine: 4 })
+  check('adj1324 跳房子从行末最后一小节开始、范围 1 小节 ⇒ 用闭口 `:|]`',
+    rOneHouse.source.includes(':|]') && parseJps(rOneHouse.source).errors.length === 0,
+    rOneHouse.source)
 
   // 用户 2026-11-24：跳房子范围重排后落在同一行内 ⇒ 自动闭口
   const openRow = H + 'Q: ["1." 1 2 3 4 | 5 6 7 1 :|\n'
