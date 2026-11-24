@@ -22801,6 +22801,16 @@ function runAdj1324Tests() {
       rmBar !== undefined && rmRowNote !== undefined && rmRowNote.x - rmBar.x >= 36,
     rm.source)
 
+  const firstMeter = H + 'Q: "p:5/4" 1 2 3 4 5 |\n'
+  const fmLayout = layoutScore(parseJps(firstMeter), defaultPageConfig)
+  const fmBar = fmLayout.pages[0].barlines.find((b) => b.comment === 'p:5/4')
+  const fmNote = fmBar
+    ? fmLayout.pages[0].notes.filter((n) => n.y > fmBar.yTop && n.y < fmBar.yBottom).sort((a, b) => a.x - b.x)[0]
+    : undefined
+  check('adj1324 第一行裸起拍号也占宽（第一音不被 `5/4` 压住）',
+    fmBar !== undefined && fmNote !== undefined && fmNote.x - fmBar.x >= 24,
+    `bar=${fmBar?.x} note=${fmNote?.x}`)
+
   const keyChange = H + 'Q: 1 2 3 4 |"d:1=D" 1 2 3 4 | 1 2 3 4 |\n'
   const rk = reflowJps(keyChange, { maxMeasuresPerLine: 1 })
   const rkLead = parseJps(rk.source).groups.flatMap((g) => g.music.tokens).find((t) => t.kind === 'barline' && t.keyChange !== undefined)
