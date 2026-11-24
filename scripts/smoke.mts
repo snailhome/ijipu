@@ -22812,6 +22812,10 @@ function runAdj1324Tests() {
     topSrc.includes("key: 'reflow'") && topSrc.includes('entryReflow') && topSrc.includes("openModal('reflow')") &&
       appSrc.includes("modal === 'reflow'") && appSrc.includes('ReflowDialog'),
     '')
+  check('adj1324 重排按钮用 `public/icons/重排.png` 图标',
+    ICON_FILES.reflow === '重排' && topSrc.includes("case 'reflow'") && topSrc.includes('<ToolIcon name="reflow" />') &&
+      existsSync('public/icons/重排.png'),
+    '')
 }
 
 

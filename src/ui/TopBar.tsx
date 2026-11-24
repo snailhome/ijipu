@@ -640,6 +640,9 @@ export function TopBar() {
     switch (key) {
       case 'guides':
         return <ToolIcon name="layout" />
+      case 'reflow':
+        // adj1324：按小节重排分行
+        return <ToolIcon name="reflow" />
       case 'playback':
         return <ToolIcon name="play" />
       case 'donate':
