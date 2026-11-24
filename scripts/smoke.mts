@@ -22830,6 +22830,14 @@ function runAdj1324Tests() {
       !rWrongKey.source.includes('|["d:1=D"'),
     rWrongKey.source)
 
+  // 跳房子渲染只能取 voltaStart.comment；p:/d: 不能回退成番号
+  const voltaMeter = H + 'Q: 1 2 3 4 |"p:4/4"[ 2 2 2 2 |\n'
+  const vmL = layoutScore(parseJps(voltaMeter), defaultPageConfig)
+  const vmSvg = renderScoreToSvg(vmL)
+  check('adj1324 `|"p:4/4"[` 的拍号只画在小节线上，不画进跳房子番号',
+    !vmSvg.includes('p:4/4') && !vmSvg.includes('&gt;p:4/4'),
+    '')
+
   const keyChange = H + 'Q: 1 2 3 4 |"d:1=D" 1 2 3 4 | 1 2 3 4 |\n'
   const rk = reflowJps(keyChange, { maxMeasuresPerLine: 1 })
   const rkLead = parseJps(rk.source).groups.flatMap((g) => g.music.tokens).find((t) => t.kind === 'barline' && t.keyChange !== undefined)
