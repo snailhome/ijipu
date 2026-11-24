@@ -22682,6 +22682,12 @@ function runAdj1324Tests() {
     countC(reC.source) === 1 && reC.source.includes('C: 歌 @ 词') && !/^C:\s*$/m.test(reC.source),
     reC.source)
 
+  const noLyricFirst = H + 'Q: 1 2 3 4 |\nQ: 5 6 7 1 |\nC: 五 六 七 八\n'
+  const rnL = reflowJps(noLyricFirst, { maxMeasuresPerLine: 4 })
+  check('adj1324 前一条曲行没有 C 行，合并时补整行 `@`，歌词仍对在第二小节',
+    countC(rnL.source) === 1 && rnL.source.includes('C: @ @ @ @ 五 六 七 八'),
+    rnL.source)
+
   const shortMv = H + 'Q1: 1 2 3 4 |\nQ2: 8 8 8 8 |\nQ1: 5 6 7 1 |\nQ2: 8 8 8 8 |\n'
   const shortMvMerged = reflowJps(shortMv, { maxMeasuresPerLine: 4 })
   check('adj1324 多声部短块也先整体合并（两块 → 一块两小节）',
