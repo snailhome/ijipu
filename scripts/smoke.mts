@@ -22871,6 +22871,21 @@ function runAdj1324Tests() {
     fakePage.barlines[1].x > 180 && fakePage.barlines[1].x < 220 && fakePage.barNumbers[0].x === fakePage.barlines[1].x,
     `line=${fakePage.barlines[1].x} bn=${fakePage.barNumbers[0].x}`)
 
+  // d: 显示锚点 = 后面第一个可发声元素（跳过休止）
+  const keyAnchorSrc = H + 'Q: 1 2 3 4 |"d:1=D" 0 0 1 2 |\n'
+  const kaLayout = layoutScore(parseJps(keyAnchorSrc), defaultPageConfig)
+  const kaBar = kaLayout.pages[0].barlines.find((b) => b.keyChangeLabel === '转1=D')
+  const kaNote = kaBar
+    ? kaLayout.pages[0].notes
+        .filter((n) => n.token.kind === 'note' && n.y > kaBar.yTop - 2 && n.y < kaBar.yBottom + 2 && n.x > kaBar.x)
+        .sort((a, b) => a.x - b.x)[0]
+    : undefined
+  check('adj1324 `d:` 的转调记号显示在下一小节第一个可发声元素上方（跳过休止）',
+    kaBar !== undefined && kaNote !== undefined &&
+      kaBar.keyChangeAnchorX === (kaNote.inkLeftX ?? kaNote.x) &&
+      kaBar.keyChangeAnchorY !== undefined && kaBar.keyChangeAnchorY < kaNote.y,
+    JSON.stringify({ anchorX: kaBar?.keyChangeAnchorX, noteX: kaNote?.x, anchorY: kaBar?.keyChangeAnchorY, noteY: kaNote?.y }))
+
   const keyChange = H + 'Q: 1 2 3 4 |"d:1=D" 1 2 3 4 | 1 2 3 4 |\n'
   const rk = reflowJps(keyChange, { maxMeasuresPerLine: 1 })
   const rkLead = parseJps(rk.source).groups.flatMap((g) => g.music.tokens).find((t) => t.kind === 'barline' && t.keyChange !== undefined)
