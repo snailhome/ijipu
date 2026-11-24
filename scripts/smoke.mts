@@ -22666,19 +22666,15 @@ function runAdj1324Tests() {
 
   const mergeLyric = H + 'Q: 1 2 3 4 |\nC: 一 二 三 四\nQ: 5 6 7 1 |\nC: 五 六 七 八\n'
   const shortLyricMerged = reflowJps(mergeLyric, { maxMeasuresPerLine: 4 })
-  check('adj1324 不同源 C 行保持不同行，不接成一句',
-    countQ(shortLyricMerged.source) === 1 && countC(shortLyricMerged.source) === 2 &&
-      shortLyricMerged.source.includes('C: 一 二 三 四') &&
-      shortLyricMerged.source.includes('C: @ @ @ @ 五 六 七 八'),
+  check('adj1324 一曲行一词行：合并后仍是一条 C 行（按槽位接起来，不是多条）',
+    countQ(shortLyricMerged.source) === 1 && countC(shortLyricMerged.source) === 1 &&
+      shortLyricMerged.source.includes('C: 一 二 三 四 五 六 七 八'),
     shortLyricMerged.source)
 
   const versesMixed = H + 'Q: 1 2 3 4 |\nC: 一 二 三 四\nQ: 5 6 7 1 |\nC: 五 六 七 八\nC: 甲 乙 丙 丁\n'
   const rv = reflowJps(versesMixed, { maxMeasuresPerLine: 4 })
-  check('adj1324 不同源 C 行分行补 `@`（C 行 1→3，不串）',
-    countC(rv.source) === 3 && rv.source.includes('C: 一 二 三 四') &&
-      rv.source.includes('C: @ @ @ @ 五 六 七 八') &&
-      rv.source.includes('C: @ @ @ @ 甲 乙 丙 丁'),
-    rv.source)
+  check('adj1324 一曲行多词行：合并后仍是多条 C 行（缺的段补 `@`）',
+    countC(rv.source) === 2 && rv.source.includes('C: @ @ @ @ 甲 乙 丙 丁'), rv.source)
 
   const shortMv = H + 'Q1: 1 2 3 4 |\nQ2: 8 8 8 8 |\nQ1: 5 6 7 1 |\nQ2: 8 8 8 8 |\n'
   const shortMvMerged = reflowJps(shortMv, { maxMeasuresPerLine: 4 })
