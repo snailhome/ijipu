@@ -22676,6 +22676,12 @@ function runAdj1324Tests() {
   check('adj1324 一曲行多词行：合并后仍是多条 C 行（缺的段补 `@`）',
     countC(rv.source) === 2 && rv.source.includes('C: @ @ @ @ 甲 乙 丙 丁'), rv.source)
 
+  const emptyC = H + 'Q: 1 2 3 4 |\nC: 歌 @ 词 @\nC: @ @ @ @\n'
+  const reC = reflowJps(emptyC, { maxMeasuresPerLine: 4 })
+  check('adj1324 空 C 行（没有歌词）重排后删除，不写空 `C:`',
+    countC(reC.source) === 1 && reC.source.includes('C: 歌 @ 词') && !/^C:\s*$/m.test(reC.source),
+    reC.source)
+
   const shortMv = H + 'Q1: 1 2 3 4 |\nQ2: 8 8 8 8 |\nQ1: 5 6 7 1 |\nQ2: 8 8 8 8 |\n'
   const shortMvMerged = reflowJps(shortMv, { maxMeasuresPerLine: 4 })
   check('adj1324 多声部短块也先整体合并（两块 → 一块两小节）',
