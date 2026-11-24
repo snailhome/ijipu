@@ -22838,6 +22838,15 @@ function runAdj1324Tests() {
     !vmSvg.includes('p:4/4') && !vmSvg.includes('&gt;p:4/4'),
     '')
 
+  const bothChange = H + 'Q: 1 2 3 4 |["1." "p:4/4" 2 2 2 2 |\n'
+  const rBoth = reflowJps(bothChange, { maxMeasuresPerLine: 4 })
+  const bothBar = parseJps(bothChange).groups[0].music.tokens.find((t) => t.kind === 'barline' && t.voltaStart !== undefined)
+  check('adj1324 拍号与跳房子同时存在时，拍号放在 `[` 前面（`|"p:4/4"["1."`）',
+    bothBar !== undefined && bothBar.kind === 'barline' && bothBar.comment === 'p:4/4' &&
+      bothBar.voltaStart?.comment === '1.' && rBoth.source.includes('|"p:4/4"["1."') &&
+      !rBoth.source.includes('|["1." "p:4/4"'),
+    rBoth.source)
+
   const keyChange = H + 'Q: 1 2 3 4 |"d:1=D" 1 2 3 4 | 1 2 3 4 |\n'
   const rk = reflowJps(keyChange, { maxMeasuresPerLine: 1 })
   const rkLead = parseJps(rk.source).groups.flatMap((g) => g.music.tokens).find((t) => t.kind === 'barline' && t.keyChange !== undefined)
