@@ -22871,6 +22871,27 @@ function runAdj1324Tests() {
     fakePage.barlines[1].x > 180 && fakePage.barlines[1].x < 220 && fakePage.barNumbers[0].x === fakePage.barlines[1].x,
     `line=${fakePage.barlines[1].x} bn=${fakePage.barNumbers[0].x}`)
 
+  const tightPage = {
+    width: 595,
+    barlines: [
+      { x: 300, width: 4, yTop: 50, yBottom: 90 },
+      { x: 150, width: 4, yTop: 100, yBottom: 160 },
+    ],
+    notes: [
+      { x: 100, width: 80, inkRightX: 160, y: 130, token: { dots: 0, augmentCount: 4 } },
+      { x: 170, width: 20, inkLeftX: 170, y: 130, token: { dots: 0, augmentCount: 0 } },
+    ],
+    barNumbers: [{ x: 150 }],
+    voiceBlocks: [
+      { x: 40, yTop: 40, yBottom: 90, voices: [{ voice: 1 }] },
+      { x: 40, yTop: 90, yBottom: 160, voices: [{ voice: 1 }] },
+    ],
+  } as unknown as Parameters<typeof keepBarlinesOutOfInk>[0][number]
+  keepBarlinesOutOfInk([tightPage], defaultPageConfig)
+  check('adj1324 前后音太挤时，小节线优先让开增时线（下一音只保证不相交）',
+    tightPage.barlines[1].x > 160 && tightPage.barlines[1].x < 170,
+    `line=${tightPage.barlines[1].x}`)
+
   // d: 显示锚点 = 后面第一个可发声元素（跳过休止）
   const keyAnchorSrc = H + 'Q: 1 2 3 4 |"d:1=D" 0 0 1 2 |\n'
   const kaLayout = layoutScore(parseJps(keyAnchorSrc), defaultPageConfig)
