@@ -22892,6 +22892,17 @@ function runAdj1324Tests() {
     tightPage.barlines[1].x > 160 && tightPage.barlines[1].x < 170,
     `line=${tightPage.barlines[1].x}`)
 
+  const alignRefSrc = H + 'Q: 1 1 7 6 | 5 6 1 - | 0 0 0 0 | 0 (4 3) - |\nQ: 6, 1 1 7, | 1 - - - ||\n'
+  const alignRefPage = layoutScore(parseJps(alignRefSrc), defaultPageConfig).pages[0]
+  const alignYs = [...new Set(alignRefPage.barlines.map((b) => b.yTop))]
+  const alignPrev = alignRefPage.barlines.filter((b) => b.yTop === alignYs[0]).map((b) => b.x)
+  const alignLast = alignRefPage.barlines.filter((b) => b.yTop === alignYs[1]).map((b) => b.x)
+  check('adj1324 最后一行的线按上一行“计入的小节”对齐（不再被行首隐藏线错位）',
+    alignPrev.length === 4 && alignLast.length === 2 &&
+      Math.abs(alignLast[0] - alignPrev[0]) < 0.2 &&
+      alignLast[1] >= alignPrev[1] - 5 && alignLast[1] <= alignPrev[1] + 0.2,
+    JSON.stringify({ prev: alignPrev, last: alignLast }))
+
   // d: 显示锚点 = 后面第一个可发声元素（跳过休止）
   const keyAnchorSrc = H + 'Q: 1 2 3 4 |"d:1=D" 0 0 1 2 |\n'
   const kaLayout = layoutScore(parseJps(keyAnchorSrc), defaultPageConfig)
