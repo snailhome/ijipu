@@ -42,6 +42,10 @@
 
 三条硬约束沿用：`draw(t)` 纯函数、所有动画由 `t` 算、`t=0` = 第 0 个采样。
 
+**生成模式（adj1324 固化）**：`LinearStripOptions.mode` 目前只有 `'play-order'`，按播放顺序展开反复/跳跃；
+`barlineAnchor` 可选 `'measure-start'`（默认）或 `'gap'`（线落在前后音墨迹中点，
+倚音/滑音/右括号都计入 `inkLeftX/inkRightX`）。CP 固定传 `mode:'play-order'` + `barlineAnchor:'gap'`。
+
 ---
 
 ## 三、单行谱怎么来（方案 A：坐标重排）
