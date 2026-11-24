@@ -97,7 +97,7 @@ import {
 // adj1162：资源安装包命名规则的唯一出处（构建/静态闸门/冒烟共用）
 import { resourceInstallerName, validateResourceDescriptor } from './asset-naming.mjs'
 import { inflateSync } from 'node:zlib'
-import { parseJps as parseJpsRaw, formatJps, formatLine, tokenizeJpsLine, tokenizeJpsMusic, interludeBeatsOf, matchInterludeHead, jpsBlockSpan, jpsBlockMarks, highlightModel, highlightLineModel, groupBlocksByLine, lineLevelOf, trackKeysOf, JPS_HIGHLIGHT_COLORS, JPS_PLAIN_COLORS, JPS_HL_CSS_VAR, createPlaybackClock, DEFAULT_NEW_JPS_TEMPLATE, configValuesEqual, isDefaultConfigValue, changedConfigKeys, instrumentColorMap, playheadBaseOf, primaryVoiceOf, playheadPosIn, tokenDuration, layoutScore, reflowJps, renderScoreToSvg, defaultPageConfig, metaAreaH, extractJpsConfig, mergeJpsConfig, writeJpsConfig, mergeConfigEdits, configCarryover, inspectJpsConfig, extractLegacyEditorPrefs, JPS_CONFIG_PREFIX, nonDefaultConfigKeys, OPTIONAL_CONFIG_FIELDS, defaultConfigForReset, SYS_FONT, SCORE_FONT_OPTIONS, EDITOR_FONT_OPTIONS, normalizeFontStack, applyFontOverride, clampEditorFontSize, splitNoteDur, digitSlotW, dotBodyW, augBodyW, slideBodyW, bracketBodyW, noteBodyW, nonDurGap, accidentalBodyW, accidentalPenDx, accidentalInkLeftDx, accidentalInkRightDx, accidentalFontSize, slideExtraW, slideGlyphInk, graceSlotLayout, graceSlideInk, mordentInkW, computeSegments, mainSpans, mainSpansInRange, beatRatio, segmentRowExtra, lyricCommentFontSize, lyricCommentWidth, LYRIC_COMMENT_GAP, segmentNoteIndexBase, decodeSegmentNoteId, buildIndexToPage, decodeTpNoteId, tpNoteIndexBase, measureBeatsOf, meterBeatsOf, inlineMeterBeats, GRACE_MARK_CODES, GRACE_MORDENT_CODES, rangeBox, applyRangeToSvg, readViewBoxOf, normalizeRangePad, minInkFor, MIN_INK_FALLBACK, NEAR_PAGE_RATIO, inkBoxOfLayout, inkBoxesOfLayout, INK_ESTIMATE_SLACK, insertPngPhys, readPngPhys, crc32, isPng, dpiForScale, pixelsPerMeterFor } from '@ijipu/engine/index.ts'
+import { parseJps as parseJpsRaw, formatJps, formatLine, tokenizeJpsLine, tokenizeJpsMusic, interludeBeatsOf, matchInterludeHead, jpsBlockSpan, jpsBlockMarks, highlightModel, highlightLineModel, groupBlocksByLine, lineLevelOf, trackKeysOf, JPS_HIGHLIGHT_COLORS, JPS_PLAIN_COLORS, JPS_HL_CSS_VAR, createPlaybackClock, DEFAULT_NEW_JPS_TEMPLATE, configValuesEqual, isDefaultConfigValue, changedConfigKeys, instrumentColorMap, playheadBaseOf, primaryVoiceOf, playheadPosIn, tokenDuration, layoutScore, reflowJps, buildLinearStrip, renderScoreToSvg, defaultPageConfig, metaAreaH, extractJpsConfig, mergeJpsConfig, writeJpsConfig, mergeConfigEdits, configCarryover, inspectJpsConfig, extractLegacyEditorPrefs, JPS_CONFIG_PREFIX, nonDefaultConfigKeys, OPTIONAL_CONFIG_FIELDS, defaultConfigForReset, SYS_FONT, SCORE_FONT_OPTIONS, EDITOR_FONT_OPTIONS, normalizeFontStack, applyFontOverride, clampEditorFontSize, splitNoteDur, digitSlotW, dotBodyW, augBodyW, slideBodyW, bracketBodyW, noteBodyW, nonDurGap, accidentalBodyW, accidentalPenDx, accidentalInkLeftDx, accidentalInkRightDx, accidentalFontSize, slideExtraW, slideGlyphInk, graceSlotLayout, graceSlideInk, mordentInkW, computeSegments, mainSpans, mainSpansInRange, beatRatio, segmentRowExtra, lyricCommentFontSize, lyricCommentWidth, LYRIC_COMMENT_GAP, segmentNoteIndexBase, decodeSegmentNoteId, buildIndexToPage, decodeTpNoteId, tpNoteIndexBase, measureBeatsOf, meterBeatsOf, inlineMeterBeats, GRACE_MARK_CODES, GRACE_MORDENT_CODES, rangeBox, applyRangeToSvg, readViewBoxOf, normalizeRangePad, minInkFor, MIN_INK_FALLBACK, NEAR_PAGE_RATIO, inkBoxOfLayout, inkBoxesOfLayout, INK_ESTIMATE_SLACK, insertPngPhys, readPngPhys, crc32, isPng, dpiForScale, pixelsPerMeterFor } from '@ijipu/engine/index.ts'
 // adj971：应用标题（`文件名.jps - 爱记谱 iJipu`）与版本串的**唯一来源** —— 冒烟直接调真函数，不抄模板
 import { appTitleOf, APP_TITLE_PREFIX, APP_VERSION, APP_VERSION_FULL } from '../src/brand/version.ts'
 /**
@@ -22824,6 +22824,26 @@ function runAdj1324Tests() {
   check('adj1324 替谱段 `{tp}` 留在歌词行、不写进 Q 行',
     rtp.source.includes('{tp') && !/^Q[^\n]*\{tp/m.test(rtp.source) && parseJps(rtp.source).errors.length === 0,
     rtp.source)
+
+  // 流线谱：小节线锚点 + 修饰符墨迹（滑音/后括号）算进音符
+  {
+    const stripSrc = H + 'Q: 1 2 3 1&hx | 5 6 7 1 |\n'
+    const sp = parseJps(stripSrc)
+    const sl = layoutScore(sp, defaultPageConfig)
+    const seq = buildPlaySequence(sp, sl, 120)
+    const gap = buildLinearStrip(sl, seq, defaultPageConfig, { barlineAnchor: 'gap' })
+    const start = buildLinearStrip(sl, seq, defaultPageConfig, { barlineAnchor: 'measure-start' })
+    const line = gap.page.barlines[0]
+    const notes = gap.page.notes.slice().sort((a, b) => a.x - b.x)
+    const prev = notes.filter((n) => n.x < line.x - 0.5).at(-1)
+    const next = notes.find((n) => n.x > line.x - 0.5)
+    check('adj1324 流线谱 `gap` 小节线落在前音右墨迹与后音左墨迹之间（滑音不被切开）',
+      line !== undefined && prev !== undefined && next !== undefined &&
+        prev.inkRightX !== undefined && prev.inkRightX > prev.x + digitSlotW(defaultPageConfig.note_size) &&
+        line.x > prev.inkRightX && line.x < (next.inkLeftX ?? next.x) &&
+        line.x !== start.page.barlines[0].x,
+      JSON.stringify({ gap: line?.x, start: start.page.barlines[0]?.x, prevRight: prev?.inkRightX, nextLeft: next?.inkLeftX }))
+  }
 
   // 接线：顶栏按钮 + 文件菜单 + 对话框挂载（源码级；真交互另在 verify:app-ui）
   const topSrc = String(readFileSync('src/ui/TopBar.tsx', 'utf8'))
