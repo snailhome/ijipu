@@ -22886,6 +22886,15 @@ function runAdj1324Tests() {
       kaBar.keyChangeAnchorY !== undefined && kaBar.keyChangeAnchorY < kaNote.y,
     JSON.stringify({ anchorX: kaBar?.keyChangeAnchorX, noteX: kaNote?.x, anchorY: kaBar?.keyChangeAnchorY, noteY: kaNote?.y }))
 
+  const dLeadSrc = H + 'Q: "d:1=D" 0 0 1 2 |\n'
+  const dLeadLayout = layoutScore(parseJps(dLeadSrc), defaultPageConfig)
+  const dLeadRest = dLeadLayout.pages[0].notes.find((n) => n.token.kind === 'rest' && n.x >= defaultPageConfig.margin_left - 0.5)
+  const dLeadBar = dLeadLayout.pages[0].barlines.find((b) => b.keyChangeLabel === '转1=D')
+  check('adj1324 行首 `d:` 不再给转调记号预留横向空位（`0` 从小节线/页左边距开始）',
+    dLeadRest !== undefined && Math.abs(dLeadRest.x - defaultPageConfig.margin_left) < 0.6 &&
+      dLeadBar?.keyChangeAnchorX !== undefined,
+    JSON.stringify({ restX: dLeadRest?.x, margin: defaultPageConfig.margin_left, anchor: dLeadBar?.keyChangeAnchorX }))
+
   const keyChange = H + 'Q: 1 2 3 4 |"d:1=D" 1 2 3 4 | 1 2 3 4 |\n'
   const rk = reflowJps(keyChange, { maxMeasuresPerLine: 1 })
   const rkLead = parseJps(rk.source).groups.flatMap((g) => g.music.tokens).find((t) => t.kind === 'barline' && t.keyChange !== undefined)
