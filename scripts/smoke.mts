@@ -22789,9 +22789,9 @@ function runAdj1324Tests() {
   const meterChange = H + 'Q: 1 2 3 4 |"p:5/4" 1 2 3 4 5 | 1 2 3 4 5 |\n'
   const rm = reflowJps(meterChange, { maxMeasuresPerLine: 1 })
   const rmLead = parseJps(rm.source).groups.flatMap((g) => g.music.tokens).find((t) => t.kind === 'barline' && t.comment === 'p:5/4')
-  check('adj1324 重排后拍号在下一行行首（`|/"p:5/4"`），不在上一行尾',
-    rm.source.split('\n').some((l) => l.startsWith('Q: |/"p:5/4"')) &&
-      rmLead !== undefined && rmLead.kind === 'barline' && rmLead.comment === 'p:5/4',
+  check('adj1324 重排后拍号在下一行行首（裸起 `"p:5/4"`，没有 `|/`）',
+    rm.source.split('\n').some((l) => l.startsWith('Q: "p:5/4"')) &&
+      rmLead !== undefined && rmLead.kind === 'barline' && rmLead.comment === 'p:5/4' && rmLead.bareAnnotation === true,
     rm.source)
 
   const keyChange = H + 'Q: 1 2 3 4 |"d:1=D" 1 2 3 4 | 1 2 3 4 |\n'
@@ -22799,9 +22799,9 @@ function runAdj1324Tests() {
   const rkLead = parseJps(rk.source).groups.flatMap((g) => g.music.tokens).find((t) => t.kind === 'barline' && t.keyChange !== undefined)
   const rkLayout = layoutScore(parseJps(rk.source), defaultPageConfig)
   const rkBar = rkLayout.pages[0].barlines.find((b) => b.keyChangeLabel === '转1=D')
-  check('adj1324 重排后转调在下一行行首（`|/"d:1=D"`），且显示在行首',
-    rk.source.split('\n').some((l) => l.startsWith('Q: |/"d:1=D"')) &&
-      rkLead !== undefined && rkBar !== undefined && rkBar.x === 50,
+  check('adj1324 重排后转调在下一行行首（裸起 `"d:1=D"`，没有 `|/`），且显示在行首',
+    rk.source.split('\n').some((l) => l.startsWith('Q: "d:1=D"')) &&
+      rkLead !== undefined && rkLead.bareAnnotation === true && rkBar !== undefined && rkBar.x === 50,
     rk.source)
 
   const lyric = H + 'Q: 1 2 3 4 | 5 6 7 1 |\nC: 一 二 三 四 五 六 七 八\nC: 甲 乙 丙 丁 戊 己 庚 辛\n'
