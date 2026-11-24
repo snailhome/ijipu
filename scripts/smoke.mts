@@ -22811,6 +22811,25 @@ function runAdj1324Tests() {
     fmBar !== undefined && fmNote !== undefined && fmNote.x - fmBar.x >= 24,
     `bar=${fmBar?.x} note=${fmNote?.x}`)
 
+  // 用户 2026-11-24：`|["p:4/4"` 的 p 不是跳房子番号，要归到小节线备注，且顺序是 `|"p:4/4"[`
+  const wrongVolta = H + 'Q: 1 2 3 4 |["p:5/4" 1 2 3 4 5 |\n'
+  const rWrong = reflowJps(wrongVolta, { maxMeasuresPerLine: 4 })
+  const wrongBar = parseJps(wrongVolta).groups[0].music.tokens.find((t) => t.kind === 'barline' && t.voltaStart !== undefined)
+  check('adj1324 `["p:4/4"` 的拍号归小节线、输出 `|"p:4/4"[`，不当跳房子番号',
+    wrongBar !== undefined && wrongBar.kind === 'barline' && wrongBar.comment === 'p:5/4' &&
+      wrongBar.voltaStart?.comment === undefined && rWrong.source.includes('|"p:5/4"[') &&
+      !rWrong.source.includes('|["p:5/4"'),
+    rWrong.source)
+
+  const wrongKey = H + 'Q: 1 2 3 4 |["d:1=D" 1 2 3 4 |\n'
+  const rWrongKey = reflowJps(wrongKey, { maxMeasuresPerLine: 4 })
+  const wrongKeyBar = parseJps(wrongKey).groups[0].music.tokens.find((t) => t.kind === 'barline' && t.voltaStart !== undefined)
+  check('adj1324 `["d:1=D"` 的转调归小节线、输出 `|"d:1=D"[`，不当跳房子番号',
+    wrongKeyBar !== undefined && wrongKeyBar.kind === 'barline' && wrongKeyBar.keyChange?.keyText === 'D' &&
+      wrongKeyBar.voltaStart?.comment === undefined && rWrongKey.source.includes('|"d:1=D"[') &&
+      !rWrongKey.source.includes('|["d:1=D"'),
+    rWrongKey.source)
+
   const keyChange = H + 'Q: 1 2 3 4 |"d:1=D" 1 2 3 4 | 1 2 3 4 |\n'
   const rk = reflowJps(keyChange, { maxMeasuresPerLine: 1 })
   const rkLead = parseJps(rk.source).groups.flatMap((g) => g.music.tokens).find((t) => t.kind === 'barline' && t.keyChange !== undefined)
