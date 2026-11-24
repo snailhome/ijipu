@@ -22788,10 +22788,17 @@ function runAdj1324Tests() {
   // 拍号/转调写在上一行末时，重排断行后应搬到下一行行首（不是上一行尾）
   const meterChange = H + 'Q: 1 2 3 4 |"p:5/4" 1 2 3 4 5 | 1 2 3 4 5 |\n'
   const rm = reflowJps(meterChange, { maxMeasuresPerLine: 1 })
-  const rmLead = parseJps(rm.source).groups.flatMap((g) => g.music.tokens).find((t) => t.kind === 'barline' && t.comment === 'p:5/4')
-  check('adj1324 重排后拍号在下一行行首（裸起 `"p:5/4"`，没有 `|/`）',
+  const rmParsed = parseJps(rm.source)
+  const rmLead = rmParsed.groups.flatMap((g) => g.music.tokens).find((t) => t.kind === 'barline' && t.comment === 'p:5/4')
+  const rmLayout = layoutScore(rmParsed, defaultPageConfig)
+  const rmBar = rmLayout.pages[0].barlines.find((b) => b.comment === 'p:5/4')
+  const rmRowNote = rmBar
+    ? rmLayout.pages[0].notes.filter((n) => n.y > rmBar.yTop && n.y < rmBar.yBottom).sort((a, b) => a.x - b.x)[0]
+    : undefined
+  check('adj1324 重排后拍号在下一行行首（裸起 `"p:5/4"`，没有 `|/`，且给拍号让位）',
     rm.source.split('\n').some((l) => l.startsWith('Q: "p:5/4"')) &&
-      rmLead !== undefined && rmLead.kind === 'barline' && rmLead.comment === 'p:5/4' && rmLead.bareAnnotation === true,
+      rmLead !== undefined && rmLead.kind === 'barline' && rmLead.comment === 'p:5/4' && rmLead.bareAnnotation === true &&
+      rmBar !== undefined && rmRowNote !== undefined && rmRowNote.x - rmBar.x >= 36,
     rm.source)
 
   const keyChange = H + 'Q: 1 2 3 4 |"d:1=D" 1 2 3 4 | 1 2 3 4 |\n'
