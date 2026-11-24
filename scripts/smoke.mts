@@ -22895,6 +22895,14 @@ function runAdj1324Tests() {
       dLeadBar?.keyChangeAnchorX !== undefined,
     JSON.stringify({ restX: dLeadRest?.x, margin: defaultPageConfig.margin_left, anchor: dLeadBar?.keyChangeAnchorX }))
 
+  const pzSrc = H + 'Q: 1 2 3 4 |"p:4/4" &zkh 1 2 3 4 &ykh |\n'
+  const pzLayout = layoutScore(parseJps(pzSrc), defaultPageConfig)
+  const pzBar = pzLayout.pages[0].barlines.find((b) => b.comment === 'p:4/4')
+  const pzZkh = pzLayout.pages[0].brackets.find((b) => b.code === 'zkh' && b.dir === 'open')
+  check('adj1324 临时拍号与 `&zkh` 不重叠（拍号右侧留 8px 安全边）',
+    pzBar !== undefined && pzZkh !== undefined && pzZkh.x - pzBar.x >= 20,
+    JSON.stringify({ bar: pzBar?.x, zkh: pzZkh?.x, gap: pzBar !== undefined && pzZkh !== undefined ? pzZkh.x - pzBar.x : null }))
+
   const keyChange = H + 'Q: 1 2 3 4 |"d:1=D" 1 2 3 4 | 1 2 3 4 |\n'
   const rk = reflowJps(keyChange, { maxMeasuresPerLine: 1 })
   const rkLead = parseJps(rk.source).groups.flatMap((g) => g.music.tokens).find((t) => t.kind === 'barline' && t.keyChange !== undefined)
