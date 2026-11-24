@@ -22773,6 +22773,18 @@ function runAdj1324Tests() {
     countQ(r80.source) > countQ(r100.source) && countQ(r100.source) === 1,
     `80%=${countQ(r80.source)} 行, 100%=${countQ(r100.source)} 行`)
 
+  // 用户实报「今生啊多相见」：空间优先谱不能用时值优先的宽去估，否则 4 小节被拆
+  const spaceQ =
+    '6 6/// 5//. (3// (2// 2)) &hx 2/ 3/ | (5/. 3//) 3/// (2// 3///) (1// (6,// 6,.)) 0/ | ' +
+    '(5// 3//) 3/ 2// 1/. (2// 5,//) 5,/ 7,// (6,/ 7,//) | 6, &zkh 7,/. 1// 6 1\' &ykh |\n'
+  const spaceOpt = { maxMeasuresPerLine: 4, pageConfig: { ...defaultPageConfig, note_size: 13, noteSpaceLayout: 'space' as const } }
+  const durOpt = { maxMeasuresPerLine: 4, pageConfig: { ...defaultPageConfig, note_size: 13, noteSpaceLayout: 'duration' as const } }
+  const rsSpace = reflowJps(H + 'Q: ' + spaceQ, spaceOpt)
+  const rsDur = reflowJps(H + 'Q: ' + spaceQ, durOpt)
+  check('adj1324 空间优先用 measureSpaceWidth 估宽（4 小节不拆；用时值宽会拆 2 行）',
+    countQ(rsSpace.source) === 1 && countQ(rsDur.source) === 2,
+    `space=${countQ(rsSpace.source)} 行, duration=${countQ(rsDur.source)} 行`)
+
   const lyric = H + 'Q: 1 2 3 4 | 5 6 7 1 |\nC: 一 二 三 四 五 六 七 八\nC: 甲 乙 丙 丁 戊 己 庚 辛\n'
   const rl = reflowJps(lyric, { maxMeasuresPerLine: 1 })
   check('adj1324 两段词拆行后每行仍两条 C 行（条数/顺序保留）',
