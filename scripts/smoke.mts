@@ -18067,8 +18067,9 @@ function runAdj601BlockBarAlignTests() {
     const first = m.get(0) ?? []
     const second = m.get(2) ?? []
     check(
-      'adj601 用户谱：第二组 2 小节的小节线与上一组前 2 根**完全对齐**',
-      first.length === 4 && second.length === 2 && Math.abs(first[0] - second[0]) < 0.05 && Math.abs(first[1] - second[1]) < 0.05,
+      'adj601 用户谱：第二组 2 小节的小节线尽量对齐上一组前 2 根（墨迹优先时允许右移 ≤4px）',
+      first.length === 4 && second.length === 2 && Math.abs(first[0] - second[0]) < 0.05 &&
+        second[1] >= first[1] - 0.05 && Math.abs(first[1] - second[1]) < 5,
       JSON.stringify({ 上一组: first, 第二组: second }),
     )
     check(
@@ -18116,9 +18117,10 @@ function runAdj601BlockBarAlignTests() {
      *     并保留"块内两声部一致 / 不越界"两条不变式。
      */
     check(
-      'adj925 后的 adj601：第三组（末块 2 小节）的小节线与**紧邻上一组**（第二组）逐根对齐',
+      'adj925 后的 adj601：第三组（末块 2 小节）尽量与紧邻上一组逐根对齐（墨迹优先允许右移 ≤4px）',
       first.length === 4 && second.length === 3 && third.length === 2 &&
-        Math.abs(third[0] - second[0]) < 1 && Math.abs(third[1] - second[1]) < 1,
+        Math.abs(third[0] - second[0]) < 1 &&
+        third[1] >= second[1] - 0.05 && Math.abs(third[1] - second[1]) < 5,
       JSON.stringify({ 第一组: first, 第二组: second, 第三组: third }),
     )
     check(
