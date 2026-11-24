@@ -22765,6 +22765,14 @@ function runAdj1324Tests() {
   const rRatio = reflowJps(src, { fixedInkRatio: 0.3, pageConfig: { ...defaultPageConfig, margin_left: 150, margin_right: 150 } })
   check('adj1324 固定占宽比例也会断行（窄页 + 30%）', countQ(rRatio.source) > 2 && seqOf(rRatio.source).totalMs === s0.totalMs, rRatio.source)
 
+  // 用户 2026-11-24 实报：比率调到 100% 仍像 80%。核查：不勾“最多小节”时两者必须不同
+  const dense8 = H + 'Q: ' + Array.from({ length: 8 }, (_, i) => `${i + 1} 2 3 4 |`).join(' ') + '\n'
+  const r80 = reflowJps(dense8, { fixedInkRatio: 0.8 })
+  const r100 = reflowJps(dense8, { fixedInkRatio: 1 })
+  check('adj1324 固定占宽 100% 不被 80% 卡住（同一段 80% 断、100% 不断）',
+    countQ(r80.source) > countQ(r100.source) && countQ(r100.source) === 1,
+    `80%=${countQ(r80.source)} 行, 100%=${countQ(r100.source)} 行`)
+
   const lyric = H + 'Q: 1 2 3 4 | 5 6 7 1 |\nC: 一 二 三 四 五 六 七 八\nC: 甲 乙 丙 丁 戊 己 庚 辛\n'
   const rl = reflowJps(lyric, { maxMeasuresPerLine: 1 })
   check('adj1324 两段词拆行后每行仍两条 C 行（条数/顺序保留）',

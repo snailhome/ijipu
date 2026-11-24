@@ -99,6 +99,10 @@ export function ReflowDialog() {
           <span>{reflowCopy.linesSuffix}</span>
         </label>
 
+        <p style={{ margin: 0, color: 'var(--jp-text-dim, #666)', fontSize: 12, lineHeight: 1.5 }}>
+          {reflowCopy.modeCombineHint}
+        </p>
+
         <div style={{ borderTop: '1px solid var(--jp-border, #ddd)', paddingTop: 10, lineHeight: 1.6 }}>
           <div>{reflowCopy.preview(lineCount, result.measures)}</div>
           {lineCount > 0 && (

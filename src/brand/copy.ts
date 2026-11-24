@@ -1815,6 +1815,7 @@ export const reflowCopy = {
   modeMax: '每行最多小节数',
   modeRatio: '固定部分占宽超过',
   modeLines: '按目标行数',
+  modeCombineHint: '三项可组合；同时勾选时取最严格的上限。只想按“固定占宽”排，请取消「每行最多小节数」。',
   apply: '应用重排',
   cancel: '取消',
   preview: (lines: number, measures: number) => `重排后约 ${lines} 行 / ${measures} 小节`,
