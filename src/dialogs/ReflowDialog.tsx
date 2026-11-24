@@ -19,6 +19,7 @@ export function ReflowDialog() {
   const parseResult = useDocStore((s) => s.parseResult)
   const pageConfig = useDocStore((s) => s.pageConfig)
   const setCode = useDocStore((s) => s.setCode)
+  const setPageConfig = useDocStore((s) => s.setPageConfig)
   const closeModal = useUiStore((s) => s.closeModal)
   const showNotice = useUiStore((s) => s.showNotice)
 
@@ -45,6 +46,14 @@ export function ReflowDialog() {
   const apply = (): void => {
     if (hasError) return
     setCode(result.source, true)
+    /**
+     * 用户 2026-11-24：重排后水印自动出现。
+     * 原因：`setCode()` 会用源码里的 `# jps-config` 重新 resolve 页面配置；
+     * 如果用户刚在「谱面设置」里把水印临时关掉但还没保存，重排会把源码里的
+     * `wmEnabled:true` 重新灌回来。重排只改 Q/C 行，不应改页面配置 ⇒ 把当前
+     * 生效配置原样恢复（不落盘，保持“未保存的临时修改”）。
+     */
+    setPageConfig(pageConfig, false)
     closeModal()
     showNotice(reflowCopy.applied(lineCount), 'ok')
   }

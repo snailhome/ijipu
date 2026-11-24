@@ -22828,6 +22828,7 @@ function runAdj1324Tests() {
   // 接线：顶栏按钮 + 文件菜单 + 对话框挂载（源码级；真交互另在 verify:app-ui）
   const topSrc = String(readFileSync('src/ui/TopBar.tsx', 'utf8'))
   const appSrc = String(readFileSync('src/App.tsx', 'utf8'))
+  const reflowDialogSrc = String(readFileSync('src/dialogs/ReflowDialog.tsx', 'utf8'))
   check('adj1324 顶栏/文件菜单都有重排入口，且 App 挂载 ReflowDialog',
     topSrc.includes("key: 'reflow'") && topSrc.includes('entryReflow') && topSrc.includes("openModal('reflow')") &&
       appSrc.includes("modal === 'reflow'") && appSrc.includes('ReflowDialog'),
@@ -22835,6 +22836,9 @@ function runAdj1324Tests() {
   check('adj1324 重排按钮用 `public/icons/重排.png` 图标',
     ICON_FILES.reflow === '重排' && topSrc.includes("case 'reflow'") && topSrc.includes('<ToolIcon name="reflow" />') &&
       existsSync('public/icons/重排.png'),
+    '')
+  check('adj1324 重排不清空/重置页面配置（水印等未保存临时设置保留）',
+    reflowDialogSrc.includes('setPageConfig(pageConfig, false)') && reflowDialogSrc.includes('setCode(result.source, true)'),
     '')
 }
 
