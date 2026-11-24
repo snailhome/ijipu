@@ -22666,15 +22666,19 @@ function runAdj1324Tests() {
 
   const mergeLyric = H + 'Q: 1 2 3 4 |\nC: 一 二 三 四\nQ: 5 6 7 1 |\nC: 五 六 七 八\n'
   const shortLyricMerged = reflowJps(mergeLyric, { maxMeasuresPerLine: 4 })
-  check('adj1324 跨 Q 行合并时歌词也接起来（两条 C 行 → 一条）',
-    countQ(shortLyricMerged.source) === 1 && countC(shortLyricMerged.source) === 1 &&
-      shortLyricMerged.source.includes('C: 一 二 三 四 五 六 七 八'),
+  check('adj1324 不同源 C 行保持不同行，不接成一句',
+    countQ(shortLyricMerged.source) === 1 && countC(shortLyricMerged.source) === 2 &&
+      shortLyricMerged.source.includes('C: 一 二 三 四') &&
+      shortLyricMerged.source.includes('C: @ @ @ @ 五 六 七 八'),
     shortLyricMerged.source)
 
   const versesMixed = H + 'Q: 1 2 3 4 |\nC: 一 二 三 四\nQ: 5 6 7 1 |\nC: 五 六 七 八\nC: 甲 乙 丙 丁\n'
   const rv = reflowJps(versesMixed, { maxMeasuresPerLine: 4 })
-  check('adj1324 C 行由 1 段变 2 段：新行补 `@` 占位，保持“第几遍”不错位',
-    countC(rv.source) === 2 && rv.source.includes('C: @ @ @ @ 甲 乙 丙 丁'), rv.source)
+  check('adj1324 不同源 C 行分行补 `@`（C 行 1→3，不串）',
+    countC(rv.source) === 3 && rv.source.includes('C: 一 二 三 四') &&
+      rv.source.includes('C: @ @ @ @ 五 六 七 八') &&
+      rv.source.includes('C: @ @ @ @ 甲 乙 丙 丁'),
+    rv.source)
 
   const shortMv = H + 'Q1: 1 2 3 4 |\nQ2: 8 8 8 8 |\nQ1: 5 6 7 1 |\nQ2: 8 8 8 8 |\n'
   const shortMvMerged = reflowJps(shortMv, { maxMeasuresPerLine: 4 })
@@ -22730,6 +22734,13 @@ function runAdj1324Tests() {
     rOneHouse.source.includes(':|]') && parseJps(rOneHouse.source).errors.length === 0,
     rOneHouse.source)
 
+  // 房子从某行最后一小节开始、真实末尾在后行 ⇒ 只画这一小节，`]/` 挂在该行末
+  const slashLast = H + 'Q: 1 2 3 4 | 5 6 7 1 | 2 3 4 5 | ["1." 6 7 1 2 |]/ 3 4 5 6 :|\n'
+  const rSlashLast = reflowJps(slashLast, { maxMeasuresPerLine: 4 })
+  check('adj1324 房子从行末最后一小节开始 ⇒ 只画一小节，`]/` 在该行末',
+    rSlashLast.source.includes('6 7 1 2 |]/') && parseJps(rSlashLast.source).errors.length === 0,
+    rSlashLast.source)
+
   // 用户 2026-11-24：跳房子范围重排后落在同一行内 ⇒ 自动闭口
   const openRow = H + 'Q: ["1." 1 2 3 4 | 5 6 7 1 :|\n'
   const rOpen = reflowJps(openRow, { maxMeasuresPerLine: 3 })
@@ -22739,8 +22750,8 @@ function runAdj1324Tests() {
 
   const voltaSrc = H + 'Q: 1 2 3 4 |\nQ: ["1." 5 6 7 1 | 2 3 4 5 |\nQ: 6 7 1 2 |\n'
   const rv2 = reflowJps(voltaSrc, { maxMeasuresPerLine: 4 })
-  check('adj1324 行首开放跳房子重排后仍留在行首（不被并到上一行）',
-    /^Q: \["1\."/m.test(rv2.source) && parseJps(rv2.source).errors.length === 0,
+  check('adj1324 跳房子可以从行中间开始（不强制新行）',
+    !/^Q: \["1\."/m.test(rv2.source) && /\["1\."/.test(rv2.source) && parseJps(rv2.source).errors.length === 0,
     rv2.source)
 
   const rRatio = reflowJps(src, { fixedInkRatio: 0.3, pageConfig: { ...defaultPageConfig, margin_left: 150, margin_right: 150 } })
