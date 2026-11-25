@@ -20,7 +20,7 @@ import { useDocStore } from '../../store/docStore'
 import { withOverlay } from '../../store/overlayAssets'
 import { useUiStore, enabledVoicesOf } from '../../store/uiStore'
 import { exportCopy, scorePackageCopy } from '../../brand/copy'
-import { layoutScore, renderScoreToSvg, buildPlaySequence, inferBpm, eventsToMidi, rangeBox, applyRangeToSvg, readViewBoxOf, resolvePracticeRange, slicePlaySequenceByRange, hasNoteId } from '@ijipu/engine'
+import { layoutScore, renderScoreToSvg, buildPlaySequence, inferBpm, eventsToMidi, rangeBox, applyRangeToSvg, readViewBoxOf, resolvePracticeRange, slicePlaySequenceByRange, hasNoteId, parseJpsToIR, irToMusicXml } from '@ijipu/engine'
 import type { ExportRange, PlaySequence, ScoreLayout } from '@ijipu/engine'
 import { renderToAudioBuffer, audioBufferToWav, audioBufferToMp3 } from '../../export/audio'
 // adj1314：导出音频可选「整曲 / 标记段」——标记段存在 L1（与试听同一份）
@@ -38,7 +38,7 @@ import { hostBankUrl } from '../../store/hostBridge'
 // adj647：宿主字体实测（导出与预览共用同一份；见 preview/fontMeta.ts）
 import { measureFontMeta } from '../../preview/fontMeta'
 
-type ExportKey = 'svg' | 'png' | 'jpg' | 'pdf' | 'pdfImg' | 'midi' | 'wav' | 'mp3' | 'jps'
+type ExportKey = 'svg' | 'png' | 'jpg' | 'pdf' | 'pdfImg' | 'midi' | 'wav' | 'mp3' | 'musicxml' | 'jps'
 
 /** 下载字节（Blob + 临时 <a>） */
 function downloadBytes(bytes: Uint8Array, name: string, type: string) {
@@ -69,6 +69,7 @@ const JOB_LABEL: Record<ExportKey, string> = {
   midi: 'MIDI 音频',
   wav: 'WAV 音频',
   mp3: 'MP3 音频',
+  musicxml: 'MusicXML 乐谱',
   jps: 'iJipu 源文件',
 }
 
@@ -89,6 +90,8 @@ export function ExportPanel() {
   // adj1065：动态谱视频入口 = 预览区相机位（不再开弹窗）；整曲入口清掉标记段范围
   const previewSoften = useUiStore((s) => s.previewSoften)
   const setExportJob = useUiStore((s) => s.setExportJob)
+  // M0：MusicXML 导出后若有"未写入"条目，用轻提示告知（不阻断）
+  const showNotice = useUiStore((s) => s.showNotice)
   // adj1195：导出乐谱包（zip）走独立对话框；三端轻功能
   const openModal = useUiStore((s) => s.openModal)  // adj626：PDF 走打印（与 Ctrl+P / 菜单「打印」同一条路：同一份页面 + 同一个默认文件名）
   const printScore = useDocStore((s) => s.printScore)
@@ -311,6 +314,26 @@ export function ExportPanel() {
         const part = markSliceOf(seq, layout)
         const buf = await renderToAudioBuffer(part.seq.events, await ensureHqBank(), { bpm, title: parseResult.header.titles[0] ?? baseName })
         downloadBytes(audioBufferToMp3(buf), `${baseName}${part.suffix}.mp3`, 'audio/mpeg')
+      }),
+    },
+    {
+      // M0（用户 2026-11-25 需求）：导出 MusicXML —— 给 MuseScore / Finale 等五线谱软件。
+      // 走引擎 `parseJpsToIR` + `irToMusicXml`（与「爱识谱」互转同一份口径），
+      // 整曲导出、不含清晰度/底色/背景图/标记段（那些是图片/音频口径）。
+      key: 'musicxml',
+      label: exportCopy.musicxmlLabel,
+      ext: '.musicxml',
+      run: () => run('musicxml', () => {
+        const ir = parseJpsToIR(code)
+        const out = irToMusicXml(ir.ir)
+        downloadBytes(
+          new TextEncoder().encode(out.xml),
+          `${baseName}.musicxml`,
+          'application/vnd.recordare.musicxml+xml',
+        )
+        if (out.issues.length > 0) {
+          showNotice(`MusicXML 已导出；有 ${out.issues.length} 处未写入（详见导出说明）`, 'warn')
+        }
       }),
     },
     { key: 'jps', label: exportCopy.jpsLabel, ext: '.jps', run: downloadJps },

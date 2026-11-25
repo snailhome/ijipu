@@ -122,7 +122,7 @@ iJipu CLI 注册状态：已注册 ✓（终端里可以直接敲 ijipu）
 | `format` | 按应用规范规范化源码（与应用编辑器的格式化结果一致） | `-i` `-o` `--check` `--in-place` `--diff` |
 | `lint` | 语法检查（有错 ⇒ 退出码 3）；输入可以是目录 | `-i` `-r` `--filter` `--format text\|json\|gh` `--watch` |
 | `info` | 谱面概况（调号 / 行数 / 分组 / 问题数） | `-i` `-t text\|json` `--json` |
-| `render` | 渲染导出：`-t svg` ｜ `-t midi` ｜ `-t png` `-t jpg` `-t pdf` ｜ `-t mp4` | `-i` `-t` `-o` `--crop` `--pad` `--ink` `--mark` `--sound` |
+| `render` | 渲染导出：`-t svg` ｜ `-t midi` ｜ `-t musicxml` ｜ `-t png` `-t jpg` `-t pdf` ｜ `-t mp4` | `-i` `-t` `-o` `--crop` `--pad` `--ink` `--mark` `--sound` |
 | `play` | 导出音频文件：`-t midi` ｜ `-t wav` | `-i` `-t` `-o` |
 | `batch` | 目录批量操作，任务可用逗号组合 | `--in` `-o` `-t lint,svg,midi,fmt` `-r` `--filter` |
 | `settings` | 查看某一个设置项的值与来源（只读） | `-i <谱>` `<键名>` `-s k=v` |
@@ -340,7 +340,7 @@ Q: 1 2 3 4 |
 
 ### 2.6 `render`：渲染导出
 
-输出类型：`-t svg|midi|png|jpg|pdf|mp4`。
+输出类型：`-t svg|midi|musicxml|png|jpg|pdf|mp4`。
 
 **① 矢量图**（多页谱会自动加 `-1` `-2`…）：
 
@@ -360,6 +360,17 @@ Q: 1 2 3 4 |
 > ijipu cli render -i samples\ershenbu.jps -t midi
 MIDI 是二进制，必须用 -o 指定文件（不能用 stdout）
 ```
+
+**②b MusicXML**（给 MuseScore / Finale 等五线谱软件；纯文本、任意环境可用）：
+
+```text
+> ijipu cli render -i samples\ershenbu.jps -t musicxml -o 我的谱.musicxml
+已写入 我的谱.musicxml（MusicXML，4998 字节）
+```
+
+- 省 `-o` 会打到 stdout（方便管道）；`-o` 给了文件就写文件。
+- 调号 / 拍号 / 速度 / 歌词 / 连音线 / 反复 / 跳房子都会写进去；**装不下的记号不静默丢**，
+  汇总里会写「N 处未写入」，导出仍会完成（与界面「导出 MusicXML」同一口径）。
 
 **③ 裁到谱面**（缺省是整页；`--pad` 是每边留白像素，钳制 0–64）：
 
@@ -795,6 +806,7 @@ iJipu CLI 注册状态：未注册 ✗（终端里还敲不了 ijipu）
 | `format` / `lint` / `info` / `batch` / `settings` / `config` / `doctor` | ✓ | 纯计算，任意环境 |
 | `render -t svg` | ✓ | 矢量图，任意环境 |
 | `render -t midi` / `play -t midi` | ✓ | 二进制 MIDI，**必须 `-o` 指定文件** |
+| `render -t musicxml` | ✓ | 乐谱交换格式，纯文本；省 `-o` 打到 stdout |
 | `render -t png` `-t jpg` `-t pdf` | ✗ 退出码 4 | 需要隐藏窗口渲染通道 ⇒ 请用应用里的「导出」 |
 | `play -t wav` | ✗ 退出码 4 | 需要音色库采样合成 ⇒ 请用应用里的试听 / 导出 |
 | `lint --watch` | ✗ 退出码 1 | **内嵌版没有**该能力；**独立 Node 包**（`@ijipu/cli`）可用 ✓ |

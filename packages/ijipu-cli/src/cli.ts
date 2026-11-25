@@ -12,6 +12,8 @@
  * `render` / `play` / `batch` / `settings` / `config` / `doctor` 属 P2–P4，**未实现时明确报错**（不假装成功 ✗）。
  */
 import { formatJps, parseJps, splitParseIssues, layoutScore, renderScoreToSvg, buildPlaySequence, inferBpm, resolvePracticeRange, resolveBarBeatRange, eventsToMidi, defaultPageConfig, mergeJpsConfig, extractJpsConfig, OPTIONAL_CONFIG_FIELDS, rangeBox, applyRangeToSvg, readViewBoxOf, normalizeRangePad, inkBoxesOfLayout, type PageConfig, type ScoreLayout, type RangeBox, type ExportRange, type ProblemRow,
+  // M0：MusicXML 导出（`.jps` → ScoreIR → MusicXML；纯文本、任意环境可用）
+  parseJpsToIR, irToMusicXml,
   // adj962：把设置**写进谱面**（`set` 命令）——与应用的「保存设置」**同一份引擎实现**
   writeJpsConfig, mergeConfigEdits } from '@ijipu/engine'
 // adj944：注册/解除 PATH 的**纯逻辑与编排**（与全局设置里那个按钮**共用同一份** ✓）
@@ -201,7 +203,7 @@ const HELP = `iJipu 命令行（爱记谱）
   lint          -i <文件|目录|-> [--format text|json|gh] [--watch]          语法检查（有错 ⇒ 退出码 3）
                 [-r] [--filter <通配>]                                    输入为目录时批量检查
   info          -i <文件|-> [-t text|json]                                  谱面概况（行数 / 分组 / 问题数）
-  render        -i <文件|-> -t svg|midi|png|jpg|pdf|mp4 -o <输出>           渲染导出
+  render        -i <文件|-> -t svg|midi|musicxml|png|jpg|pdf|mp4 -o <输出>   渲染导出
                 [--crop page|score] [--pad N] [--ink x,y,w,h]              画布范围（缺省 page = 整页）
                 [--from 27:3 --to 50:1 [--pass 2]]                        只导这一段（mp4）
                 [--mark 段1]                                              按 sidecar 里的标记段名导出（与 from/to 互斥）
@@ -936,6 +938,8 @@ export async function runCli(argv: string[], io: CliIo, meta?: { version?: strin
     const caps = {
       svg: true,
       midi: true,
+      // M0：MusicXML 是纯文本（ScoreIR → 文本），任意环境都有，不依赖桌面渲染
+      musicxml: true,
       raster: io.rasterize !== undefined,
       audio: io.synthesize !== undefined,
       // adj1084：动态谱视频（WebCodecs）——同样只有桌面宿主能给
@@ -953,8 +957,8 @@ export async function runCli(argv: string[], io: CliIo, meta?: { version?: strin
     else {
       line(io, `iJipu CLI doctor`)
       line(io, `  可设置项：${report.configKeys} 个（含可选字段 ${OPTIONAL_CONFIG_FIELDS.length} 个）`)
-      line(io, `  能力：svg ✓｜midi ✓｜位图(png/jpg/pdf) ${caps.raster ? '✓（桌面端通道已就绪）' : '✗（需桌面端隐藏窗口渲染）'}｜音频(wav) ${caps.audio ? '✓' : '✗（需音色库合成）'}｜视频(mp4) ${caps.video ? '✓（桌面端隐藏窗口）' : '✗（需桌面端隐藏窗口）'}`)
-      line(io, `  提示：位图/音频在桌面端 exe 内可用；独立 Node 环境只能用 svg/midi ✓`)
+      line(io, `  能力：svg ✓｜midi ✓｜musicxml ✓｜位图(png/jpg/pdf) ${caps.raster ? '✓（桌面端通道已就绪）' : '✗（需桌面端隐藏窗口渲染）'}｜音频(wav) ${caps.audio ? '✓' : '✗（需音色库合成）'}｜视频(mp4) ${caps.video ? '✓（桌面端隐藏窗口）' : '✗（需桌面端隐藏窗口）'}`)
+      line(io, `  提示：位图/音频在桌面端 exe 内可用；独立 Node 环境可用 svg/midi/musicxml ✓`)
     }
     return { code: EXIT.ok, json: report }
   }
@@ -1748,8 +1752,35 @@ export async function runCli(argv: string[], io: CliIo, meta?: { version?: strin
       if (!p.quiet) line(io, `已写入 ${target}（MIDI，${bytes.length} 字节）`)
       return { code: EXIT.ok, json: { schema: 1, type: 'midi', output: target, bytes: bytes.length } }
     }
+    if (type === 'musicxml') {
+      /**
+       * M0（用户 2026-11-25 需求）：`.jps` → MusicXML。
+       *
+       * 与主应用导出面板、爱识谱互转**同一份引擎实现**（`parseJpsToIR` + `irToMusicXml`）；
+       * 纯文本、不需要桌面渲染能力，所以独立 Node 环境也能用。
+       * 有"未写入"条目时**不阻断**导出（与 GUI 同一口径），在汇总里如实报数。
+       */
+      const out = irToMusicXml(parseJpsToIR(src).ir)
+      const target = p.output
+      if (target === null || target === '-') {
+        line(io, out.xml)
+        return {
+          code: EXIT.ok,
+          json: { schema: 1, type: 'musicxml', output: null, bytes: out.xml.length, issues: out.issues.length },
+        }
+      }
+      await io.writeFile(target, out.xml)
+      if (!p.quiet) {
+        const tail = out.issues.length > 0 ? `，${out.issues.length} 处未写入` : ''
+        line(io, `已写入 ${target}（MusicXML，${out.xml.length} 字节${tail}）`)
+      }
+      return {
+        code: EXIT.ok,
+        json: { schema: 1, type: 'musicxml', output: target, bytes: out.xml.length, issues: out.issues.length },
+      }
+    }
     if (type !== 'svg' && type !== 'text' && type !== 'png' && type !== 'jpg' && type !== 'pdf' && type !== 'mp4') {
-      io.err(`render 的 -t 支持 svg | midi | png | jpg | pdf | mp4（收到 “${type}”；wav 请用 play -t wav）`)
+      io.err(`render 的 -t 支持 svg | midi | musicxml | png | jpg | pdf | mp4（收到 “${type}”；wav 请用 play -t wav）`)
       return { code: EXIT.usage }
     }
     if (type === 'png' || type === 'jpg' || type === 'pdf') {
@@ -1761,7 +1792,7 @@ export async function runCli(argv: string[], io: CliIo, meta?: { version?: strin
       if (io.rasterize === undefined) {
         io.err(
           `-t ${type} 需要"隐藏窗口渲染"通道（桌面端 exe 内置）；当前环境没有该能力。\n` +
-            `  可用：-t svg（矢量，任意环境）｜或改用桌面端：ijipu cli render -i <谱> -t ${type} -o <输出>`,
+            `  可用：-t svg（矢量，任意环境）｜-t musicxml（乐谱交换，任意环境）｜或改用桌面端：ijipu cli render -i <谱> -t ${type} -o <输出>`,
         )
         return { code: EXIT.render }
       }
@@ -1839,6 +1870,7 @@ export async function runCli(argv: string[], io: CliIo, meta?: { version?: strin
       if (t === 'lint') return 'lint'
       if (t === 'svg') return 'svg'
       if (t === 'midi') return 'midi'
+      if (t === 'musicxml') return 'musicxml'
       if (t === 'fmt' || t === 'format' || t === 'jps') return 'fmt'
       return null
     }
@@ -1851,7 +1883,7 @@ export async function runCli(argv: string[], io: CliIo, meta?: { version?: strin
     const badTasks = tasks.filter((t) => normTask(t) === null)
     if (tasks.length === 0 || badTasks.length > 0) {
       io.err(
-        `batch 的 -t 支持 lint | svg | midi | fmt（可逗号组合，如 -t lint,fmt,svg）；收到 “${badTasks.join(' ') || String(p.type ?? '')}”`,
+        `batch 的 -t 支持 lint | svg | midi | musicxml | fmt（可逗号组合，如 -t lint,fmt,svg）；收到 “${badTasks.join(' ') || String(p.type ?? '')}”`,
       )
       return { code: EXIT.usage }
     }
@@ -1942,6 +1974,10 @@ export async function runCli(argv: string[], io: CliIo, meta?: { version?: strin
           const layout = layoutScore(parsed, cfg)
           const bytes = eventsToMidi(buildPlaySequence(parsed, layout, 60).events, { bpm: 60, title: stem })
           await io.writeFile(joinPath(outBase, `${stem}.mid`), bytes)
+        }
+        if (kinds.includes('musicxml')) {
+          const xml = irToMusicXml(parseJpsToIR(src).ir).xml
+          await io.writeFile(joinPath(outBase, `${stem}.musicxml`), xml)
         }
         if (kinds.includes('fmt')) {
           // adj961：`--in-place` ⇒ 覆盖源文件本身；否则写进 outBase（给了 -o 就是它，没给就是源目录）

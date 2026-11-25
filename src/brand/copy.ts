@@ -741,6 +741,10 @@ export const exportCopy = {
   midiLabel: 'MIDI 音频（分轨）',
   wavLabel: 'WAV 音频（高保真）',
   mp3Label: 'MP3 音频（体积小）',
+  // M0（用户 2026-11-25 需求）：MusicXML —— 五线谱软件（MuseScore / Finale）能直接打开；
+  // 走引擎 ScoreIR 互转，与「爱识谱」共用同一份口径。整曲、不含排版/底色/背景图。
+  musicxmlLabel: 'MusicXML 乐谱',
+  musicxmlHint: '给 MuseScore / Finale 等五线谱软件用；整曲导出，不含排版、底色与背景图。',
   jpsLabel: 'iJipu 源文件',
   scaleLabel: '图片清晰度',
   scaleHint: '适用于 PNG / JPG / PDF 图片',

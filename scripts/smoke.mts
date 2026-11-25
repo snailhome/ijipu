@@ -98,6 +98,16 @@ import {
 import { resourceInstallerName, validateResourceDescriptor } from './asset-naming.mjs'
 import { inflateSync } from 'node:zlib'
 import { parseJps as parseJpsRaw, formatJps, formatLine, tokenizeJpsLine, tokenizeJpsMusic, interludeBeatsOf, matchInterludeHead, jpsBlockSpan, jpsBlockMarks, highlightModel, highlightLineModel, groupBlocksByLine, lineLevelOf, trackKeysOf, JPS_HIGHLIGHT_COLORS, JPS_PLAIN_COLORS, JPS_HL_CSS_VAR, createPlaybackClock, DEFAULT_NEW_JPS_TEMPLATE, configValuesEqual, isDefaultConfigValue, changedConfigKeys, instrumentColorMap, playheadBaseOf, primaryVoiceOf, playheadPosIn, tokenDuration, layoutScore, reflowJps, buildLinearStrip, keepBarlinesOutOfInk, renderScoreToSvg, defaultPageConfig, metaAreaH, extractJpsConfig, mergeJpsConfig, writeJpsConfig, mergeConfigEdits, configCarryover, inspectJpsConfig, extractLegacyEditorPrefs, JPS_CONFIG_PREFIX, nonDefaultConfigKeys, OPTIONAL_CONFIG_FIELDS, defaultConfigForReset, SYS_FONT, SCORE_FONT_OPTIONS, EDITOR_FONT_OPTIONS, normalizeFontStack, applyFontOverride, clampEditorFontSize, splitNoteDur, digitSlotW, dotBodyW, augBodyW, slideBodyW, bracketBodyW, noteBodyW, nonDurGap, accidentalBodyW, accidentalPenDx, accidentalInkLeftDx, accidentalInkRightDx, accidentalFontSize, slideExtraW, slideGlyphInk, graceSlotLayout, graceSlideInk, mordentInkW, computeSegments, mainSpans, mainSpansInRange, beatRatio, segmentRowExtra, lyricCommentFontSize, lyricCommentWidth, LYRIC_COMMENT_GAP, segmentNoteIndexBase, decodeSegmentNoteId, buildIndexToPage, decodeTpNoteId, tpNoteIndexBase, measureBeatsOf, meterBeatsOf, inlineMeterBeats, GRACE_MARK_CODES, GRACE_MORDENT_CODES, rangeBox, applyRangeToSvg, readViewBoxOf, normalizeRangePad, minInkFor, MIN_INK_FALLBACK, NEAR_PAGE_RATIO, inkBoxOfLayout, inkBoxesOfLayout, INK_ESTIMATE_SLACK, insertPngPhys, readPngPhys, crc32, isPng, dpiForScale, pixelsPerMeterFor } from '@ijipu/engine/index.ts'
+// 乐谱中间表示（M0）：`.jps` ↔ ScoreIR ↔ MusicXML 的唯一口径；断言见 runScoreIrTests
+import {
+  parseJpsToIR,
+  irToJps,
+  irToMusicXml,
+  parseMusicXmlToIR,
+  jpsPitchToMidi,
+  midiToJpsPitch,
+  spellMidiForStaff,
+} from '@ijipu/engine/index.ts'
 // adj971：应用标题（`文件名.jps - 爱记谱 iJipu`）与版本串的**唯一来源** —— 冒烟直接调真函数，不抄模板
 import { appTitleOf, APP_TITLE_PREFIX, APP_VERSION, APP_VERSION_FULL } from '../src/brand/version.ts'
 /**
@@ -21271,6 +21281,8 @@ runAdj927ExternalChangeTests()
       .then(() => runAdj947CliPrefixTests())
       .then(() => runAdj948SiteCopyTests())
       .then(() => runAdj949ManualScopeTests())
+      // 乐谱中间表示（M0）：jps ↔ IR ↔ MusicXML 往返 + 负向（坏 XML / 不支持结构）
+      .then(() => runScoreIrTests())
       // 视频/对拍/卡片/连续谱已迁到爱出片；本仓库不再跑相关冒烟
       .then(() => {
         console.log(failed === 0 ? '\nALL SMOKE TESTS PASSED ✅' : `\n${failed} CHECKS FAILED ❌`)
@@ -33505,13 +33517,14 @@ function runAdj945CliManualTests() {
       Array.from(knownSet(fakeSource)).some((c) => !manual.includes('`' + c + '`')),
   )
 
-  // ---- ② 输出类型必须写全（用户点名：`render` 含 `-t svg|midi|png|jpg|pdf`）----
-  const RENDER_TYPES = '-t svg|midi|png|jpg|pdf'
+  // ---- ② 输出类型必须写全（用户点名：`render` 含 svg/midi/musicxml/png/jpg/pdf；
+  //      M0 起支持 MusicXML，所以这条名单同步加 musicxml——**支持面变了，判据跟着变**）----
+  const RENDER_TYPES = '-t svg|midi|musicxml|png|jpg|pdf'
   const PLAY_TYPES = '-t midi|wav'
   const typesOk = (t: string): boolean => t.includes(RENDER_TYPES) && t.includes(PLAY_TYPES)
-  check('adj945 手册写全 render 的输出类型（含 `-t svg|midi|png|jpg|pdf`）与 play 的（`-t midi|wav`）', typesOk(manual))
+  check('adj945 手册写全 render 的输出类型（含 `-t svg|midi|musicxml|png|jpg|pdf`）与 play 的（`-t midi|wav`）', typesOk(manual))
   check(
-    'adj945 负对照③：把手册里的 `-t svg|midi|png|jpg|pdf` **全部**抹成 `-t svg` ⇒ 判据判红',
+    'adj945 负对照③：把手册里的 `-t svg|midi|musicxml|png|jpg|pdf` **全部**抹成 `-t svg` ⇒ 判据判红',
     (() => {
       const cut = manual.split(RENDER_TYPES).join('-t svg')
       return cut !== manual && !typesOk(cut) && typesOk(manual)
@@ -35131,3 +35144,118 @@ console.log('[adj1013] toast / update-prompt pinned below the topbar at top-righ
  *
  * 视频这条路最怕"这一帧和下一帧算得不一样"，所以 ③ 不是锦上添花，是硬门槛。
  */
+
+/**
+ * M0：ScoreIR 往返测试（`.jps` ↔ MusicXML）
+ *
+ * 判据不是"能生成文件"，而是**语义往返一致**：
+ *  - 音符（音级/八度/变音/时值）逐个相同；
+ *  - 小节线数量相同；
+ *  - 歌词非跳过字数相同；
+ *  - 两次 `parseJps` 都 0 错误（不是"能渲染就行"）。
+ *
+ * 另外守三条负向：坏 XML 必须进 issues（不抛异常）、和弦必须降级并留 issue、
+ * 临时段必须标"暂不支持"而不是静默丢。
+ */
+function runScoreIrTests(): void {
+  interface ScoreStat {
+    errors: number
+    bars: number
+    notes: string[]
+    lyrics: number
+  }
+
+  const statOf = (code: string): ScoreStat => {
+    const r = parseJpsRaw(code)
+    const notes: string[] = []
+    let bars = 0
+    let lyrics = 0
+    for (const g of r.groups) {
+      for (const t of g.music.tokens) {
+        if (t.kind === 'note') {
+          notes.push(`${t.pitch}/${t.octaveShift}/${t.accidental ?? ''}/${tokenDuration(t)}`)
+        }
+        if (t.kind === 'barline' && t.type !== '|/') bars++
+      }
+      lyrics += g.lyrics.reduce((n, l) => n + l.chars.filter((c) => !c.skip).length, 0)
+    }
+    return { errors: r.errors.length, bars, notes, lyrics }
+  }
+
+  const roundtrip = (label: string, src: string): void => {
+    const a = statOf(src)
+    const parsed = parseJpsToIR(src)
+    check(`[scoreIR] ${label}：parseJpsToIR 带回的解析错误为 0`, parsed.errors.length === 0, String(parsed.errors.length))
+
+    const toJps = irToJps(parsed.ir)
+    const b = statOf(toJps.code)
+    check(`[scoreIR] ${label}：IR → .jps 再解析 0 错误`, b.errors === 0, String(b.errors))
+    check(`[scoreIR] ${label}：音符（音级/八度/变音/时值）逐音相同`, a.notes.join('|') === b.notes.join('|'),
+      `${a.notes.length} vs ${b.notes.length}`)
+    check(`[scoreIR] ${label}：小节线数量相同`, a.bars === b.bars, `${a.bars} vs ${b.bars}`)
+    check(`[scoreIR] ${label}：歌词非跳过字数相同`, a.lyrics === b.lyrics, `${a.lyrics} vs ${b.lyrics}`)
+
+    const xml = irToMusicXml(parsed.ir)
+    check(`[scoreIR] ${label}：MusicXML 是 score-partwise`, xml.xml.includes('<score-partwise version="4.0"'), '')
+    const back = parseMusicXmlToIR(xml.xml)
+    const c = statOf(irToJps(back.ir).code)
+    check(`[scoreIR] ${label}：MusicXML → IR → .jps 再解析 0 错误`, c.errors === 0, String(c.errors))
+    check(`[scoreIR] ${label}：绕 MusicXML 一圈音符仍逐音相同`, a.notes.join('|') === c.notes.join('|'))
+    check(`[scoreIR] ${label}：绕 MusicXML 一圈小节线数量相同`, a.bars === c.bars, `${a.bars} vs ${c.bars}`)
+    check(`[scoreIR] ${label}：绕 MusicXML 一圈歌词字数相同`, a.lyrics === c.lyrics, `${a.lyrics} vs ${c.lyrics}`)
+  }
+
+  for (const name of ['送别', '茉莉花']) {
+    roundtrip(name, String(readFileSync(join('public/samples', `${name}.jps`), 'utf8')))
+  }
+
+  // —— 音高口径：C 大调 1 = C4 = MIDI 60；5 = G4（不是 G5） ——
+  check('[scoreIR] C 大调 1 = MIDI 60', jpsPitchToMidi(1, 0, null, 0) === 60)
+  check('[scoreIR] C 大调 5 = MIDI 67', jpsPitchToMidi(5, 0, null, 0) === 67)
+  check('[scoreIR] C 大调 1, = MIDI 48', jpsPitchToMidi(1, -1, null, 0) === 48)
+  const g4 = spellMidiForStaff(67, 0)
+  check('[scoreIR] spellMidiForStaff(67) = G4（不是 G5：八度按字母自然音高反推）',
+    g4.step === 'G' && g4.alter === 0 && g4.octave === 4, JSON.stringify(g4))
+  const backPitch = midiToJpsPitch(48, 0)
+  check('[scoreIR] MIDI 48 在 C 调 = 1,', backPitch.degree === 1 && backPitch.octaveShift === -1 && backPitch.accidental === null,
+    JSON.stringify(backPitch))
+
+  // —— 6/8：必须给「按四分音符导出」的 review 提示，不能装作没差别 ——
+  const sixEight = parseJpsToIR('V: 1.0\nB: 6/8\nD: C\nP: 6/8\nQ: 1 2 3 4 5 6 |\n')
+  const sixXml = irToMusicXml(sixEight.ir)
+  check('[scoreIR] 非 /4 拍号导出带 meterDenominator 提示（不静默）',
+    sixXml.issues.some((i) => i.kind === 'meterDenominator'), sixXml.issues.map((i) => i.kind).join(','))
+
+  // —— 和弦：默认取最高音，其余标待确认 ——
+  const chordXml = '<score-partwise version="4.0"><part-list><score-part id="P1"><part-name>P1</part-name></score-part></part-list>' +
+    '<part id="P1"><measure number="1"><attributes><divisions>480</divisions></attributes>' +
+    '<note><pitch><step>C</step><octave>4</octave></pitch><duration>480</duration><type>quarter</type></note>' +
+    '<note><chord/><pitch><step>E</step><octave>4</octave></pitch><duration>480</duration><type>quarter</type></note>' +
+    '<note><pitch><step>G</step><octave>4</octave></pitch><duration>1920</duration><type>whole</type></note>' +
+    '</measure></part></score-partwise>'
+  const chordIr = parseMusicXmlToIR(chordXml)
+  const chordNotes = chordIr.ir.parts[0]?.measures[0]?.events.filter((e) => e.kind === 'note') ?? []
+  check('[scoreIR] 和弦按「最高音为主旋律」保留（C4+E4 → E4）',
+    chordNotes.length === 2 && chordNotes[0].kind === 'note' && chordNotes[0].midi === 64,
+    chordNotes.map((e) => (e.kind === 'note' ? e.midi : -1)).join(','))
+  check('[scoreIR] 和弦有 chord issue（不静默丢音）', chordIr.issues.some((i) => i.kind === 'chord'))
+
+  // —— 负向：坏 XML 不抛异常、必须给 must ——
+  const bad = parseMusicXmlToIR('<foo/>')
+  check('[scoreIR] 坏 XML 不抛异常且给 must issue',
+    bad.issues.some((i) => i.severity === 'must'), bad.issues.map((i) => i.kind).join(','))
+
+  // —— 负向：临时段暂不支持，必须标出来 ——
+  const seg = parseJpsToIR('V: 1.0\nB: 段\nD: C\nP: 4/4\nQ: 3 4 | {bz 1 2 3 4 | 5 6 7 1\'} 5 6 7 1\' |\n')
+  check('[scoreIR] 临时段（{bz}）标「暂未支持」且是 must',
+    seg.ir.issues.some((i) => i.kind === 'unsupported' && i.severity === 'must'),
+    seg.ir.issues.map((i) => `${i.kind}:${i.severity}`).join(','))
+
+  // —— 多声部：Q1/Q2 同时演奏要落成两个 part，写回仍在一起 ——
+  const multi = 'V: 1.0\nB: 多声部\nD: C\nP: 4/4\nQ1: 1 2 3 4 |\nQ2: 5, 6, 7, 1 |\n'
+  const multiIr = parseJpsToIR(multi)
+  check('[scoreIR] 多声部落成两个 part', multiIr.ir.parts.length === 2, String(multiIr.ir.parts.length))
+  const multiBack = irToJps(multiIr.ir).code
+  check('[scoreIR] 多声部写回同一块（Q1/Q2 都在）', multiBack.includes('Q1:') && multiBack.includes('Q2:'), multiBack)
+  check('[scoreIR] 多声部写回再解析 0 错误', statOf(multiBack).errors === 0, String(statOf(multiBack).errors))
+}

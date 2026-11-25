@@ -38,6 +38,7 @@ ijipu cli --help                                     # 完整的命令/选项清
 ijipu cli lint -i 我的谱.jps                         # 有错 ⇒ 退出码 3
 ijipu cli render -i 我的谱.jps -t svg -o 我的谱.svg
 ijipu cli render -i 我的谱.jps -t midi -o 我的谱.mid
+ijipu cli render -i 我的谱.jps -t musicxml -o 我的谱.musicxml
 ```
 
 > **没注册 PATH 时**用垫片的完整路径，效果一样：
@@ -197,7 +198,7 @@ ijipu cli lint -i 我的谱.jps > out.txt # cmd 与 PowerShell 的 > 都写出�
 | `format` | 按应用规范**规范化源码**（与应用编辑器/插件格式化同一实现） | `-i` `-o` `--check` `--in-place` `--diff` |
 | `lint` | 语法检查（错误/告警）；输入可以是**目录**（`-r` 递归、`--filter` 按名筛）；`--watch` 监视文件变化后**即时重检** | `-i` `-r` `--filter` `--format text\|json\|gh` `--watch` |
 | `info` | 谱面概况（标题/调号/行数/分组/问题数） | `-i` `-t text\|json` |
-| `render` | 源码 → **SVG**（每页一段）／**MIDI**／**PNG·JPG·PDF**（需桌面端通道）／**MP4 动态谱视频**（桌面端，另起隐藏窗口） | `-i` `-t svg\|midi\|png\|jpg\|pdf\|mp4` `-o` `--from` `--to` `--pass` `--aspect` `--card` `--nosound` |
+| `render` | 源码 → **SVG**（每页一段）／**MIDI**／**MusicXML**（纯文本，任意环境）／**PNG·JPG·PDF**（需桌面端通道）／**MP4 动态谱视频**（桌面端，另起隐藏窗口） | `-i` `-t svg\|midi\|musicxml\|png\|jpg\|pdf\|mp4` `-o` `--from` `--to` `--pass` `--aspect` `--card` `--nosound` |
 | `play` | 导出音频：**MIDI**（任意环境）／**WAV**（需桌面端通道） | `-i` `-t midi\|wav` `-o` |
 | `batch` | **目录批量操作**（任务**可逗号组合**：`lint` / `svg` / `midi` / `fmt`）；输出目录会自动创建 | `--in <目录>` `-o <目录>`（**纯 `-t lint` 可省**）`-t lint,svg,midi,fmt` `-r` `--filter` |
 | `settings` | 看**某一个设置项**的值与**来源**（位置参数 = 键名） | `-i <谱>` `<键名>` `-s k=v`（临时覆盖） |
@@ -605,7 +606,7 @@ CLI 侧**已就绪** ✓：`render -t png|jpg|pdf`、`play -t wav` 需要宿主�
 ```
 ijipu.exe cli render -i 谱.jps -t png -o out.png
   └─ src-tauri 入口解析到「子命令 `cli`」⇒ 不进 GUI（`adj942` 起已落 ✓）
-      ├─ 纯文本类（format/lint/info/render -t svg|midi/batch/settings/config/doctor）：**无需窗口** ✓
+      ├─ 纯文本类（format/lint/info/render -t svg|midi|musicxml/batch/settings/config/doctor）：**无需窗口** ✓
       │    （内嵌 QuickJS 直接跑，宿主只提供文件/stdout —— 见 §一）
       └─ 位图/音频类（png/jpg/pdf/wav）：
           ① 建一个**不可见窗口**（或复用主窗口但先隐藏 / offscreen ✓），加载应用页面（同一套前端 ✓）

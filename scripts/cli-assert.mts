@@ -166,6 +166,29 @@ console.log('\n— 命令行（A·P1–P4）—')
   const magic = bytes ? String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3]) : ''
   check('adj806 render -t midi ⇒ 0 且文件头是 MThd', m.code === EXIT.ok && magic === 'MThd', `magic=${magic}`)
   check('adj806 MIDI 不能用 stdout（二进制）', (await runCli(['render', '-i', '-', '-t', 'midi'], makeIo({ '(stdin)': GOOD }).io)).code === EXIT.usage)
+  /**
+   * M0（用户 2026-11-25 需求）：`render -t musicxml` —— 纯文本、任意环境可用。
+   * 守三件：① 能写出完整 score-partwise；② 省 `-o` 时打到 stdout（不是二进制）；
+   * ③ 没实现的类型（`.mxl`）仍然报用法错误，不假装支持。
+   */
+  const mxIo = makeIo({ '(stdin)': GOOD })
+  const mx = await runCli(['render', '-i', '-', '-t', 'musicxml', '-o', 'out.musicxml'], mxIo.io)
+  const mxText = String(mxIo.files['out.musicxml'] ?? '')
+  check(
+    'M0 render -t musicxml ⇒ 0 且写出完整 score-partwise',
+    mx.code === EXIT.ok && mxText.includes('<score-partwise') && mxText.includes('</score-partwise>'),
+    `${mx.code} ${mxText.length}`,
+  )
+  const mxStdout = makeIo({ '(stdin)': GOOD })
+  const mxStdoutRun = await runCli(['render', '-i', '-', '-t', 'musicxml'], mxStdout.io)
+  check(
+    'M0 musicxml 可打 stdout（纯文本，不是二进制）',
+    mxStdoutRun.code === EXIT.ok && String(mxStdout.logs.join('')).includes('<score-partwise'),
+  )
+  check(
+    'M0 还没实现的 mxl 仍报用法错误（不假装支持）',
+    (await runCli(['render', '-i', '-', '-t', 'mxl'], makeIo({ '(stdin)': GOOD }).io)).code === EXIT.usage,
+  )
 }
 
 // ③b adj873（T-3 补落点）：`render --crop page|score [--pad N] [--ink x,y,w,h]`
