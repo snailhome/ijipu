@@ -39,6 +39,12 @@ import { useUiStore, enabledVoicesOf } from './uiStore'
 import { isHostEmbedded, shouldYieldBindingRestore } from './hostBridge'
 import { loadFontOverride, migrateLegacyEditorPrefs, hasShownPermGuide, markPermGuideShown } from './editorPrefs'
 import { normalizePastedSource } from './importSource'
+import {
+  MUSIC_XML_IMPORT_NAME,
+  isMusicXmlName,
+  musicXmlNotice,
+  musicXmlToJps,
+} from './musicXmlImport'
 // adj538：桌面壳的「外部打开」（双击 .jps）——纯网页下这些函数一律惰性/空转，见该模块注释
 import { pickPrimary, pickJpsFile, readNativeProbe, saveJpsFileNative, writeExternalFile, type ExternalFile } from './externalOpen'
 // adj1158：另存为成功后把内存 sync doc「接管」到新路径（不清掉锚点/音量）
@@ -207,6 +213,11 @@ interface DocState {
   markSaved: () => void
   /** adj406：粘贴源码导入（返回 false = 内容为空、未替换） */
   importSource: (raw: string) => boolean
+  /**
+   * MusicXML 导入：走引擎 `parseMusicXmlToIR → irToJps`，转成 `.jps` 后按“未绑定文件”装进编辑器。
+   * 返回 false = 解析失败或没有可写出的谱面（具体错误已通过 notice 提示）。
+   */
+  importMusicXml: (raw: string) => boolean
   /**
    * adj615（用户要求）：**打印当前谱面**——菜单「打印」与 `Ctrl+P` 共用。
    * 与导出同一口径：有语法错误就提示并**不打**（别打出半张谱）。
@@ -888,6 +899,24 @@ export const useDocStore = create<DocState>()((set, get) => ({
     })
     return true
   },
+  /**
+   * MusicXML 导入（用户 2026-11-25 要求）：转换后按“粘贴导入”同一档装载——
+   * 不绑定 `.musicxml` 原文件，`dirty:true`，保存必须走另存为/导出，避免把 jps 写回 xml。
+   */
+  importMusicXml: (raw) => {
+    const converted = musicXmlToJps(raw)
+    if (!converted.ok) {
+      useUiStore.getState().showNotice(`MusicXML 导入失败：${converted.error}`, 'error')
+      return false
+    }
+    adoptDoc({
+      name: MUSIC_XML_IMPORT_NAME,
+      code: converted.code,
+      asImport: true,
+      notice: musicXmlNotice(converted),
+    })
+    return true
+  },
   // adj615（用户要求）：菜单「打印」与 `Ctrl+P` 共用这一条
   printScore: () => {
     const s = get()
@@ -927,6 +956,16 @@ export const useDocStore = create<DocState>()((set, get) => ({
     }
     fileStateTouched = true
     const name = fileBaseName(primary.name)
+    if (isMusicXmlName(primary.path)) {
+      const converted = musicXmlToJps(primary.code)
+      if (!converted.ok) {
+        ui.showNotice(`MusicXML 导入失败：${converted.error}`, 'error')
+        return false
+      }
+      adoptDoc({ name, code: converted.code, asImport: true, notice: musicXmlNotice(converted) })
+      if (extraCount > 0) ui.showNotice(externalOpenCopy.openedWithExtra(name, extraCount), 'ok')
+      return true
+    }
     try {
       localStorage.setItem(DRAFT_KEY, primary.code)
       localStorage.setItem(DRAFT_NAME_KEY, name)
@@ -981,6 +1020,7 @@ export const useDocStore = create<DocState>()((set, get) => ({
   openDropped: async ({ handle, file }) => {
     const ui = useUiStore.getState()
     let name = ''
+    let rawName = ''
     let code = ''
     let mtime: number | null = null
     /** adj969：这份文件的身份（两条档都能给：句柄读到的 `File`，或拖进来的 `File`） */
@@ -988,11 +1028,13 @@ export const useDocStore = create<DocState>()((set, get) => ({
     try {
       if (handle) {
         const f = await handle.getFile()
+        rawName = f.name
         name = fileBaseName(f.name)
         code = await f.text()
         mtime = f.lastModified
         fileRef = refOfFile(f)
       } else if (file) {
+        rawName = file.name
         name = fileBaseName(file.name)
         code = await file.text()
         fileRef = refOfFile(file)
@@ -1004,14 +1046,30 @@ export const useDocStore = create<DocState>()((set, get) => ({
       ui.showNotice(dropOpenCopy.failed(e instanceof Error ? e.message : String(e)), 'error')
       return false
     }
+    /** MusicXML 拖入：先转成 jps，再按“导入稿”装载（不绑定原文件） */
+    let importedNotice = ''
+    if (isMusicXmlName(rawName)) {
+      const converted = musicXmlToJps(code)
+      if (!converted.ok) {
+        ui.showNotice(`MusicXML 导入失败：${converted.error}`, 'error')
+        return false
+      }
+      code = converted.code
+      importedNotice = musicXmlNotice(converted)
+    }
     /** 真正装载那一下（确认之后才执行） */
-    const run = (): void =>
+    const run = (): void => {
+      if (importedNotice !== '') {
+        adoptDoc({ name, code, asImport: true, notice: importedNotice })
+        return
+      }
       adoptDoc(
         handle
           ? { name, code, handle, mtime, fileRef, notice: `${uiCopy.openOkPrefix}${name}.jps` }
           : // 拿不到可写句柄 ⇒ 说清"保存请用另存为"，别让用户以为能存回原文件
             { name, code, fileRef, notice: dropOpenCopy.uploadedReadOnly(name), noticeKind: 'warn' },
       )
+    }
     /**
      * 拖入是**替换当前文档**的动作：有未保存修改就先问一句（与「新建」同一套确认条，
      * 见 `requestNewDoc`）——绝不静默丢编辑。确认条是异步的，故这里先返回 true。
@@ -1041,12 +1099,30 @@ export const useDocStore = create<DocState>()((set, get) => ({
     if (shouldUseFileInputPicker(isCoarsePointerDevice(), typeof picker === 'function')) return openFileViaInput()
     try {
       const [handle] = await picker({
-        types: [{ description: 'iJipu 乐谱', accept: { 'text/plain': ['.jps'] } }],
+        types: [
+          { description: 'iJipu 乐谱', accept: { 'text/plain': ['.jps'] } },
+          {
+            description: 'MusicXML',
+            accept: {
+              'application/vnd.recordare.musicxml+xml': ['.musicxml'],
+              'application/xml': ['.xml'],
+            },
+          },
+        ],
         multiple: false,
       })
       const file = await handle.getFile()
       const code = await file.text()
       const name = fileBaseName(file.name)
+      if (isMusicXmlName(file.name)) {
+        const converted = musicXmlToJps(code)
+        if (!converted.ok) {
+          useUiStore.getState().showNotice(`MusicXML 导入失败：${converted.error}`, 'error')
+          return false
+        }
+        adoptDoc({ name, code: converted.code, asImport: true, notice: musicXmlNotice(converted) })
+        return true
+      }
       // adj968：装载 + 记基准（带 mtime）+ 句柄持久化 + 持久权限引导都收在 `adoptDoc`（与"拖入"同一份实现）
       adoptDoc({
         name,
@@ -1087,6 +1163,26 @@ export const useDocStore = create<DocState>()((set, get) => ({
     const prevPending = useDocStore.getState().pendingBinding
     try {
       const code = await readWorkspaceText(ws, segs)
+      const leaf = segs[segs.length - 1]
+      /**
+       * 工作区里也可能放着 MusicXML：它是**导入源**，不是可写回的 .jps。
+       * 先转成 jps 再按导入稿装载（dirty=true、不绑工作区路径），
+       * 否则会把 jps 写回 .musicxml，或把工作区绑定指到错的文件。
+       */
+      if (isMusicXmlName(leaf)) {
+        const converted = musicXmlToJps(code)
+        if (!converted.ok) {
+          ui.showNotice(`MusicXML 导入失败：${converted.error}`, 'error')
+          return false
+        }
+        adoptDoc({
+          name: fileBaseName(leaf),
+          code: converted.code,
+          asImport: true,
+          notice: musicXmlNotice(converted),
+        })
+        return true
+      }
       // adj927：读进来就是当前基准（外部改动的判据拿它当参照；「载入外部」也走这条路 ⇒ 自动对齐）
       setBaseline(baselineKeyOf(ws.id, segs), code, null)
       const name = fileBaseName(segs[segs.length - 1])
@@ -1787,14 +1883,24 @@ function adoptDoc(input: {
    * 网页 / PWA 一档永远是 `null`（浏览器不给路径，那一档也没有"被拦"这回事）。
    */
   nativePath?: string | null
+  /**
+   * true = 由别种格式（目前是 MusicXML）转换来的导入稿：
+   * **不绑定任何原文件**（`handle`/`nativePath` 即使传了也忽略）、`dirty:true`，
+   * 保存只能走另存为/导出——否则 Ctrl+S 会把 `.jps` 写回 `.musicxml`。
+   */
+  asImport?: boolean
   notice: string
   noticeKind?: 'ok' | 'warn' | 'error'
 }): void {
   const { name, code, handle = null } = input
-  const nativePath = input.nativePath ?? null
-  const effectiveHandle = nativePath !== null ? null : handle
+  const imported = input.asImport === true
+  const nativePath = imported ? null : input.nativePath ?? null
+  const effectiveHandle = imported ? null : nativePath !== null ? null : handle
   fileStateTouched = true
-  if (nativePath !== null) {
+  if (imported) {
+    // 转换稿没有原文件可写回：清掉可能残留的句柄/来源，避免误写
+    void saveFileHandle(null)
+  } else if (nativePath !== null) {
     // adj1156：原生路径 = 系统文件；基准键与双击打开同一口径（后续写盘前要比基准）
     setBaseline(bindingKeyOf({ kind: 'native', path: nativePath }), code, input.mtime ?? null)
     // 与原生路径互斥：清掉可能残留的浏览器句柄，避免"保存写回上一个文件"
@@ -1831,7 +1937,7 @@ function adoptDoc(input: {
     fileName: name,
     parseResult: parseJps(code),
     pageConfig: cfg,
-    dirty: false,
+    dirty: imported,
     fileHandle: effectiveHandle,
     // adj1156：原生打开时记真实路径；FSA 打开时保持 null（两者互斥）
     nativePath,
@@ -1860,7 +1966,9 @@ function adoptDoc(input: {
    * 不 await：装载动作是同步返回的，问那一句是"后台再问"，用户点「暂不」也不影响已经打开的文档。
    */
   const needAssets = localAssetRefs(cfg).length > 0
-  if (nativePath !== null) {
+  if (imported) {
+    // 转换稿不是磁盘上的 `{kind:'native'|'handle'}` 档：没有"所在目录"可授权
+  } else if (nativePath !== null) {
     // 原生路径：只有"桌面/文档/下载"这三个浏览器禁授权目录需要解释原因；其它目录直接按路径读
     void askSensitiveDirOnNativeOpen(needAssets, name, nativePath)
   } else {
@@ -1886,6 +1994,15 @@ async function openFileNative(): Promise<boolean> {
     if (path === null) return false // 用户取消：静默
     const probe = await readNativeProbe(path)
     const name = fileBaseName(path)
+    if (isMusicXmlName(path)) {
+      const converted = musicXmlToJps(probe.text)
+      if (!converted.ok) {
+        useUiStore.getState().showNotice(`MusicXML 导入失败：${converted.error}`, 'error')
+        return false
+      }
+      adoptDoc({ name, code: converted.code, asImport: true, notice: musicXmlNotice(converted) })
+      return true
+    }
     adoptDoc({
       name,
       code: probe.text,
@@ -1994,6 +2111,17 @@ function openFileViaInput(): Promise<boolean> {
       try {
         const code = await file.text()
         const name = fileBaseName(file.name)
+        if (isMusicXmlName(file.name)) {
+          const converted = musicXmlToJps(code)
+          if (!converted.ok) {
+            useUiStore.getState().showNotice(`MusicXML 导入失败：${converted.error}`, 'error')
+            finish(false)
+            return
+          }
+          adoptDoc({ name, code: converted.code, asImport: true, notice: musicXmlNotice(converted) })
+          finish(true)
+          return
+        }
         // adj968：与"拖入"共用同一份装载实现（差别只是这里拿不到可写句柄 ⇒ 不绑定）
         // adj969：`fileRef` 仍要给——图是相对路径的话，用户还能额外授权一次所在文件夹
         adoptDoc({ name, code, fileRef: refOfFile(file), notice: uiCopy.openFallbackNotice, noticeKind: 'warn' })

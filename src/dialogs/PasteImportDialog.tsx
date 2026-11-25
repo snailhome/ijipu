@@ -28,6 +28,7 @@ import {
   writeWorkspaceText,
 } from '../store/workspace'
 import { readScorePackage, safePackageDirName, suggestNewDirName } from '../store/scorePackageImport'
+import { looksLikeMusicXml } from '../store/musicXmlImport'
 
 const TEXT_PACKAGE_EXT = new Set(['json', 'md', 'jps', 'txt'])
 const decoder = new TextDecoder('utf-8')
@@ -37,6 +38,7 @@ export function PasteImportDialog({ inline = false }: { inline?: boolean } = {})
   const [packageBusy, setPackageBusy] = useState(false)
   const packageInputRef = useRef<HTMLInputElement | null>(null)
   const importSource = useDocStore((s) => s.importSource)
+  const importMusicXml = useDocStore((s) => s.importMusicXml)
   const openWorkspaceFile = useDocStore((s) => s.openWorkspaceFile)
   const closeModal = useUiStore((s) => s.closeModal)
   const closeDock = useUiStore((s) => s.closeDock)
@@ -66,6 +68,13 @@ export function PasteImportDialog({ inline = false }: { inline?: boolean } = {})
   }
 
   const doImport = () => {
+    // MusicXML 文本也从这个框进来（用户 2026-11-25 要求）：识别根元素后走引擎转换，
+    // 转成 jps 再按“导入稿”装载；失败的原因由 store 的 notice 说明。
+    if (looksLikeMusicXml(text)) {
+      if (!importMusicXml(text)) return
+      dismiss()
+      return
+    }
     if (!importSource(text)) {
       showNotice(pasteImportCopy.empty, 'warn')
       return
@@ -78,6 +87,12 @@ export function PasteImportDialog({ inline = false }: { inline?: boolean } = {})
     if (!file) return
     setPackageBusy(true)
     try {
+      // 同一个文件按钮也能挑 MusicXML（用户 2026-11-25 要求）：按扩展名分流，
+      // .zip 仍走乐谱包，.musicxml/.xml 交给引擎转成 jps。
+      if (/\.(musicxml|xml)$/i.test(file.name)) {
+        if (importMusicXml(await file.text())) dismiss()
+        return
+      }
       const ws = await getWorkspace()
       if (!ws) {
         showNotice(scorePackageImportCopy.needWorkspace, 'warn')
@@ -232,6 +247,7 @@ export function PasteImportDialog({ inline = false }: { inline?: boolean } = {})
             // 忙态没有文字可显示（按钮只有图标）⇒ 提示语跟着换，读屏也念得出来
             title={packageBusy ? scorePackageImportCopy.creating : scorePackageImportCopy.button}
             aria-label={packageBusy ? scorePackageImportCopy.creating : scorePackageImportCopy.button}
+            aria-description="也可以选 .musicxml / .xml 文件"
             onClick={() => packageInputRef.current?.click()}
           >
             <ToolIcon name="scorePackage" />
@@ -239,7 +255,7 @@ export function PasteImportDialog({ inline = false }: { inline?: boolean } = {})
           <input
             ref={packageInputRef}
             type="file"
-            accept=".zip,application/zip"
+            accept=".zip,.musicxml,.xml,application/zip,application/vnd.recordare.musicxml+xml,application/xml,text/xml"
             hidden
             onChange={(e) => void pickPackage(e.target.files?.[0])}
           />

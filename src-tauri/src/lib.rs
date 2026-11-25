@@ -50,11 +50,16 @@ pub mod cli_embed;
 #[derive(Default)]
 struct PendingOpen(Mutex<Vec<String>>);
 
-/// 是否是我们要接的文件参数：`.jps` 结尾且不是开关（`-`/`--`）。
+/// 是否是我们要接的文件参数：`.jps` / `.musicxml` / `.xml` 结尾且不是开关（`-`/`--`）。
+///
+/// 名字保留 `jps` 是因为这条链（双击/拖放/单实例）历史上只认 `.jps`；MusicXML 导入
+/// 复用同一条“外部打开”链，到前端再按扩展名分流并转成 `.jps`，所以这里只管放行。
 /// 刻意**不按位置过滤**（不 `skip(1)`）：不同来源的 argv 是否含 argv[0]（exe 自身）并不一致
 /// —— 单实例插件回传的参数含 exe 路径，而 exe 不会以 `.jps` 结尾，故"按后缀筛选"对两种口径都成立。
 fn is_jps_arg(arg: &str) -> bool {
-    !arg.starts_with('-') && arg.to_ascii_lowercase().ends_with(".jps")
+    let lower = arg.to_ascii_lowercase();
+    !arg.starts_with('-')
+        && (lower.ends_with(".jps") || lower.ends_with(".musicxml") || lower.ends_with(".xml"))
 }
 
 /// 从 `OsString` 参数列表里挑出 `.jps` 路径（非 UTF-8 参数直接跳过，不 panic）。
@@ -1015,7 +1020,7 @@ async fn pick_jps_file(app: tauri::AppHandle) -> Option<String> {
         app.dialog()
             .file()
             .set_title("打开乐谱")
-            .add_filter("iJipu 乐谱", &["jps"])
+            .add_filter("iJipu 乐谱 / MusicXML", &["jps", "musicxml", "xml"])
             .blocking_pick_file()
     })
     .await
@@ -1361,7 +1366,12 @@ pub fn run() {
                         let names: Vec<String> = paths
                             .iter()
                             .filter_map(|p| p.file_name().map(|n| n.to_string_lossy().to_string()))
-                            .filter(|n| n.to_ascii_lowercase().ends_with(".jps"))
+                            .filter(|n| {
+                                let lower = n.to_ascii_lowercase();
+                                lower.ends_with(".jps")
+                                    || lower.ends_with(".musicxml")
+                                    || lower.ends_with(".xml")
+                            })
                             .collect();
                         let _ = window.app_handle().emit("ijipu://drag-hover", names.first().cloned());
                     }

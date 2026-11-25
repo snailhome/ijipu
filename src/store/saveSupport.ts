@@ -83,9 +83,9 @@ export function sameContent(a: string, b: string): boolean {
   return stripBom(a) === stripBom(b)
 }
 
-/** 文件名去掉 .jps/.md/.txt 后缀（显示名统一不带扩展名） */
+/** 文件名去掉 .jps/.md/.txt/.musicxml/.xml 后缀（显示名统一不带扩展名） */
 export function fileBaseName(name: string | undefined | null): string {
-  return (name || '未命名').replace(/\.(jps|md|txt)$/i, '')
+  return (name || '未命名').replace(/\.(jps|md|txt|musicxml|xml)$/i, '')
 }
 
 /**
@@ -97,7 +97,9 @@ export function fileBaseName(name: string | undefined | null): string {
  * 桌面浏览器按**文件名后缀**匹配（Firefox/Safari 还会额外给「所有文件」入口），过滤安全可用。
  */
 export function fileInputAccept(coarsePointer: boolean): string | null {
-  return coarsePointer ? null : '.jps,text/plain,.txt,application/octet-stream'
+  return coarsePointer
+    ? null
+    : '.jps,.musicxml,.xml,text/plain,.txt,application/xml,text/xml,application/octet-stream'
 }
 
 /**
