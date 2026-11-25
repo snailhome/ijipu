@@ -42,7 +42,7 @@ const OUT = path.join(ROOT, 'dist-embed', 'public')
  * 与 `src/ui/toolIcons.ts` 的 `ICON_FILES` 一一对应——**改那里的清单就要同步这里**。
  * 本脚本构建时会解析 `toolIcons.ts` 并断言无遗漏（见 `assertToolIconsCovered`），
  * 漏一个会直接让 `build:embed` 失败，避免插件里出现"按钮在、图标空白"。
- * 另加 5 个非工具图标：应用 logo、捐赠码、播放面板谱面图、视图模式整页/页宽。
+ * 另加 6 个非工具图标：应用 logo、新品牌 logo、捐赠码、播放面板谱面图、视图模式整页/页宽。
  */
 const USED_ICONS = [
   // ---- src/ui/toolIcons.ts 的 ICON_FILES（工具条/顶栏/底栏 图标）----
@@ -51,7 +51,8 @@ const USED_ICONS = [
   '工作区', '底栏展开', '底栏收起', '左', '右', '导入', '告警', '关于', '切换工作区', '查找',
   '右侧边栏', '窄栏', '宽栏', '浮动', '粘贴', '取消', '乐谱包', '恢复默认', '保存', '打开目录',
   // ---- 非工具图标 ----
-  'Jianpu.png', // 顶栏 logo（TopBar.tsx）+ index.html 的 favicon
+  'Jianpu.png', // 旧版 logo（index.html 的 favicon）
+  'logo-jp.png', // 现用品牌 logo（TopBar.tsx / AboutDialog.tsx）
   'good.png', // 「支持作者」捐赠码（brand/copy.ts 的 image 字段）
   '谱面.png', // 播放/谱面面板
   '整页.png', // 视图模式（整页）
@@ -84,6 +85,36 @@ async function assertToolIconsCovered() {
   return toolIcons.length
 }
 
+/**
+ * 构建期闸门：`src/` 里以 `icons/xxx.png` 形式引用的静态图片也必须进白名单。
+ *
+ * 背景（2026-11-25 用户实报）：品牌 logo 换成 `logo-jp.png` 后，顶栏和「关于」里
+ * 仍按老清单只带 `Jianpu.png`，嵌入版里 logo 请求回 204，显示成破图。
+ * 工具图标的闸门只覆盖 `ICON_FILES`，管不到 logo，所以再扫一遍源码里的静态引用。
+ */
+async function assertStaticIconsCovered() {
+  const files = (await readdir(path.join(ROOT, 'src'), { recursive: true })).filter((f) =>
+    /\.(ts|tsx)$/.test(f),
+  )
+  const refs = new Set()
+  for (const f of files) {
+    const text = await readFile(path.join(ROOT, 'src', f), 'utf8')
+    // 只认真正会渲染的 `src="..."` / `src={`...`}`；注释里提到的历史文件名不算。
+    for (const m of text.matchAll(/src=\{?[`"'][^`"']*?icons\/([\w\u4e00-\u9fa5.-]+\.(?:png|svg|ico))/g)) {
+      refs.add(m[1])
+    }
+  }
+  const used = new Set(USED_ICONS.map((n) => (n.includes('.') ? n : `${n}.png`)))
+  const missing = [...refs].filter((n) => !used.has(n))
+  if (missing.length > 0) {
+    throw new Error(
+      `[embed-assets] USED_ICONS 漏了源码里直接引用的图片：${missing.join('、')}\n` +
+        `  嵌入版里这些图片会 404（server.ts 回 204）⇒ 显示成破图。请把它们补进 USED_ICONS。`,
+    )
+  }
+  return refs.size
+}
+
 
 /** 嵌入版需要的示例谱（`samples/`）——「新建」模板在 `src/samples/`，不走这里 */
 const KEEP_SAMPLES = true
@@ -96,6 +127,7 @@ export const EXCLUDED = {
 
 async function main() {
   const toolIconCount = await assertToolIconsCovered()
+  const staticIconCount = await assertStaticIconsCovered()
   await rm(OUT, { recursive: true, force: true })
   await mkdir(path.join(OUT, 'icons'), { recursive: true })
 
@@ -139,6 +171,7 @@ async function main() {
 
   console.log(`[embed-assets] 已生成精简 public → dist-embed/public`)
   console.log(`[embed-assets] 工具图标 ${toolIconCount} 个，USED_ICONS 全覆盖 ✓`)
+  console.log(`[embed-assets] 源码静态图片引用 ${staticIconCount} 个，USED_ICONS 全覆盖 ✓`)
   console.log(`[embed-assets] icons: ${needFiles.length} 个 / ${(bytes / 1024).toFixed(1)} KB`)
   console.log(`[embed-assets] 剔除 PWA 专用 ${EXCLUDED.pwa.length} 个（省 ${(saved / 1024).toFixed(1)} KB）：${EXCLUDED.pwa.join('、')}`)
   console.log(`[embed-assets] 剔除遗留 SVG ${EXCLUDED.legacySvg.length} 个（引擎的曲谱图形是现画 SVG，源码未按路径加载）`)
