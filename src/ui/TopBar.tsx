@@ -1416,11 +1416,11 @@ export function TopBar() {
       {/* Logo */}
       <div className="topbar-brand">
         {/* adj724b：Logo 路径**不能写绝对路径**——嵌入版页面挂在 `/<token>/` 下，
-            绝对路径 `/icons/Jianpu.png` 会解析到站点根（无 token 段）而被服务 404，
+            绝对路径 `/icons/logo-jp.png` 会解析到站点根（无 token 段）而被服务 404，
             表现为"顶栏左侧爱记谱图标不显示"（用户实测）。用 `BASE_URL` 走相对路径。 */}
         <img
           className="logo-mark"
-          src={`${import.meta.env.BASE_URL}icons/Jianpu.png`}
+          src={`${import.meta.env.BASE_URL}icons/logo-jp.png`}
           alt="爱记谱 iJipu"
           draggable={false}
         />

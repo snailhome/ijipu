@@ -55,12 +55,8 @@
 ; 模板生成的主程序名与快捷方式名（对应 tauri.conf.json 的 productName / 打包出的 exe 名）
 !define IJIPU_EXE "ijipu.exe"
 !define IJIPU_LNK_OLD "iJipu.lnk"
-; 用户指定的新快捷方式名与备注（samples 无关，纯品牌文案）
-; ⚠️ 第一个字是**拉丁字母 i**（`i记谱`），不是「爱记谱」——这是用户明确指定的写法：
-;   桌面上原本已有一个「爱记谱 iJipu.lnk」，那是 Chrome 装出来的**网页版(PWA)**快捷方式
-;   （目标 = chrome_proxy.exe + `--app-id=…`）。若这里也用「爱记谱 iJipu」就会**同名覆盖**掉它，
-;   故用户选了 `i记谱 iJipu` 与之区分，两个图标可以并存。
-!define IJIPU_LNK_NEW "i记谱 iJipu.lnk"
+; 用户 2026-11-25 统一口径：分应用桌面/开始菜单快捷方式 =「中文名・iJipu 缩写」
+!define IJIPU_LNK_NEW "爱记谱・iJipu.lnk"
 !define IJIPU_LNK_DESC "爱记谱 - 码即成，谱自现，代码式简谱制谱引擎。"
 !define IJIPU_OPEN_VERB "使用 iJipu 打开"
 ; 应用的 AppUserModelID（任务栏分组用），必须与 tauri.conf.json 的 `identifier` 一致（smoke 有断言兜底）

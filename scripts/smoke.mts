@@ -9951,7 +9951,7 @@ console.log('[103] icons live in public/icons and only the used ones (adj417)')
     'adj1315 安装钩子把 ProgID 的 DefaultIcon 指到 $INSTDIR\\jps.ico（不是 exe）',
     jpHooks.includes('Software\\Classes\\${IJIPU_PROGID}\\DefaultIcon') && jpHooks.includes('$INSTDIR\\${IJIPU_JPS_ICON},0'),
   )
-  const genericLogoBytes = readFileSync(join(root, 'public', 'icons', 'Logo.png'))
+  const genericLogoBytes = readFileSync(join(root, 'public', 'icons', 'logo.png'))
   const brandIconBytes = ['Jianpu.png', 'pwa-192.png', 'pwa-512.png'].map((n) => readFileSync(join(root, 'public', 'icons', n)))
   check(
     'adj1315 网站图标（Jianpu/pwa-192/pwa-512）已换成品牌 Logo-jp，不再等于通用 Logo.png',
@@ -15243,12 +15243,12 @@ function runAdj539ShellTests() {
     `首字节 ${hooksBuf[0]?.toString(16)} ${hooksBuf[1]?.toString(16)} ${hooksBuf[2]?.toString(16)}`)
   const hooks = String(hooksBuf)
   const hooksCode = hooks.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*;.*$/gm, '')
-  check('adj539 快捷方式名与备注是用户给的原文（备注只能靠 `CreateShortCut` 第 7 个参数写）',
-    hooks.includes('!define IJIPU_LNK_NEW "i记谱 iJipu.lnk"') &&
+  check('adj1324 快捷方式名与备注是用户给的原文（备注只能靠 `CreateShortCut` 第 7 个参数写）',
+    hooks.includes('!define IJIPU_LNK_NEW "爱记谱・iJipu.lnk"') &&
       hooks.includes('!define IJIPU_LNK_DESC "爱记谱 - 码即成，谱自现，代码式简谱制谱引擎。"'),
     '')
-  check('adj539 新名首字是拉丁字母 `i`（不是「爱记谱」）——「爱记谱 iJipu.lnk」是 Chrome 装的网页版(PWA)快捷方式，同名会把它覆盖掉',
-    !hooks.includes('!define IJIPU_LNK_NEW "爱记谱') && hooks.includes('!define IJIPU_LNK_NEW "i记谱'),
+  check('adj1324 快捷方式名统一为「爱记谱・iJipu」，不再用旧的 `i记谱 iJipu`',
+    hooks.includes('!define IJIPU_LNK_NEW "爱记谱・iJipu.lnk"') && !hooks.includes('!define IJIPU_LNK_NEW "i记谱'),
     '')
   check('adj539 删旧名前先摘固定项（改名后旧 pin 必然失效，主动摘掉不留幽灵图标）',
     (hooksCode.match(/!insertmacro UnpinShortcut "\$(DESKTOP|SMPROGRAMS)\\\$\{IJIPU_LNK_OLD\}"/g) ?? []).length === 2,

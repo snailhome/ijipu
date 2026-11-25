@@ -24,7 +24,7 @@ export function App() {
     <div className="t-shell">
       <header className="t-top">
         <a className="t-brand" href="/">
-          <img src="/icons/Jianpu.png" alt="" width={28} height={28} />
+          <img src="/icons/logo-jp.png" alt="" width={28} height={28} />
           <span className="t-brand-name">{toolsCopy.brand}</span>
           <span className="t-brand-sub">{toolsCopy.brandSub}</span>
         </a>
