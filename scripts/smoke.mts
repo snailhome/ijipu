@@ -22701,6 +22701,16 @@ function runAdj1324Tests() {
     JSON.stringify({ total: [s0.totalMs, s2.totalMs], bars: [s0.barNos, s2.barNos] }))
   check('adj1324 重排幂等', reflowJps(r2.source, { maxMeasuresPerLine: 2 }).source === r2.source, '')
 
+  // 用户 2026-11-26（E-2026-615）：重排也要走同一套格式化——它从 token 重拼源码，
+  // 不归一的话渐强会拼回 `6--- <+++`、连音线收尾拼回 `7-- )`，与编辑器里的格式不一致。
+  const hpReflow = reflowJps(H + 'Q: 6--- <+++ ! 0 0 0 |\n', { maxMeasuresPerLine: 8 })
+  const hpReflowLine = hpReflow.source.split('\n').find((l) => l.startsWith('Q')) ?? ''
+  check('adj1324 重排后渐强抬升量随记号搬（6<+++ ---!）', hpReflowLine === 'Q: 6<+++ ---! 0 0 0 |', hpReflow.source)
+  const slurReflow = reflowJps(H + 'Q: 7[6/]--- <+++ | 7-- ) ! 0 0 |\n', { maxMeasuresPerLine: 8 })
+  const slurReflowLine = slurReflow.source.split('\n').find((l) => l.startsWith('Q')) ?? ''
+  check('adj1324 重排后连音线收尾带空格（7) --!）', slurReflowLine === 'Q: 7[6/]<+++ --- | 7) --! 0 0 |', slurReflow.source)
+  check('adj1324 重排输出的 Q 行再经 formatLine 不变（两处同口径）', formatLine(slurReflowLine) === slurReflowLine, `${slurReflowLine} vs ${formatLine(slurReflowLine)}`)
+
   const r3 = reflowJps(src, { targetLineCount: 3 })
   check('adj1324 目标 3 行 → 正好 3 行', countQ(r3.source) === 3, r3.source)
 

@@ -85,7 +85,7 @@ function formatLyricBody(body: string): string {
  *
  * 只处理引号外、`@乐器@` 外的正文；歌词/注释里的同样字符保持原样。
  */
-function normalizeHairpinsAndSlurEnds(text: string): string {
+export function normalizeHairpinsAndSlurEnds(text: string): string {
   let out = ''
   for (let i = 0; i < text.length; ) {
     const c = text[i]
