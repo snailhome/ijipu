@@ -69,6 +69,69 @@ function formatLyricBody(body: string): string {
 }
 
 /**
+ * 渐强/渐弱与连音线收尾的**规范位置**（用户 2026-11-26 口径）。
+ *
+ * 1. `<`/`>` 的起点是“紧邻其前的有声元素”。若它被写在增时线/附点之后
+ *    （`6---<`），解析器仍把起点算回音符 6，但随后 `!` 会紧跟在 `<` 后，
+ *    `endOn` 被误判成 `note` ⇒ 起止落在同一音符、时值为零、出告警。
+ *    因此把起点记号移到该音符的增时线/附点**之前**：`6---<` → `6<---`。
+ * 2. `!` 的终点由**紧邻其前的非空字符**决定：写在 `-`/`.` 后是增时线/附点右缘。
+ *    所以 `!` 必须紧贴前一个元素，`6<--- !` → `6<---!`；**绝不能**把它挪到 `<` 后。
+ * 3. 连音线收尾时，末音的增时线/附点属于该音“之后”的时值；规范写法把它们放在
+ *    `)` **外面**（`(7---|7---)` → `(7---|7)---`），与预览/演奏口径一致。
+ *
+ * 只处理引号外、`@乐器@` 外的正文；歌词/注释里的同样字符保持原样。
+ */
+function normalizeHairpinsAndSlurEnds(text: string): string {
+  let out = ''
+  for (let i = 0; i < text.length; ) {
+    const c = text[i]
+    // 引号/乐器名整段原样（内部可能含 < > ! ) 等字符）
+    if (c === '"' || c === '@') {
+      const close = text.indexOf(c, i + 1)
+      if (close >= 0) {
+        out += text.slice(i, close + 1)
+        i = close + 1
+        continue
+      }
+      out += text.slice(i)
+      break
+    }
+    if (c === '!' || c === '<' || c === '>' || c === ')') {
+      /**
+       * 记号紧贴前一个元素：先吃掉源码里多余的空格。
+       * 只在前一个非空字符确实像“音符块尾部”时才吃——否则 `Q: <++---`
+       * 会把行头后的空格也吞掉（变成 `Q:<++ ---`），行头就坏了。
+       */
+      const trimmed = out.replace(/[ \t]+$/, '')
+      if (/[\d\-.)\]'#,$=]$/.test(trimmed)) out = trimmed
+      if (c === '!') {
+        out += c
+      } else {
+        /**
+         * 紧邻前面的“末时值元素”是增时线/附点时才需要挪：
+         * `6---<` → `6<---`；`)` 则相反，把增时线/附点移到右括号外。
+         * 正则避开小节线/括号/其它记号，防止把连音线前缀 `(-` 误当音符增时线。
+         */
+        const m = /([0-9][^\s|()<>!+-]*?)([-.]+)$/.exec(out)
+        if (!m) {
+          out += c
+        } else if (c === ')') {
+          out = out.slice(0, m.index) + m[1] + ')' + m[2]
+        } else {
+          out = out.slice(0, m.index) + m[1] + c + m[2]
+        }
+      }
+      i++
+      continue
+    }
+    out += c
+    i++
+  }
+  return out
+}
+
+/**
  * adj629h：曲行内容的格式化（原 `formatLine` 的主循环，抽出来供歌词行里的替谱段复用）。
  * 规则见文件头；`Q:` 以外的行头**已去掉**，这里收到的就是纯曲部内容。
  */
@@ -219,5 +282,5 @@ export function formatMusicBody(trimmed: string): string {
     }
     if ('0123456789-|'.includes(note)) lastNote = note
   }
-  return out.join('')
+  return normalizeHairpinsAndSlurEnds(out.join(''))
 }
