@@ -98,7 +98,7 @@ const DOC_SOURCES = [
  *     ④ 交叉校验钩子里的 exe 名 / AUMI 与本次构建生成的值一致（防 E-2026-240 那类"名字对不上"）。
  */
 const HOOKS = 'src-tauri/nsis/hooks.nsh'
-const LNK_NAME = 'i记谱 iJipu.lnk'
+const LNK_NAME = '爱记谱・iJipu.lnk'
 const LNK_DESC = '爱记谱 - 码即成，谱自现，代码式简谱制谱引擎。'
 
 const NSI = 'src-tauri/target/release/nsis/x64/installer.nsi'
